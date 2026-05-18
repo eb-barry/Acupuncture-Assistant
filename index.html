@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#eef4f7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>針灸助理</title>
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- lunar-javascript (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ════════════════════════════════════════
+       PAGE: 主頁 (Home)
+  ═════════════════════════════════════════ -->
+  <div class="page active" id="page-home">
+
+    <!-- Hero Header -->
+    <div class="home-hero">
+      <div class="home-hero-bg"></div>
+      <div class="home-hero-content">
+        <div class="home-logo">
+          <!-- Yin-Yang SVG matching the mockup -->
+          <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" class="yinyang-svg">
+            <circle cx="40" cy="40" r="38" fill="none" stroke="rgba(74,154,170,0.3)" stroke-width="1"/>
+            <!-- Top half teal, bottom half gold -->
+            <path d="M40 2 A38 38 0 0 1 40 78 A19 19 0 0 1 40 40 A19 19 0 0 0 40 2 Z" fill="#4a9aaa"/>
+            <path d="M40 2 A38 38 0 0 0 40 78 A19 19 0 0 0 40 40 A19 19 0 0 1 40 2 Z" fill="#c8a86b"/>
+            <circle cx="40" cy="21" r="9" fill="#c8a86b"/>
+            <circle cx="40" cy="59" r="9" fill="#4a9aaa"/>
+            <circle cx="40" cy="21" r="3.5" fill="#4a9aaa"/>
+            <circle cx="40" cy="59" r="3.5" fill="#c8a86b"/>
+          </svg>
+        </div>
+        <h1 class="home-title">針灸助理</h1>
+        <p class="home-subtitle">全人醫療・調和陰陽・扶正祛邪</p>
+      </div>
+    </div>
+
+    <!-- Feature Cards -->
+    <div class="scroll-area home-cards-area">
+      <div class="flex-col gap-md">
+
+        <div class="card card-row" id="btn-lingui" role="button" tabindex="0"
+             aria-label="靈龜八法與子午流注">
+          <div class="card-icon">
+            <!-- Bagua SVG icon -->
+            <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="26" cy="26" r="24" stroke="#4a9aaa" stroke-width="1.5" fill="rgba(74,154,170,0.06)"/>
+              <circle cx="26" cy="26" r="8" stroke="#4a9aaa" stroke-width="1.5" fill="rgba(74,154,170,0.12)"/>
+              <!-- 8 trigram lines (simplified) -->
+              <g stroke="#4a9aaa" stroke-width="2" stroke-linecap="round">
+                <!-- N -->  <line x1="26" y1="3"  x2="26" y2="10"/>
+                <!-- NE --> <line x1="41" y1="11" x2="36" y2="16"/>
+                <!-- E -->  <line x1="49" y1="26" x2="42" y2="26"/>
+                <!-- SE --> <line x1="41" y1="41" x2="36" y2="36"/>
+                <!-- S -->  <line x1="26" y1="49" x2="26" y2="42"/>
+                <!-- SW --> <line x1="11" y1="41" x2="16" y2="36"/>
+                <!-- W -->  <line x1="3"  y1="26" x2="10" y2="26"/>
+                <!-- NW --> <line x1="11" y1="11" x2="16" y2="16"/>
+              </g>
+              <!-- Yin-yang mini -->
+              <path d="M26 18 A8 8 0 0 1 26 34 A4 4 0 0 1 26 26 A4 4 0 0 0 26 18 Z" fill="#4a9aaa" opacity="0.7"/>
+              <path d="M26 18 A8 8 0 0 0 26 34 A4 4 0 0 0 26 26 A4 4 0 0 1 26 18 Z" fill="#c8a86b" opacity="0.7"/>
+            </svg>
+          </div>
+          <div class="card-text">
+            <h3>靈龜八法與子午流注</h3>
+            <p>開卦、主穴、配穴、子午流注</p>
+          </div>
+          <div class="card-chevron">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="card card-row" id="btn-meridian" role="button" tabindex="0"
+             aria-label="經絡與穴位">
+          <div class="card-icon">
+            <!-- Human silhouette SVG -->
+            <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="26" cy="10" r="6" fill="rgba(74,154,170,0.25)" stroke="#4a9aaa" stroke-width="1.5"/>
+              <path d="M18 20 Q26 16 34 20 L36 38 H30 L28 50 H24 L22 38 H16 Z"
+                    fill="rgba(74,154,170,0.12)" stroke="#4a9aaa" stroke-width="1.5" stroke-linejoin="round"/>
+              <line x1="18" y1="22" x2="12" y2="34" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="34" y1="22" x2="40" y2="34" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+              <!-- meridian dots -->
+              <circle cx="26" cy="24" r="2" fill="#4a9aaa" opacity="0.6"/>
+              <circle cx="26" cy="31" r="2" fill="#4a9aaa" opacity="0.6"/>
+              <circle cx="26" cy="38" r="2" fill="#4a9aaa" opacity="0.6"/>
+            </svg>
+          </div>
+          <div class="card-text">
+            <h3>經絡與穴位</h3>
+            <p>經絡圖、穴位特性、取穴方法</p>
+          </div>
+          <div class="card-chevron">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="card card-row" id="btn-rhymes" role="button" tabindex="0"
+             aria-label="中醫歌訣">
+          <div class="card-icon">
+            <!-- Book SVG -->
+            <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="8" y="8" width="36" height="38" rx="4"
+                    fill="rgba(74,154,170,0.1)" stroke="#2d7a8a" stroke-width="1.8"/>
+              <line x1="26" y1="8" x2="26" y2="46" stroke="#2d7a8a" stroke-width="1.5" stroke-dasharray="2 2"/>
+              <path d="M8 12 Q12 10 16 12 Q20 14 24 12" stroke="#2d7a8a" stroke-width="1.5"
+                    stroke-linecap="round" fill="none"/>
+              <line x1="14" y1="22" x2="23" y2="22" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="14" y1="28" x2="23" y2="28" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="14" y1="34" x2="23" y2="34" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="29" y1="22" x2="38" y2="22" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="29" y1="28" x2="38" y2="28" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="29" y1="34" x2="38" y2="34" stroke="#4a9aaa" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="card-text">
+            <h3>中醫歌訣</h3>
+            <p>經典歌訣、快速查詢</p>
+          </div>
+          <div class="card-chevron">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Decorative ink-wash footer image area -->
+      <div class="home-footer-art" aria-hidden="true">
+        <svg viewBox="0 0 480 160" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">
+          <!-- Mountains ink-wash style -->
+          <defs>
+            <linearGradient id="mtnGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#4a9aaa" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#4a9aaa" stop-opacity="0.04"/>
+            </linearGradient>
+            <linearGradient id="mtnGrad2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#2d7a8a" stop-opacity="0.12"/>
+              <stop offset="100%" stop-color="#2d7a8a" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <!-- Far mountains -->
+          <path d="M0 140 Q60 40 120 90 Q180 30 240 70 Q300 20 360 80 Q420 50 480 100 L480 160 L0 160 Z"
+                fill="url(#mtnGrad)"/>
+          <!-- Near mountains -->
+          <path d="M0 160 Q80 80 160 120 Q220 70 280 110 Q340 75 400 115 Q440 90 480 130 L480 160 Z"
+                fill="url(#mtnGrad2)"/>
+          <!-- Water ripples -->
+          <ellipse cx="240" cy="155" rx="180" ry="8" fill="rgba(74,154,170,0.08)"/>
+          <ellipse cx="240" cy="158" rx="120" ry="5" fill="rgba(74,154,170,0.06)"/>
+        </svg>
+      </div>
+
+      <div class="safe-bottom"></div>
+    </div>
+
+    <!-- Settings button (floating bottom-right) -->
+    <button class="btn-settings-fab" id="btn-settings" aria-label="設定">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
+                 a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
+                 A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83
+                 l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+                 A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83
+                 l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09
+                 a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83
+                 l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+                 a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div><!-- /#page-home -->
+
+
+  <!-- ════════════════════════════════════════
+       PAGE: 靈龜八法
+  ═════════════════════════════════════════ -->
+  <div class="page" id="page-lingui">
+    <div class="top-bar">
+      <button class="btn-icon" id="back-lingui" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="page-title">靈龜八法</span>
+      <div style="width:36px"></div>
+    </div>
+    <div class="scroll-area" id="lingui-scroll">
+      <!-- Dynamically rendered by lingui.js -->
+      <div id="lingui-content"></div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════
+       PAGE: 經絡與穴位
+  ═════════════════════════════════════════ -->
+  <div class="page" id="page-meridian">
+    <div class="top-bar">
+      <button class="btn-icon" id="back-meridian" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="page-title">經絡與穴位</span>
+      <div style="width:36px"></div>
+    </div>
+    <div class="scroll-area" id="meridian-scroll">
+      <div id="meridian-content"></div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════
+       PAGE: 中醫歌訣
+  ═════════════════════════════════════════ -->
+  <div class="page" id="page-rhymes">
+    <div class="top-bar">
+      <button class="btn-icon" id="back-rhymes" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="page-title">中醫歌訣</span>
+      <div style="width:36px"></div>
+    </div>
+    <div class="scroll-area" id="rhymes-scroll">
+      <div id="rhymes-content"></div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════
+       PAGE: 設定
+  ═════════════════════════════════════════ -->
+  <div class="page" id="page-settings">
+    <div class="top-bar">
+      <button class="btn-icon" id="back-settings" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="page-title">設定</span>
+      <div style="width:36px"></div>
+    </div>
+    <div class="scroll-area">
+      <div class="flex-col gap-lg">
+
+        <div>
+          <p class="section-title">顯示</p>
+          <div class="settings-section">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                字型大小
+                <small>調整全 App 文字大小</small>
+              </div>
+              <div class="font-size-picker" id="font-size-picker">
+                <button data-size="small"  title="小">小</button>
+                <button data-size="medium" title="中">中</button>
+                <button data-size="large"  title="大">大</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="section-title">語音</p>
+          <div class="settings-section">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                TTS 聲音
+                <small>朗讀歌訣時的聲音性別</small>
+              </div>
+              <div class="voice-picker" id="voice-picker">
+                <button data-voice="female">女聲</button>
+                <button data-voice="male">男聲</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                語音測試
+                <small>點擊試聽目前設定</small>
+              </div>
+              <button class="btn btn-secondary" id="btn-tts-test" style="font-size:var(--fs-sm);padding:8px 14px;">
+                試聽
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="section-title">關於</p>
+          <div class="settings-section">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                針灸助理
+                <small>版本 1.0.0</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- ── Styles for home page hero (page-specific) ── -->
+<style>
+.home-hero {
+  position: relative;
+  padding: 48px var(--sp-lg) var(--sp-xl);
+  text-align: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.home-hero-bg {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg,
+    rgba(184,221,230,0.45) 0%,
+    rgba(238,244,247,0.0) 100%);
+  pointer-events: none;
+}
+.home-hero-content { position: relative; z-index: 1; }
+.home-logo { margin-bottom: var(--sp-md); }
+.yinyang-svg {
+  width: 72px; height: 72px;
+  filter: drop-shadow(0 4px 12px rgba(74,154,170,0.25));
+  animation: floatLogo 4s ease-in-out infinite;
+}
+@keyframes floatLogo {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.home-title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  color: var(--clr-ink);
+  letter-spacing: 0.12em;
+  margin-bottom: var(--sp-sm);
+}
+.home-subtitle {
+  font-size: var(--fs-sm);
+  color: var(--clr-muted);
+  letter-spacing: 0.15em;
+}
+
+.home-cards-area { padding-top: var(--sp-md); }
+
+.home-footer-art {
+  margin-top: var(--sp-xl);
+  width: 100%; height: 160px;
+  overflow: hidden;
+  opacity: 0.85;
+}
+.home-footer-art svg { width: 100%; height: 100%; }
+
+/* Settings FAB */
+.btn-settings-fab {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 20px);
+  right: calc((100vw - min(100vw, var(--max-width))) / 2 + 20px);
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: rgba(245,249,251,0.9);
+  border: var(--border);
+  box-shadow: var(--shadow-md);
+  color: var(--clr-teal);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all var(--dur-fast);
+  z-index: 90;
+}
+.btn-settings-fab:hover { background: var(--clr-teal-light); }
+.btn-settings-fab svg { width: 20px; height: 20px; }
+
+/* Hide FAB when not on home page */
+.page:not(#page-home).active ~ * .btn-settings-fab,
+#page-home:not(.active) ~ * { display:none; }
+</style>
+
+<!-- ── Scripts ── -->
+<script src="js/settings.js"></script>
+<script src="js/cache.js"></script>
+<script src="js/ganzhi.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/lingui.js"></script>
+<script src="js/meridian.js"></script>
+<script src="js/rhymes.js"></script>
+
+<script>
+// ── App Bootstrap ──
+(function() {
+  // Apply saved settings immediately
+  Settings.apply();
+
+  // ── Navigation ──
+  function nav(pageId) { UI.showPage(pageId); }
+
+  document.getElementById('btn-lingui').addEventListener('click',   () => { nav('page-lingui');   Lingui.init(); });
+  document.getElementById('btn-meridian').addEventListener('click', () => { nav('page-meridian'); Meridian.init(); });
+  document.getElementById('btn-rhymes').addEventListener('click',   () => { nav('page-rhymes');   Rhymes.init(); });
+  document.getElementById('btn-settings').addEventListener('click', () => { nav('page-settings'); initSettings(); });
+
+  document.getElementById('back-lingui').addEventListener('click',   () => nav('page-home'));
+  document.getElementById('back-meridian').addEventListener('click', () => nav('page-home'));
+  document.getElementById('back-rhymes').addEventListener('click',   () => { Rhymes.stop(); nav('page-home'); });
+  document.getElementById('back-settings').addEventListener('click', () => nav('page-home'));
+
+  // Keyboard accessibility for card-rows
+  document.querySelectorAll('.card-row[role=button]').forEach(el => {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') el.click(); });
+  });
+
+  // ── Settings Page ──
+  function initSettings() {
+    const prefs = Settings.load();
+
+    // Font size picker
+    document.querySelectorAll('#font-size-picker button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.size === prefs.fontSize);
+      btn.addEventListener('click', () => {
+        Settings.set('fontSize', btn.dataset.size);
+        document.querySelectorAll('#font-size-picker button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        UI.toast('字型大小已更新');
+      });
+    });
+
+    // Voice picker
+    document.querySelectorAll('#voice-picker button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.voice === prefs.voiceGender);
+      btn.addEventListener('click', () => {
+        Settings.set('voiceGender', btn.dataset.voice);
+        document.querySelectorAll('#voice-picker button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        UI.toast('聲音設定已更新');
+      });
+    });
+
+    // TTS test
+    document.getElementById('btn-tts-test').addEventListener('click', () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance('針灸助理，全人醫療，調和陰陽。');
+        utt.lang = 'zh-TW';
+        const gender = Settings.get('voiceGender');
+        const voices = window.speechSynthesis.getVoices();
+        const picked = voices.find(v => v.lang.startsWith('zh') && (gender === 'female' ? /female|woman|girl/i.test(v.name) : /male|man/i.test(v.name)))
+                    || voices.find(v => v.lang.startsWith('zh'))
+                    || null;
+        if (picked) utt.voice = picked;
+        window.speechSynthesis.speak(utt);
+      } else {
+        UI.toast('您的裝置不支援語音功能');
+      }
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
