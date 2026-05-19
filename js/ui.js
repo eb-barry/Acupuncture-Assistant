@@ -1,24 +1,28 @@
 /**
  * ui.js
- * Shared UI utilities: page navigation, toast, acupoint info panel,
- * image lazy-load with spinner and slow-notice.
+ * 共用 UI 工具：
+ *   - 頁面切換
+ *   - Toast 通知
+ *   - 穴位資訊面板（圖片 lazy load + 文字按需載入）
  */
 
 const UI = (() => {
 
-  /* ── Page Navigation ── */
+  /* ── 頁面切換 ── */
   function showPage(id) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const target = document.getElementById(id);
     if (target) {
       target.classList.add('active');
-      target.scrollTop = 0;
+      // 捲回頂部
+      const scroll = target.querySelector('.scroll-area');
+      if (scroll) scroll.scrollTop = 0;
     }
   }
 
   /* ── Toast ── */
   let _toastTimer = null;
-  function toast(msg, duration = 2500) {
+  function toast(msg, duration = 2800) {
     let el = document.getElementById('toast');
     if (!el) {
       el = document.createElement('div');
@@ -32,89 +36,76 @@ const UI = (() => {
     _toastTimer = setTimeout(() => el.classList.remove('show'), duration);
   }
 
-  /* ── Acupoint Info Panel ── */
-  /**
-   * Render an acupoint info panel (image + description text).
-   * @param {HTMLElement} container  - where to render
-   * @param {string}      pointName  - e.g. "尺澤"
-   * @param {string}      badgeLabel - e.g. "主穴" / "合穴"
+  /* ── 穴位資訊面板 ──
+   * @param {HTMLElement} container  渲染目標
+   * @param {string}      pointName  穴位名稱，如「尺澤」
+   * @param {string}      badgeLabel 標籤文字，如「主穴」「合穴」
    */
-  async function renderPointPanel(container, pointName, badgeLabel = '') {
+  async function renderPointPanel(container, pointName, badgeLabel) {
+    const imgId  = `pi-${pointName}`;
+    const phId   = `pp-${pointName}`;
+    const slowId = `ps-${pointName}`;
+    const descId = `pd-${pointName}`;
+
     container.innerHTML = `
       <div class="info-panel">
+
+        <!-- 穴位圖 -->
         <div class="info-image-wrap">
-          <div class="img-placeholder" id="img-placeholder-${pointName}">
+          <div class="img-placeholder" id="${phId}">
             <div class="spinner"></div>
-            <span>載入穴位圖…</span>
+            <span>穴位圖載入中</span>
           </div>
-          <img id="point-img-${pointName}" src="" alt="${pointName}穴位圖"
-               style="display:none;" loading="lazy" />
+          <img id="${imgId}" src="" alt="${pointName}穴位圖" style="display:none;" loading="lazy" />
         </div>
-        <p class="slow-notice" id="slow-notice-${pointName}">圖片載入中，請稍候…</p>
+        <p class="slow-notice" id="${slowId}">圖片載入較慢，請稍候…</p>
+
+        <!-- 文字說明 -->
         <div class="info-text">
           <h4>
             ${pointName}
             ${badgeLabel ? `<span class="badge">${badgeLabel}</span>` : ''}
           </h4>
-          <div id="point-desc-${pointName}">
-            <div class="img-placeholder" style="position:relative;height:60px;">
+          <div id="${descId}">
+            <div class="img-placeholder" style="position:relative;height:56px;">
               <div class="spinner"></div>
             </div>
           </div>
         </div>
+
       </div>`;
 
-    // ── Load image ──
-    const imgEl  = document.getElementById(`point-img-${pointName}`);
-    const phEl   = document.getElementById(`img-placeholder-${pointName}`);
-    const slowEl = document.getElementById(`slow-notice-${pointName}`);
+    /* ── 載入圖片 ── */
+    const imgEl  = document.getElementById(imgId);
+    const phEl   = document.getElementById(phId);
+    const slowEl = document.getElementById(slowId);
 
-    const slowTimer = setTimeout(() => slowEl && slowEl.classList.add('visible'), 5000);
+    // 5 秒後顯示「載入較慢」提示
+    const slowTimer = setTimeout(() => slowEl?.classList.add('visible'), 5000);
 
     imgEl.onload = () => {
       clearTimeout(slowTimer);
-      if (phEl) phEl.style.display = 'none';
-      imgEl.style.display = 'block';
-      slowEl && slowEl.classList.remove('visible');
+      phEl.style.display   = 'none';
+      imgEl.style.display  = 'block';
+      slowEl?.classList.remove('visible');
     };
     imgEl.onerror = () => {
       clearTimeout(slowTimer);
-      if (phEl) phEl.innerHTML = '<span style="color:var(--clr-muted)">穴位圖暫未提供</span>';
-      slowEl && slowEl.classList.remove('visible');
+      phEl.innerHTML = `<span style="color:var(--clr-muted);font-size:var(--fs-sm)">穴位圖暫未提供</span>`;
+      slowEl?.classList.remove('visible');
     };
     imgEl.src = Cache.pointImageUrl(pointName);
 
-    // ── Load text ──
-    const descEl = document.getElementById(`point-desc-${pointName}`);
+    /* ── 載入文字 ── */
+    const descEl = document.getElementById(descId);
     try {
       const text = await Cache.loadPointText(pointName);
       if (descEl) descEl.innerHTML = `<p>${text.trim()}</p>`;
     } catch {
-      if (descEl) descEl.innerHTML = `<p style="color:var(--clr-muted)">說明文字暫未提供。</p>`;
+      if (descEl) descEl.innerHTML =
+        `<p style="color:var(--clr-muted)">取穴說明暫未提供。</p>`;
     }
   }
 
-  /* ── Back button helper ── */
-  function backTo(pageId) {
-    return () => showPage(pageId);
-  }
-
-  /* ── SVG icon shortcuts ── */
-  const icons = {
-    back: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-             <polyline points="15 18 9 12 15 6"/>
-           </svg>`,
-    settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                 <circle cx="12" cy="12" r="3"/>
-                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-               </svg>`,
-    chevron: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>`,
-    play:  `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
-    stop:  `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
-    pause: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`,
-  };
-
-  return { showPage, toast, renderPointPanel, backTo, icons };
+  return { showPage, toast, renderPointPanel };
 })();
