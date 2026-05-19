@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <circle cx="16" cy="16" r="15" fill="#eef4f7" stroke="#4a9aaa" stroke-width="1"/>
+  <!-- Yin-Yang simplified -->
+  <path d="M16 2 A14 14 0 0 1 16 30 A7 7 0 0 1 16 16 A7 7 0 0 0 16 2 Z" fill="#4a9aaa"/>
+  <path d="M16 2 A14 14 0 0 0 16 30 A7 7 0 0 0 16 16 A7 7 0 0 1 16 2 Z" fill="#c8a86b"/>
+  <circle cx="16" cy="9"  r="3.5" fill="#c8a86b"/>
+  <circle cx="16" cy="23" r="3.5" fill="#4a9aaa"/>
+  <circle cx="16" cy="9"  r="1.5" fill="#4a9aaa"/>
+  <circle cx="16" cy="23" r="1.5" fill="#c8a86b"/>
+</svg>
