@@ -417,3 +417,39 @@ body::before {
 .mt-sm      { margin-top: var(--sp-sm); }
 .mt-md      { margin-top: var(--sp-md); }
 .mt-lg      { margin-top: var(--sp-lg); }
+
+/* ── 靈龜八法：主穴藍底白字 / 配穴綠底白字 ── */
+.btn-point--main {
+  background: linear-gradient(135deg, #3a8fc4, #2270a8);
+  border-color: #2270a8;
+  color: #fff;
+}
+.btn-point--main .point-label { color: rgba(255,255,255,0.75); }
+.btn-point--main:hover,
+.btn-point--main.active {
+  background: linear-gradient(135deg, #2e7db5, #1a5f8e);
+  border-color: #1a5f8e;
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.btn-point--paired {
+  background: linear-gradient(135deg, #4a9a6e, #2d7a52);
+  border-color: #2d7a52;
+  color: #fff;
+}
+.btn-point--paired .point-label { color: rgba(255,255,255,0.75); }
+.btn-point--paired:hover,
+.btn-point--paired.active {
+  background: linear-gradient(135deg, #3d8860, #1f6640);
+  border-color: #1f6640;
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+/* ── 穴位圖：寬度撐滿螢幕（突破 scroll-area padding） ── */
+.info-image-wrap {
+  margin-left:  calc(-1 * var(--sp-md));
+  margin-right: calc(-1 * var(--sp-md));
+  border-radius: 0;
+}
