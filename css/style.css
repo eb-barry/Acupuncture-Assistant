@@ -286,8 +286,14 @@ body::before {
   border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm);
 }
 .info-image-wrap {
-  position: relative; width: 100%; padding-top: 55%;
+  position: relative;
+  width: calc(100% + 2 * var(--sp-md));   /* 撐出左右 padding */
+  margin-left: calc(-1 * var(--sp-md));
+  margin-right: calc(-1 * var(--sp-md));
+  padding-top: 55%;                        /* 維持寬高比 */
   background: linear-gradient(135deg, var(--clr-bg), var(--clr-bg-card2));
+  border-radius: 0;                        /* 獨立在 panel 外，不需圓角 */
+  overflow: hidden;
 }
 .info-image-wrap img {
   position: absolute; inset: 0; width: 100%; height: 100%;
@@ -306,6 +312,15 @@ body::before {
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 穴位面板外層包裝 ── */
+.point-panel-wrap {
+  border: var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  background: var(--clr-bg-card);
+}
 .slow-notice { font-size: var(--fs-xs); color: var(--clr-muted); text-align: center; padding: var(--sp-xs) 0; display: none; }
 .slow-notice.visible { display: block; }
 
@@ -418,38 +433,44 @@ body::before {
 .mt-md      { margin-top: var(--sp-md); }
 .mt-lg      { margin-top: var(--sp-lg); }
 
-/* ── 靈龜八法：主穴藍底白字 / 配穴綠底白字 ── */
+/* ── 靈龜八法：主穴（藍）/ 配穴（綠）── 預設淺色，按下後深色 ── */
+
+/* 主穴：預設淺藍 */
 .btn-point--main {
-  background: linear-gradient(135deg, #3a8fc4, #2270a8);
-  border-color: #2270a8;
-  color: #fff;
+  background: #e8f4fb;
+  border-color: #90c4e0;
+  color: #1a5f8e;
 }
-.btn-point--main .point-label { color: rgba(255,255,255,0.75); }
-.btn-point--main:hover,
-.btn-point--main.active {
+.btn-point--main .point-label { color: #5a9ec4; }
+
+/* 主穴：按下後深藍 */
+.btn-point--main.active,
+.btn-point--main:active {
   background: linear-gradient(135deg, #2e7db5, #1a5f8e);
   border-color: #1a5f8e;
   color: #fff;
   transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
+.btn-point--main.active .point-label { color: rgba(255,255,255,0.8); }
 
+/* 配穴：預設淺綠 */
 .btn-point--paired {
-  background: linear-gradient(135deg, #4a9a6e, #2d7a52);
-  border-color: #2d7a52;
-  color: #fff;
+  background: #e8f5ee;
+  border-color: #80c8a0;
+  color: #1f6640;
 }
-.btn-point--paired .point-label { color: rgba(255,255,255,0.75); }
-.btn-point--paired:hover,
-.btn-point--paired.active {
+.btn-point--paired .point-label { color: #4a9a6e; }
+
+/* 配穴：按下後深綠 */
+.btn-point--paired.active,
+.btn-point--paired:active {
   background: linear-gradient(135deg, #3d8860, #1f6640);
   border-color: #1f6640;
   color: #fff;
   transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
+.btn-point--paired.active .point-label { color: rgba(255,255,255,0.8); }
 
-/* ── 穴位圖：寬度撐滿螢幕（突破 scroll-area padding） ── */
-.info-image-wrap {
-  margin-left:  calc(-1 * var(--sp-md));
-  margin-right: calc(-1 * var(--sp-md));
-  border-radius: 0;
-}
+
