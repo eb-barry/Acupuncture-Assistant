@@ -1,17 +1,15 @@
 /**
- * meridian.js
- * 經絡與穴位 page:
- *   - 三層連動 select：經脈 → 穴位特性 → 穴位名稱
- *   - 穴位特性僅顯示目前選定經脈「有值」的特性（不顯示 null 項目）
- *   - 確定按鈕在無對應穴位時顯示為灰色
- *   - 點選確定後顯示穴位圖與取穴說明
+ * meridian.js — 經絡與穴位
+ * UI 改動：
+ *   - 經脈名稱 + 穴位特性並排同一列
+ *   - 穴位名稱 + 查詢穴位並排同一列
+ *   - 穴位圖片寬度撐滿螢幕（負 margin 突破 scroll-area padding）
  */
 
 const Meridian = (() => {
-  let _data    = null;
-  let _inited  = false;
+  let _data   = null;
+  let _inited = false;
 
-  // 穴位特性顯示順序
   const CATEGORIES = [
     '井穴','榮穴','俞穴','經穴','合穴',
     '背俞穴','募穴','原穴','絡穴','郄穴',
@@ -19,12 +17,9 @@ const Meridian = (() => {
   ];
 
   async function init() {
-    // 資料只載入一次
     if (_inited) { _restoreUI(); return; }
-
     const container = document.getElementById('meridian-content');
     container.innerHTML = _loadingHTML(120);
-
     try {
       _data   = await Cache.loadJSON('acupuncture-data.json');
       _inited = true;
@@ -34,53 +29,58 @@ const Meridian = (() => {
     }
   }
 
-  // 若已初始化，只重建 UI（保留資料快取）
   function _restoreUI() {
-    const container = document.getElementById('meridian-content');
-    _buildUI(container);
+    _buildUI(document.getElementById('meridian-content'));
   }
 
   function _buildUI(container) {
     container.innerHTML = `
       <div class="flex-col gap-md">
 
-        <!-- 經脈 -->
-        <div class="form-group">
-          <label class="form-label" for="sel-meridian">經脈名稱</label>
-          <div class="select-wrap">
-            <select class="styled-select" id="sel-meridian">
-              <option value="">— 請選擇經脈 —</option>
-              ${_data.map(m =>
-                `<option value="${m['經脈']}">${m['經脈']}</option>`
-              ).join('')}
-            </select>
+        <!-- ── 第一列：經脈名稱 ＋ 穴位特性 並排 ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-sm)">
+
+          <div class="form-group">
+            <label class="form-label" for="sel-meridian">經脈名稱</label>
+            <div class="select-wrap">
+              <select class="styled-select" id="sel-meridian">
+                <option value="">— 請選擇 —</option>
+                ${_data.map(m =>
+                  `<option value="${m['經脈']}">${m['經脈']}</option>`
+                ).join('')}
+              </select>
+            </div>
           </div>
+
+          <div class="form-group">
+            <label class="form-label" for="sel-category">穴位特性</label>
+            <div class="select-wrap">
+              <select class="styled-select" id="sel-category" disabled>
+                <option value="">— 請先選經脈 —</option>
+              </select>
+            </div>
+          </div>
+
         </div>
 
-        <!-- 穴位特性 -->
-        <div class="form-group">
-          <label class="form-label" for="sel-category">穴位特性</label>
-          <div class="select-wrap">
-            <select class="styled-select" id="sel-category" disabled>
-              <option value="">— 請先選擇經脈 —</option>
-            </select>
-          </div>
-        </div>
+        <!-- ── 第二列：穴位名稱 ＋ 查詢穴位 並排 ── -->
+        <div style="display:grid;grid-template-columns:1fr auto;gap:var(--sp-sm);align-items:flex-end">
 
-        <!-- 穴位名稱 -->
-        <div class="form-group">
-          <label class="form-label" for="sel-point">穴位名稱</label>
-          <div class="select-wrap">
-            <select class="styled-select" id="sel-point" disabled>
-              <option value="">—</option>
-            </select>
+          <div class="form-group">
+            <label class="form-label" for="sel-point">穴位名稱</label>
+            <div class="select-wrap">
+              <select class="styled-select" id="sel-point" disabled>
+                <option value="">—</option>
+              </select>
+            </div>
           </div>
-        </div>
 
-        <!-- 確定按鈕 -->
-        <button class="btn btn-primary w-full" id="btn-meri-ok" disabled>
-          查詢穴位
-        </button>
+          <button class="btn btn-primary" id="btn-meri-ok" disabled
+                  style="height:46px;padding:0 var(--sp-lg);white-space:nowrap;flex-shrink:0">
+            查詢穴位
+          </button>
+
+        </div>
 
       </div>
 
@@ -97,7 +97,6 @@ const Meridian = (() => {
     const selP  = document.getElementById('sel-point');
     const btnOk = document.getElementById('btn-meri-ok');
 
-    // 選經脈 → 更新穴位特性（只顯示有值的特性）
     selM.addEventListener('change', () => {
       const name = selM.value;
       selC.innerHTML = '<option value="">— 請選擇穴位特性 —</option>';
@@ -105,37 +104,32 @@ const Meridian = (() => {
       selC.disabled  = !name;
       selP.disabled  = true;
       btnOk.disabled = true;
-
       if (!name) return;
+
       const rec = _data.find(m => m['經脈'] === name);
       if (!rec) return;
-
-      // 只加入該經脈「有穴位」的特性
       const available = CATEGORIES.filter(cat => rec['穴位'][cat]);
       if (!available.length) {
-        selC.innerHTML = '<option value="">（此經脈無特殊穴位資料）</option>';
+        selC.innerHTML = '<option value="">（無特殊穴位資料）</option>';
         return;
       }
       available.forEach(cat => {
         const opt = document.createElement('option');
-        opt.value = cat;
-        opt.textContent = cat;
+        opt.value = cat; opt.textContent = cat;
         selC.appendChild(opt);
       });
     });
 
-    // 選穴位特性 → 填入穴位名稱
     selC.addEventListener('change', () => {
-      const name = selM.value;
-      const cat  = selC.value;
+      const name  = selM.value;
+      const cat   = selC.value;
       selP.innerHTML = '<option value="">—</option>';
       selP.disabled  = true;
       btnOk.disabled = true;
-
       if (!name || !cat) return;
+
       const rec   = _data.find(m => m['經脈'] === name);
       const point = rec && rec['穴位'][cat];
-
       if (point) {
         const opt = document.createElement('option');
         opt.value = point; opt.textContent = point;
@@ -148,12 +142,10 @@ const Meridian = (() => {
       }
     });
 
-    // 查詢穴位
     btnOk.addEventListener('click', () => {
       const point = selP.value;
       const cat   = selC.value;
       if (!point) return;
-
       document.getElementById('meri-divider').style.display = '';
       const panel = document.getElementById('meri-panel');
       UI.renderPointPanel(panel, point, cat);
@@ -163,10 +155,8 @@ const Meridian = (() => {
 
   function _loadingHTML(h) {
     return `<div class="img-placeholder" style="position:relative;height:${h}px;">
-              <div class="spinner"></div>
-            </div>`;
+              <div class="spinner"></div></div>`;
   }
-
   function _errorHTML(msg, detail) {
     return `<div style="text-align:center;padding:var(--sp-xl);color:var(--clr-muted)">
               <p style="font-size:var(--fs-lg);margin-bottom:var(--sp-sm)">⚠ ${msg}</p>
