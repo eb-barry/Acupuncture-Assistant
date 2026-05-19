@@ -2,8 +2,12 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#eef4f7" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>針灸助理</title>
@@ -398,9 +402,7 @@
 .btn-settings-fab:hover { background: var(--clr-teal-light); }
 .btn-settings-fab svg { width: 20px; height: 20px; }
 
-/* Hide FAB when not on home page */
-.page:not(#page-home).active ~ * .btn-settings-fab,
-#page-home:not(.active) ~ * { display:none; }
+/* FAB visibility controlled by JS */
 </style>
 
 <!-- ── Scripts ── -->
@@ -419,7 +421,12 @@
   Settings.apply();
 
   // ── Navigation ──
-  function nav(pageId) { UI.showPage(pageId); }
+  const fab = document.getElementById('btn-settings');
+  function nav(pageId) {
+    UI.showPage(pageId);
+    // 只在主頁顯示設定按鈕
+    fab.style.display = (pageId === 'page-home') ? 'flex' : 'none';
+  }
 
   document.getElementById('btn-lingui').addEventListener('click',   () => { nav('page-lingui');   Lingui.init(); });
   document.getElementById('btn-meridian').addEventListener('click', () => { nav('page-meridian'); Meridian.init(); });
