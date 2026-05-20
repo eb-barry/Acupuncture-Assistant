@@ -144,12 +144,12 @@ body::before {
 /* ── Scroll Area ── */
 .scroll-area {
   flex: 1; overflow-y: auto;
-  padding: var(--sp-md);
+  padding: var(--sp-md) 0;          /* 左右 padding 移到子元件 */
   -webkit-overflow-scrolling: touch;
 }
 .scroll-area::-webkit-scrollbar { width: 4px; }
 .scroll-area::-webkit-scrollbar-thumb { background: var(--clr-teal-light); border-radius: 2px; }
-
+/* ── 頁面內容區：補回 scroll-area 移除的左右 padding ── */
 /* ── Cards ── */
 .card {
   background: var(--clr-bg-card);
@@ -285,20 +285,26 @@ body::before {
   background: var(--clr-bg-card); border: var(--border);
   border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm);
 }
-.info-image-wrap {
+/* ── 穴位圖片區：全寬，維持比例 ── */
+.point-img-block {
   position: relative;
-  width: calc(100% + 2 * var(--sp-md));   /* 撐出左右 padding */
-  margin-left: calc(-1 * var(--sp-md));
-  margin-right: calc(-1 * var(--sp-md));
-  padding-top: 55%;                        /* 維持寬高比 */
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding-bottom: 75%;
   background: linear-gradient(135deg, var(--clr-bg), var(--clr-bg-card2));
-  border-radius: 0;                        /* 獨立在 panel 外，不需圓角 */
   overflow: hidden;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
-.info-image-wrap img {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; padding: var(--sp-sm);
+@supports (aspect-ratio: 1) {
+  .point-img-block { padding-bottom: 0; }
 }
+.point-img-block .img-placeholder {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: var(--sp-sm);
+}
+
 .img-placeholder {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -313,13 +319,15 @@ body::before {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── 穴位面板外層包裝 ── */
-.point-panel-wrap {
-  border: var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
+
+/* ── 穴位說明文字區 ── */
+.point-text-block {
+  padding: var(--sp-md) var(--sp-md);
   background: var(--clr-bg-card);
+  border: var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 .slow-notice { font-size: var(--fs-xs); color: var(--clr-muted); text-align: center; padding: var(--sp-xs) 0; display: none; }
 .slow-notice.visible { display: block; }
