@@ -2,14 +2,15 @@
  * ui.js
  * 共用 UI 工具：頁面切換、Toast、穴位資訊面板
  *
- * 圖片全寬策略：
- *   info-image-wrap 獨立在 info-panel 外，
- *   用負 margin 突破 scroll-area 的 padding，達到真正全寬。
+ * 圖片全寬策略（最終版）：
+ *   圖片區與文字區完全分開，不共用任何父容器。
+ *   圖片直接撐滿 scroll-area（左右無 padding），
+ *   文字區加回 page-content padding。
  *
  *   DOM 結構：
- *     <div class="point-panel-wrap">
- *       <div class="info-image-wrap">   ← 全寬圖片，在 panel 外
- *       <div class="info-panel">        ← 只包文字說明
+ *     container
+ *       ├─ <div class="point-img-block">    ← 全寬圖片，無包裹容器
+ *       └─ <div class="point-text-block">   ← 文字說明，有 padding
  */
 
 const UI = (() => {
@@ -41,7 +42,7 @@ const UI = (() => {
     _toastTimer = setTimeout(() => el.classList.remove('show'), duration);
   }
 
-  /* ── 依序嘗試多個圖片 URL（中文檔名 CDN 相容） ── */
+  /* ── 依序嘗試多個圖片 URL ── */
   function _loadImageWithFallback(urls, imgEl, phEl, slowEl) {
     let idx = 0;
     function tryNext() {
@@ -65,17 +66,14 @@ const UI = (() => {
 
   /* ── 穴位資訊面板 ──
    *
-   * 最終 DOM：
-   *   <div class="point-panel-wrap">
-   *     <div class="info-image-wrap">        ← 全寬，負 margin
-   *       <div class="img-placeholder">
-   *       <img>
-   *     </div>
-   *     <p class="slow-notice">
-   *     <div class="info-panel">             ← 文字說明，正常 padding
-   *       <div class="info-text">
-   *         <h4> 穴位名稱 + badge
-   *         <div> 說明文字
+   * 圖片區（point-img-block）：
+   *   - 無父容器限制，直接在 scroll-area 內
+   *   - scroll-area 左右 padding=0，所以 width:100% 即為螢幕全寬
+   *   - 用 padding-bottom 維持圖片比例（aspect-ratio fallback）
+   *
+   * 文字區（point-text-block）：
+   *   - 加回左右 padding
+   *   - 有背景色、圓角（底部）、邊框
    */
   async function renderPointPanel(container, pointName, badgeLabel) {
     const uid    = pointName.replace(/[^\w]/g, '_') + '_' + Date.now();
@@ -85,53 +83,51 @@ const UI = (() => {
     const descId = `pd_${uid}`;
 
     container.innerHTML = `
-      <div class="point-panel-wrap">
 
-        <!-- 全寬圖片區：獨立在 info-panel 外 -->
-        <div class="info-image-wrap">
-          <div class="img-placeholder" id="${phId}">
+      <!-- ── 全寬圖片區 ── -->
+      <div class="point-img-block">
+        <div class="img-placeholder" id="${phId}">
+          <div class="spinner"></div>
+          <span>穴位圖載入中</span>
+        </div>
+        <img id="${imgId}" src="" alt="${pointName}穴位圖"
+             style="display:none;width:100%;height:100%;object-fit:contain;" />
+      </div>
+      <p class="slow-notice" id="${slowId}"
+         style="text-align:center;padding:var(--sp-xs) var(--sp-md);">
+        圖片載入較慢，請稍候…
+      </p>
+
+      <!-- ── 文字說明區 ── -->
+      <div class="point-text-block">
+        <h4 style="font-family:var(--font-serif);font-size:var(--fs-lg);
+                   color:var(--clr-ink);margin-bottom:var(--sp-sm);
+                   display:flex;align-items:center;gap:var(--sp-sm);">
+          ${pointName}
+          ${badgeLabel ? `<span class="badge">${badgeLabel}</span>` : ''}
+        </h4>
+        <div id="${descId}">
+          <div class="img-placeholder" style="position:relative;height:56px;">
             <div class="spinner"></div>
-            <span>穴位圖載入中</span>
-          </div>
-          <img id="${imgId}" src="" alt="${pointName}穴位圖" style="display:none;" />
-        </div>
-        <p class="slow-notice" id="${slowId}">圖片載入較慢，請稍候…</p>
-
-        <!-- 文字說明區 -->
-        <div class="info-panel" style="border-top:none;border-radius:0 0 var(--radius-md) var(--radius-md);">
-          <div class="info-text">
-            <h4>
-              ${pointName}
-              ${badgeLabel ? `<span class="badge">${badgeLabel}</span>` : ''}
-            </h4>
-            <div id="${descId}">
-              <div class="img-placeholder" style="position:relative;height:56px;">
-                <div class="spinner"></div>
-              </div>
-            </div>
           </div>
         </div>
-
-      </div>`;
+      </div>
+    `;
 
     const imgEl  = document.getElementById(imgId);
     const phEl   = document.getElementById(phId);
     const slowEl = document.getElementById(slowId);
     const descEl = document.getElementById(descId);
 
-    // 5 秒後顯示「載入較慢」提示
     setTimeout(() => slowEl?.classList.add('visible'), 5000);
-
-    // 依序嘗試多個備援 URL
     _loadImageWithFallback(Cache.pointImageUrls(pointName), imgEl, phEl, slowEl);
 
-    // 載入文字說明
     try {
       const text = await Cache.loadPointText(pointName);
-      if (descEl) descEl.innerHTML = `<p>${text.trim()}</p>`;
+      if (descEl) descEl.innerHTML = `<p style="font-size:var(--fs-sm);line-height:1.9;color:var(--clr-text);white-space:pre-wrap;">${text.trim()}</p>`;
     } catch {
       if (descEl) descEl.innerHTML =
-        `<p style="color:var(--clr-muted)">取穴說明暫未提供。</p>`;
+        `<p style="color:var(--clr-muted);font-size:var(--fs-sm);">取穴說明暫未提供。</p>`;
     }
   }
 
