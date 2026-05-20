@@ -144,12 +144,21 @@ body::before {
 /* ── Scroll Area ── */
 .scroll-area {
   flex: 1; overflow-y: auto;
-  padding: var(--sp-md) 0;          /* 左右 padding 移到子元件 */
+  padding: var(--sp-md) 0;          /* 左右 padding 由子元件或 .page-content 控制 */
   -webkit-overflow-scrolling: touch;
+}
+.scroll-area.home-cards-area {
+  padding-left:  var(--sp-md);      /* 主頁卡片需要左右 padding */
+  padding-right: var(--sp-md);
 }
 .scroll-area::-webkit-scrollbar { width: 4px; }
 .scroll-area::-webkit-scrollbar-thumb { background: var(--clr-teal-light); border-radius: 2px; }
 /* ── 頁面內容區：補回 scroll-area 移除的左右 padding ── */
+.page-content {
+  padding-left:  var(--sp-md);
+  padding-right: var(--sp-md);
+}
+
 /* ── Cards ── */
 .card {
   background: var(--clr-bg-card);
@@ -482,3 +491,31 @@ body::before {
 .btn-point--paired.active .point-label { color: rgba(255,255,255,0.8); }
 
 
+
+/* ── 靈龜八法：餘數=5 男/女切換 ── */
+.gender-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--clr-bg-card2);
+  border: var(--border);
+  border-radius: var(--radius-full);
+  padding: 3px;
+}
+.gender-btn {
+  padding: 4px 14px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--clr-teal-dark);
+  font-size: var(--fs-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  line-height: 1.6;
+}
+.gender-btn.active {
+  background: var(--clr-white);
+  color: var(--clr-ink);
+  box-shadow: var(--shadow-sm);
+}
