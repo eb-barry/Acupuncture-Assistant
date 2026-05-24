@@ -69,17 +69,20 @@ const Lingui = (() => {
 
             <!-- 月曆圖示按鈕 -->
             <button id="btn-calendar" title="自訂日期時間"
-                    style="background:none;border:none;cursor:pointer;
-                           color:var(--clr-teal);padding:2px;
-                           display:flex;align-items:center;">
+                    style="background:var(--clr-teal);border:none;cursor:pointer;
+                           color:#fff;padding:7px 10px;border-radius:var(--radius-sm);
+                           display:flex;align-items:center;gap:5px;
+                           font-size:var(--fs-sm);font-weight:500;
+                           box-shadow:var(--shadow-sm);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                   style="width:20px;height:20px;">
+                   stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+                   style="width:18px;height:18px;flex-shrink:0;">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                 <line x1="16" y1="2" x2="16" y2="6"/>
                 <line x1="8"  y1="2" x2="8"  y2="6"/>
                 <line x1="3"  y1="10" x2="21" y2="10"/>
               </svg>
+              查詢
             </button>
 
             <!-- 日期時間顯示 -->
@@ -90,16 +93,18 @@ const Lingui = (() => {
             <!-- 回到當前時間（自訂模式才顯示） -->
             ${isCustom ? `
             <button id="btn-reset-time" title="回到當前時間"
-                    style="background:none;border:none;cursor:pointer;
-                           color:var(--clr-muted);padding:2px;
-                           display:flex;align-items:center;font-size:var(--fs-xs);">
+                    style="background:var(--clr-gold);border:none;cursor:pointer;
+                           color:#fff;padding:7px 10px;border-radius:var(--radius-sm);
+                           display:flex;align-items:center;gap:5px;
+                           font-size:var(--fs-sm);font-weight:500;
+                           box-shadow:var(--shadow-sm);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                   style="width:16px;height:16px;margin-right:2px;">
+                   stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+                   style="width:18px;height:18px;flex-shrink:0;">
                 <polyline points="1 4 1 10 7 10"/>
                 <path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
               </svg>
-              當前
+              當前時間
             </button>` : ''}
           </div>
 
