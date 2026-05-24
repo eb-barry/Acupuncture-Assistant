@@ -519,3 +519,50 @@ body::before {
   color: var(--clr-ink);
   box-shadow: var(--shadow-sm);
 }
+
+/* ── 靈龜八法：自訂日期時間輸入面板 ── */
+.calendar-input-box {
+  background: var(--clr-bg-card);
+  border: 1.5px solid var(--clr-teal-light);
+  border-radius: var(--radius-md);
+  padding: var(--sp-md);
+  margin-top: var(--sp-sm);
+  box-shadow: var(--shadow-sm);
+}
+.calendar-input-title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--clr-teal-dark);
+  margin-bottom: var(--sp-md);
+  text-align: center;
+}
+.calendar-input-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-sm);
+}
+.styled-input {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--clr-bg);
+  border: 1.5px solid var(--clr-teal-light);
+  border-radius: var(--radius-md);
+  padding: 10px var(--sp-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  color: var(--clr-ink);
+  outline: none;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.styled-input:focus {
+  border-color: var(--clr-teal);
+  box-shadow: 0 0 0 3px rgba(74,154,170,0.18);
+}
+
+/* 自訂時間模式：section-title 顯示金色 */
+.section-title.custom-mode {
+  font-size: var(--fs-sm);
+  color: var(--clr-gold);
+}
