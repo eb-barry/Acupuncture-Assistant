@@ -123,12 +123,39 @@ const UI = (() => {
     _loadImageWithFallback(Cache.pointImageUrls(pointName), imgEl, phEl, slowEl);
 
     try {
-      const text = await Cache.loadPointText(pointName);
-      if (descEl) descEl.innerHTML = `<p style="font-size:var(--fs-sm);line-height:1.9;color:var(--clr-text);white-space:pre-wrap;">${text.trim()}</p>`;
+      const d = await Cache.loadPointData(pointName);
+      if (descEl) descEl.innerHTML = _renderPointFields(d);
     } catch {
       if (descEl) descEl.innerHTML =
         `<p style="color:var(--clr-muted);font-size:var(--fs-sm);">取穴說明暫未提供。</p>`;
     }
+  }
+
+  function _renderPointFields(d) {
+    const fields = [
+      { key: '主治',         icon: '◉', color: 'var(--clr-teal-dark)' },
+      { key: '現代醫學闡釋', icon: '◈', color: 'var(--clr-teal)' },
+      { key: '取穴要領',     icon: '◎', color: 'var(--clr-ink)' },
+      { key: '簡易取穴法',   icon: '◌', color: 'var(--clr-text)' },
+    ];
+    let html = '';
+    for (const f of fields) {
+      if (!d[f.key]) continue;
+      html += `<div class="point-field">
+        <div class="point-field-label" style="color:${f.color}">${f.icon} ${f.key}</div>
+        <div class="point-field-value">${d[f.key]}</div>
+      </div>`;
+    }
+    if (d['針灸禁忌']) {
+      html += `<div class="point-field point-field--caution">
+        <div class="point-field-label" style="color:var(--clr-danger)">⚠ 針灸禁忌</div>
+        <div class="point-field-value">
+          <strong>${d['針灸禁忌']}</strong>
+          ${d['禁忌說明'] ? `<br><span style="font-size:var(--fs-xs);color:var(--clr-muted)">${d['禁忌說明']}</span>` : ''}
+        </div>
+      </div>`;
+    }
+    return html || `<p style="color:var(--clr-muted);font-size:var(--fs-sm)">暫無資料</p>`;
   }
 
   return { showPage, toast, renderPointPanel };

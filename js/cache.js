@@ -47,17 +47,44 @@ const Cache = (() => {
     return data;
   }
 
-  /** 載入穴位說明文字（中文檔名需 encode） */
+  /** 穴位資料 JSON 快取 */
+  let _pointsData = null;
+
+  async function _ensurePointsData() {
+    if (_pointsData) return _pointsData;
+    _pointsData = await loadJSON('points-data.json');
+    return _pointsData;
+  }
+
+  /** 取得單一穴位完整資料物件 */
+  async function loadPointData(pointName) {
+    const data = await _ensurePointsData();
+    const entry = data[pointName];
+    if (!entry) throw new Error(`找不到穴位資料：${pointName}`);
+    return entry;
+  }
+
+  /** 格式化穴位資料為純文字（ui.js renderPointPanel 使用） */
+  function _formatPointText(d) {
+    const lines = [];
+    if (d['主治'])         lines.push(`【主治】
+${d['主治']}`);
+    if (d['現代醫學闡釋']) lines.push(`【現代醫學闡釋】
+${d['現代醫學闡釋']}`);
+    if (d['針灸禁忌'])     lines.push(`【針灸禁忌】${d['針灸禁忌']}${d['禁忌說明'] ? '　' + d['禁忌說明'] : ''}`);
+    if (d['取穴要領'])     lines.push(`【取穴要領】
+${d['取穴要領']}`);
+    if (d['簡易取穴法'])   lines.push(`【簡易取穴法】
+${d['簡易取穴法']}`);
+    return lines.join('
+
+');
+  }
+
+  /** 載入穴位說明（從 JSON，不再使用個別 .txt 檔） */
   async function loadPointText(pointName) {
-    // 先嘗試 raw，失敗時嘗試 GitHub Pages
-    const urls = [
-      `${RAW_BASE}/points/${_enc(pointName)}.txt`,
-      `${PAGES_BASE}/points/${_enc(pointName)}.txt`,
-    ];
-    for (const url of urls) {
-      try { return await _fetchText(url); } catch {}
-    }
-    throw new Error(`無法載入 ${pointName}.txt`);
+    const d = await loadPointData(pointName);
+    return _formatPointText(d);
   }
 
   /**
