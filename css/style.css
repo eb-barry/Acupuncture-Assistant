@@ -595,3 +595,103 @@ body::before {
   margin-top: var(--sp-xs);
   border-bottom: none;
 }
+
+/* ── 經絡與穴位：Tab 切換 ── */
+.meri-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+  background: var(--clr-bg-card2);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-bottom: var(--sp-md);
+}
+.meri-tab {
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--clr-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+.meri-tab.active {
+  background: var(--clr-white);
+  color: var(--clr-teal-dark);
+  box-shadow: var(--shadow-sm);
+}
+.meri-tab-panel { display: none; }
+.meri-tab-panel.active { display: block; }
+
+/* ── Autocomplete 下拉 ── */
+.suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0; right: 0;
+  background: var(--clr-white);
+  border: 1.5px solid var(--clr-teal-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 200;
+  overflow: hidden;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.suggestion-item {
+  padding: 10px var(--sp-md);
+  font-size: var(--fs-md);
+  color: var(--clr-ink);
+  cursor: pointer;
+  border-bottom: 0.5px solid var(--clr-teal-light);
+  transition: background var(--dur-fast);
+}
+.suggestion-item:last-child { border-bottom: none; }
+.suggestion-item:hover, .suggestion-item:active {
+  background: var(--clr-bg-card2);
+  color: var(--clr-teal-dark);
+}
+
+/* ── 穴位結果標題區 ── */
+.point-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-sm);
+  margin-bottom: 6px;
+}
+.point-title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--clr-ink);
+}
+.meridian-tag {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  background: rgba(74,154,170,0.12);
+  color: var(--clr-teal-dark);
+  border: 1px solid var(--clr-teal-light);
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.point-attr-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+.attr-tag {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  background: rgba(200,168,107,0.15);
+  color: var(--clr-gold);
+  border: 1px solid var(--clr-gold-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
