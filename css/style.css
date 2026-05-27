@@ -60,6 +60,9 @@
   --dur-fast:   150ms;
   --dur-normal: 260ms;
 
+  /* 穴位說明文字大小（獨立於 --fs-base，由設定頁控制） */
+  --fs-desc: 15px;
+
   /* Layout */
   --max-width: 480px;
   --header-h:  56px;
@@ -582,8 +585,8 @@ body::before {
   font-family: var(--font-sans);
 }
 .point-field-value {
-  font-size: var(--fs-sm);
-  line-height: 1.85;
+  font-size: var(--fs-desc);   /* 由設定頁「說明文字大小」控制 */
+  line-height: 1.9;
   color: var(--clr-text);
 }
 
