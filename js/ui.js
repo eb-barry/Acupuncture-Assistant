@@ -84,16 +84,35 @@ const UI = (() => {
    *   - 加回左右 padding
    *   - 有背景色、圓角（底部）、邊框
    */
-  async function renderPointPanel(container, pointName, badgeLabel) {
+  async function renderPointPanel(container, pointName, meta) {
     const uid    = pointName.replace(/[^\w]/g, '_') + '_' + Date.now();
     const imgId  = `pi_${uid}`;
     const phId   = `pp_${uid}`;
     const slowId = `ps_${uid}`;
     const descId = `pd_${uid}`;
 
+    // meta: string (badge) 或 { meridian, attributes[] }
+    let headerHTML = '';
+    if (meta && typeof meta === 'object') {
+      const attrTags = (meta.attributes || []).map(a =>
+        `<span class="attr-tag">${a}</span>`
+      ).join('');
+      headerHTML = `
+        <div class="point-header">
+          <span class="point-title">${pointName}</span>
+          ${meta.meridian ? `<span class="meridian-tag">${meta.meridian}</span>` : ''}
+        </div>
+        ${attrTags ? `<div class="point-attr-row">${attrTags}</div>` : ''}`;
+    } else {
+      headerHTML = `
+        <div class="point-header">
+          <span class="point-title">${pointName}</span>
+          ${meta ? `<span class="badge">${meta}</span>` : ''}
+        </div>`;
+    }
+
     container.innerHTML = `
 
-      <!-- ── 全寬圖片區 ── -->
       <div class="point-img-block">
         <div class="img-placeholder" id="${phId}">
           <div class="spinner"></div>
@@ -107,15 +126,9 @@ const UI = (() => {
         圖片載入較慢，請稍候…
       </p>
 
-      <!-- ── 文字說明區 ── -->
       <div class="point-text-block">
-        <h4 style="font-family:var(--font-serif);font-size:var(--fs-lg);
-                   color:var(--clr-ink);margin-bottom:var(--sp-sm);
-                   display:flex;align-items:center;gap:var(--sp-sm);">
-          ${pointName}
-          ${badgeLabel ? `<span class="badge">${badgeLabel}</span>` : ''}
-        </h4>
-        <div id="${descId}">
+        ${headerHTML}
+        <div id="${descId}" style="margin-top:var(--sp-sm);">
           <div class="img-placeholder" style="position:relative;height:56px;">
             <div class="spinner"></div>
           </div>
