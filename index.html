@@ -271,13 +271,24 @@
           <div class="settings-section">
             <div class="settings-row">
               <div class="settings-row-label">
-                字型大小
-                <small>調整全 App 文字大小</small>
+                介面字型大小
+                <small>調整按鈕、選單等 UI 文字</small>
               </div>
               <div class="font-size-picker" id="font-size-picker">
                 <button data-size="small"  title="小">小</button>
                 <button data-size="medium" title="中">中</button>
                 <button data-size="large"  title="大">大</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                說明文字大小
+                <small>穴位主治、取穴等說明的字型</small>
+              </div>
+              <div class="font-size-picker" id="desc-size-picker">
+                <button data-desc="normal" title="標準">標準</button>
+                <button data-desc="large"  title="大">大</button>
+                <button data-desc="xlarge" title="特大">特大</button>
               </div>
             </div>
           </div>
@@ -447,14 +458,25 @@
   function initSettings() {
     const prefs = Settings.load();
 
-    // Font size picker
+    // 介面字型大小
     document.querySelectorAll('#font-size-picker button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.size === prefs.fontSize);
       btn.addEventListener('click', () => {
         Settings.set('fontSize', btn.dataset.size);
         document.querySelectorAll('#font-size-picker button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        UI.toast('字型大小已更新');
+        UI.toast('介面字型已更新');
+      });
+    });
+
+    // 說明文字大小
+    document.querySelectorAll('#desc-size-picker button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.desc === prefs.descSize);
+      btn.addEventListener('click', () => {
+        Settings.set('descSize', btn.dataset.desc);
+        document.querySelectorAll('#desc-size-picker button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        UI.toast('說明文字大小已更新');
       });
     });
 
