@@ -566,3 +566,32 @@ body::before {
   font-size: var(--fs-sm);
   color: var(--clr-gold);
 }
+
+/* ── 穴位資料結構化欄位 ── */
+.point-field {
+  padding: var(--sp-sm) 0;
+  border-bottom: 0.5px solid rgba(74,154,170,0.15);
+}
+.point-field:last-child { border-bottom: none; }
+
+.point-field-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  font-family: var(--font-sans);
+}
+.point-field-value {
+  font-size: var(--fs-sm);
+  line-height: 1.85;
+  color: var(--clr-text);
+}
+
+/* 禁忌欄位：淡紅底 */
+.point-field--caution {
+  background: rgba(192, 84, 74, 0.06);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-sm) var(--sp-sm);
+  margin-top: var(--sp-xs);
+  border-bottom: none;
+}
