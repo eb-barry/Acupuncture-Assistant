@@ -45,16 +45,25 @@ const UI = (() => {
   /* ── 依序嘗試多個圖片 URL ── */
   function _loadImageWithFallback(urls, imgEl, phEl, slowEl) {
     let idx = 0;
+    let timer = null;
+
     function tryNext() {
       if (idx >= urls.length) {
+        clearTimeout(timer);
         if (phEl) phEl.innerHTML =
           `<span style="color:var(--clr-muted);font-size:var(--fs-sm)">穴位圖暫未提供</span>`;
         slowEl && slowEl.classList.remove('visible');
         return;
       }
       const url = urls[idx++];
-      imgEl.onerror = () => tryNext();
+
+      // 每個 URL 最多等 8 秒，超時自動嘗試下一個
+      clearTimeout(timer);
+      timer = setTimeout(() => { imgEl.onerror(null); }, 8000);
+
+      imgEl.onerror = () => { clearTimeout(timer); tryNext(); };
       imgEl.onload  = () => {
+        clearTimeout(timer);
         if (phEl) phEl.style.display = 'none';
         imgEl.style.display = 'block';
         slowEl && slowEl.classList.remove('visible');
