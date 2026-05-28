@@ -741,3 +741,21 @@ body::before {
 }
 /* Debug mode: 取消下面這行的註解可看到點擊區域的邊框 */
 /* .home-hit-area { border: 2px dashed rgba(255,0,0,0.5); } */
+
+/* ── 返回主頁：Home 圖示（Tiffany Green，右上角） ── */
+.btn-home {
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #0abfbc;
+  background: rgba(10, 191, 188, 0.12);
+  color: #0abfbc;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  flex-shrink: 0;
+}
+.btn-home:hover, .btn-home:active {
+  background: #0abfbc;
+  color: #fff;
+}
+.btn-home svg { width: 20px; height: 20px; }
