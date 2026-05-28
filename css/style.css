@@ -98,6 +98,7 @@ body::before {
   max-width: var(--max-width);
   margin: 0 auto;
   min-height: 100dvh;
+  height: 100dvh;          /* allow children to fill full height */
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -107,6 +108,7 @@ body::before {
 .page { display: none; flex-direction: column; flex: 1; }
 .page.active {
   display: flex;
+  height: 100%;            /* fill #app height */
   animation: pageFadeIn var(--dur-normal) var(--ease) both;
 }
 @keyframes pageFadeIn {
@@ -699,17 +701,17 @@ body::before {
   white-space: nowrap;
 }
 
-/* ── 主選單：圖片模式 ── */
+/* ── 主選單：圖片全螢幕模式 ── */
+.page#page-home {
+  height: 100dvh;          /* 撐滿裝置可視高度 */
+  min-height: 100dvh;
+}
 .home-image-wrap {
   position: relative;
   width: 100%;
-  /* 維持 9:16 比例 */
-  aspect-ratio: 9 / 16;
+  height: 100%;            /* 撐滿 page-home 全高 */
   overflow: hidden;
-  flex-shrink: 0;
-}
-@supports not (aspect-ratio: 1) {
-  .home-image-wrap { padding-bottom: 177.78%; height: 0; }
+  flex: 1;
 }
 
 .home-bg-img {
@@ -717,8 +719,8 @@ body::before {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
+  object-fit: cover;        /* 裁切填滿，不留空白 */
+  object-position: center center;
   display: block;
   user-select: none;
   -webkit-user-select: none;
