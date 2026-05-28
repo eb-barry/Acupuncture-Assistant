@@ -698,3 +698,44 @@ body::before {
   border-radius: var(--radius-full);
   white-space: nowrap;
 }
+
+/* ── 主選單：圖片模式 ── */
+.home-image-wrap {
+  position: relative;
+  width: 100%;
+  /* 維持 9:16 比例 */
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+@supports not (aspect-ratio: 1) {
+  .home-image-wrap { padding-bottom: 177.78%; height: 0; }
+}
+
+.home-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 透明點擊熱區 */
+.home-hit-area {
+  position: absolute;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+  -webkit-tap-highlight-color: rgba(255,255,255,0.15);
+  transition: background var(--dur-fast);
+}
+.home-hit-area:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+/* Debug mode: 取消下面這行的註解可看到點擊區域的邊框 */
+/* .home-hit-area { border: 2px dashed rgba(255,0,0,0.5); } */
