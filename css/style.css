@@ -121,10 +121,8 @@ body::before {
   height: var(--header-h);
   display: flex; align-items: center;
   padding: 0 var(--sp-md);
-  background: rgba(245,249,251,0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: var(--border);
+  background: #0abfbc;
+  border-bottom: none;
   position: sticky; top: 0; z-index: 100;
   gap: var(--sp-sm);
 }
@@ -132,17 +130,17 @@ body::before {
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   border: none; background: transparent; cursor: pointer;
-  color: var(--clr-teal); border-radius: var(--radius-sm);
+  color: #ffffff; border-radius: var(--radius-sm);
   transition: background var(--dur-fast);
   flex-shrink: 0;
 }
-.top-bar .btn-icon:hover { background: var(--clr-teal-light); }
-.top-bar .btn-icon svg  { width: 22px; height: 22px; }
+.top-bar .btn-icon:hover { background: rgba(255,255,255,0.2); }
+.top-bar .btn-icon svg { width: 22px; height: 22px; }
 .top-bar .page-title {
   font-family: var(--font-serif);
   font-size: var(--fs-lg);
   font-weight: 600;
-  color: var(--clr-ink);
+  color: #ffffff;
   flex: 1; text-align: center;
 }
 
@@ -742,20 +740,19 @@ body::before {
 /* Debug mode: 取消下面這行的註解可看到點擊區域的邊框 */
 /* .home-hit-area { border: 2px dashed rgba(255,0,0,0.5); } */
 
-/* ── 返回主頁：Home 圖示（Tiffany Green，右上角） ── */
+/* ── 返回主頁：Home 圖示（白色，在 Tiffany Green top-bar 上） ── */
 .btn-home {
   width: 38px; height: 38px;
   display: flex; align-items: center; justify-content: center;
-  border: 2px solid #0abfbc;
-  background: rgba(10, 191, 188, 0.12);
-  color: #0abfbc;
+  border: none;
+  background: transparent;
+  color: #ffffff;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--dur-fast);
+  transition: background var(--dur-fast);
   flex-shrink: 0;
 }
 .btn-home:hover, .btn-home:active {
-  background: #0abfbc;
-  color: #fff;
+  background: rgba(255,255,255,0.2);
 }
-.btn-home svg { width: 20px; height: 20px; }
+.btn-home svg { width: 22px; height: 22px; }
