@@ -1,14 +1,23 @@
 /**
  * settings.js
- * Manages user preferences: font size, TTS voice gender.
- * Persists to localStorage; applies on every page load.
+ * 管理使用者偏好：全域字型大小、說明文字大小、TTS 聲音性別
+ * 所有設定持久化到 localStorage
  */
 
 const Settings = (() => {
   const STORAGE_KEY = 'acupuncture_settings';
-  const FONT_SIZES  = { small: '14px', medium: '16px', large: '19px' };
 
-  const defaults = { fontSize: 'medium', voiceGender: 'female' };
+  // 全域 UI 字型（影響按鈕、選單、標籤等）
+  const FONT_SIZES = { small: '14px', medium: '16px', large: '19px' };
+
+  // 穴位說明文字大小（獨立控制）
+  const DESC_SIZES = { normal: '15px', large: '18px', xlarge: '22px' };
+
+  const defaults = {
+    fontSize:    'medium',
+    descSize:    'normal',
+    voiceGender: 'female',
+  };
 
   function load() {
     try {
@@ -26,9 +35,15 @@ const Settings = (() => {
     document.documentElement.style.setProperty('--fs-base', px);
   }
 
+  function applyDescSize(size) {
+    const px = DESC_SIZES[size] || DESC_SIZES.normal;
+    document.documentElement.style.setProperty('--fs-desc', px);
+  }
+
   function apply() {
     const prefs = load();
     applyFontSize(prefs.fontSize);
+    applyDescSize(prefs.descSize);
     return prefs;
   }
 
@@ -37,12 +52,11 @@ const Settings = (() => {
     prefs[key] = value;
     save(prefs);
     if (key === 'fontSize') applyFontSize(value);
+    if (key === 'descSize')  applyDescSize(value);
     return prefs;
   }
 
-  function get(key) {
-    return load()[key];
-  }
+  function get(key) { return load()[key]; }
 
-  return { apply, set, get, load, FONT_SIZES };
+  return { apply, set, get, load, FONT_SIZES, DESC_SIZES };
 })();
