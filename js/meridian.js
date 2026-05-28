@@ -52,10 +52,11 @@ const Meridian = (() => {
     container.innerHTML = `
       <!-- Tab 切換 -->
       <div class="page-content">
-        <div class="meri-tabs">
+        <div class="meri-tabs" style="grid-template-columns:1fr 1fr 1fr 1fr;">
           <button class="meri-tab ${_activeTab==='A'?'active':''}" data-tab="A">輸入穴位</button>
           <button class="meri-tab ${_activeTab==='B'?'active':''}" data-tab="B">依經脈</button>
           <button class="meri-tab ${_activeTab==='C'?'active':''}" data-tab="C">依特性</button>
+          <button class="meri-tab ${_activeTab==='D'?'active':''}" data-tab="D">依病症</button>
         </div>
 
         <!-- Tab A：直接輸入穴位名稱 -->
@@ -139,6 +140,41 @@ const Meridian = (() => {
           </div>
         </div>
 
+        <!-- Tab D：依病症搜尋 -->
+        <div id="tab-D" class="meri-tab-panel ${_activeTab==='D'?'active':''}">
+          <div class="flex-col gap-md">
+            <div class="form-group">
+              <label class="form-label" for="inp-symptom">輸入病症關鍵字</label>
+              <div style="display:grid;grid-template-columns:1fr auto;gap:var(--sp-sm);">
+                <div style="position:relative;">
+                  <input type="text" id="inp-symptom" class="styled-input"
+                         placeholder="例：頭痛、失眠、消化不良…"
+                         autocomplete="off" />
+                </div>
+                <button class="btn btn-primary" id="btn-d-search"
+                        style="height:46px;padding:0 var(--sp-lg);">搜尋</button>
+              </div>
+            </div>
+            <!-- 搜尋結果數量提示 -->
+            <div id="d-result-count" style="display:none;
+                 font-size:var(--fs-sm);color:var(--clr-muted);text-align:center;"></div>
+            <!-- 結果清單 -->
+            <div style="display:grid;grid-template-columns:1fr auto;gap:var(--sp-sm);
+                        align-items:flex-end;display:none;" id="d-select-row">
+              <div class="form-group">
+                <label class="form-label" for="sel-d-point">符合穴位</label>
+                <div class="select-wrap">
+                  <select class="styled-select" id="sel-d-point">
+                    <option value="">— 請先搜尋 —</option>
+                  </select>
+                </div>
+              </div>
+              <button class="btn btn-primary" id="btn-d-confirm"
+                      disabled style="height:46px;padding:0 var(--sp-lg);">查詢穴位</button>
+            </div>
+          </div>
+        </div>
+
       </div><!-- /.page-content -->
 
       <div class="divider page-content" id="meri-divider" style="display:none;"></div>
@@ -149,6 +185,7 @@ const Meridian = (() => {
     _bindTabA(allNames);
     _bindTabB(allMeridians);
     _bindTabC(allCats);
+    _bindTabD();
   }
 
   /* ── Tab 切換 ── */
@@ -326,6 +363,64 @@ const Meridian = (() => {
     };
     UI.renderPointPanel(panel, pointName, meta);
     setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 120);
+  }
+
+  /* ── Tab D：依病症搜尋 ── */
+  function _bindTabD() {
+    const inp     = document.getElementById('inp-symptom');
+    const btnSrch = document.getElementById('btn-d-search');
+    const selP    = document.getElementById('sel-d-point');
+    const btnOk   = document.getElementById('btn-d-confirm');
+    const countEl = document.getElementById('d-result-count');
+    const rowEl   = document.getElementById('d-select-row');
+
+    function doSearch() {
+      const q = inp.value.trim();
+      if (!q) { UI.toast('請輸入病症關鍵字'); return; }
+
+      // 搜尋主治 + 現代醫學闡釋 中包含關鍵字的穴位
+      const keywords = q.split(/[，,、\s]+/).filter(Boolean);
+      const results = [];
+
+      for (const [name, d] of Object.entries(_data)) {
+        const text = [d['主治'] || '', d['現代醫學闡釋'] || ''].join('');
+        const matched = keywords.some(kw => text.includes(kw));
+        if (matched) {
+          // 找出匹配到的關鍵字
+          const hits = keywords.filter(kw => text.includes(kw));
+          results.push({ name, meridian: d['所屬經脈'], hits });
+        }
+      }
+
+      // 更新結果數量
+      countEl.style.display = '';
+      if (!results.length) {
+        countEl.textContent = `未找到與「${q}」相關的穴位`;
+        countEl.style.color = 'var(--clr-muted)';
+        rowEl.style.display = 'none';
+        return;
+      }
+
+      countEl.textContent = `找到 ${results.length} 個相關穴位`;
+      countEl.style.color = 'var(--clr-teal-dark)';
+
+      // 填入選單
+      selP.innerHTML = '<option value="">— 請選擇穴位 —</option>';
+      results.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.name;
+        opt.textContent = `${r.name}（${r.meridian}）`;
+        opt.title = `相關：${r.hits.join('、')}`;
+        selP.appendChild(opt);
+      });
+      rowEl.style.display = 'grid';
+      btnOk.disabled = true;
+    }
+
+    btnSrch.addEventListener('click', doSearch);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+    selP.addEventListener('change', () => { btnOk.disabled = !selP.value; });
+    btnOk.addEventListener('click', () => { if (selP.value) _showResult(selP.value); });
   }
 
   /* ── Helpers ── */
