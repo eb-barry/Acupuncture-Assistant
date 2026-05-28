@@ -32,24 +32,24 @@
            class="home-bg-img"
            draggable="false" />
 
-      <!-- 透明點擊區：靈龜八法（top 40%~48%） -->
+      <!-- 靈龜八法 -->
       <button class="home-hit-area" id="btn-lingui"
-              style="top:40%;left:5%;width:90%;height:8%;"
+              style="top:27%;left:5%;width:90%;height:11%;"
               aria-label="靈龜八法與子午流注"></button>
 
-      <!-- 透明點擊區：經絡與穴位（top 50%~65%） -->
+      <!-- 經絡與穴位 -->
       <button class="home-hit-area" id="btn-meridian"
-              style="top:50%;left:5%;width:90%;height:15%;"
+              style="top:39%;left:5%;width:90%;height:22%;"
               aria-label="經絡與穴位"></button>
 
-      <!-- 透明點擊區：中醫歌訣（top 71%~80%） -->
+      <!-- 中醫歌訣 -->
       <button class="home-hit-area" id="btn-rhymes"
-              style="top:71%;left:5%;width:90%;height:9%;"
+              style="top:71%;left:5%;width:90%;height:10%;"
               aria-label="中醫歌訣"></button>
 
-      <!-- 透明點擊區：設定齒輪（右下，top 86%~97%） -->
+      <!-- 設定齒輪 -->
       <button class="home-hit-area" id="btn-settings"
-              style="top:86%;left:68%;width:28%;height:11%;"
+              style="top:86%;left:68%;width:27%;height:9%;"
               aria-label="設定"></button>
 
     </div>
@@ -61,12 +61,15 @@
   ═════════════════════════════════════════ -->
   <div class="page" id="page-lingui">
     <div class="top-bar">
-      <button class="btn-icon" id="back-lingui" aria-label="返回主頁">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
-      <span class="page-title">靈龜八法</span>
       <div style="width:36px"></div>
+      <span class="page-title">靈龜八法</span>
+      <button class="btn-home" id="back-lingui" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
     </div>
     <div class="scroll-area" id="lingui-scroll">
       <!-- Dynamically rendered by lingui.js -->
@@ -81,12 +84,15 @@
   ═════════════════════════════════════════ -->
   <div class="page" id="page-meridian">
     <div class="top-bar">
-      <button class="btn-icon" id="back-meridian" aria-label="返回主頁">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
-      <span class="page-title">經絡與穴位</span>
       <div style="width:36px"></div>
+      <span class="page-title">經絡與穴位</span>
+      <button class="btn-home" id="back-meridian" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
     </div>
     <div class="scroll-area" id="meridian-scroll">
       <div id="meridian-content"></div>
@@ -100,12 +106,15 @@
   ═════════════════════════════════════════ -->
   <div class="page" id="page-rhymes">
     <div class="top-bar">
-      <button class="btn-icon" id="back-rhymes" aria-label="返回主頁">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
-      <span class="page-title">中醫歌訣</span>
       <div style="width:36px"></div>
+      <span class="page-title">中醫歌訣</span>
+      <button class="btn-home" id="back-rhymes" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
     </div>
     <div class="scroll-area" id="rhymes-scroll">
       <div id="rhymes-content"></div>
@@ -119,12 +128,15 @@
   ═════════════════════════════════════════ -->
   <div class="page" id="page-settings">
     <div class="top-bar">
-      <button class="btn-icon" id="back-settings" aria-label="返回主頁">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
-      <span class="page-title">設定</span>
       <div style="width:36px"></div>
+      <span class="page-title">設定</span>
+      <button class="btn-home" id="back-settings" aria-label="返回主頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
     </div>
     <div class="scroll-area">
       <div class="flex-col gap-lg">
