@@ -750,7 +750,7 @@ body::before {
 }
 
 /* Debug mode: 取消下面這行的註解可看到所有點擊區域 */
-/* .home-hit-area { border: 2px dashed rgba(255,0,0,0.6) !important; } */
+ .home-hit-area { border: 2px dashed rgba(255,0,0,0.6) !important; } 
 
 /* ── 返回主頁：Home 圖示（白色，在 Tiffany Green top-bar 上） ── */
 .btn-home {
