@@ -70,13 +70,18 @@
 
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: var(--fs-base); -webkit-text-size-adjust: 100%; }
+html {
+  font-size: var(--fs-base);
+  -webkit-text-size-adjust: 100%;
+  height: 100%;
+}
 body {
   font-family: var(--font-sans);
   font-size: var(--fs-md);
   color: var(--clr-text);
   background: var(--clr-bg);
-  min-height: 100dvh;
+  min-height: 100%;
+  height: 100%;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -699,25 +704,28 @@ body::before {
   white-space: nowrap;
 }
 
-/* ── 主選單：圖片全螢幕模式 ── */
+/* ── 主選單：圖片全螢幕模式（含 status bar）── */
 .page#page-home {
-  height: 100dvh;          /* 撐滿裝置可視高度 */
-  min-height: 100dvh;
+  position: fixed !important;   /* 蓋過 status bar */
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  max-width: none;
+  z-index: 10;
 }
 .home-image-wrap {
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 100%;            /* 撐滿 page-home 全高 */
+  height: 100%;
   overflow: hidden;
-  flex: 1;
 }
-
 .home-bg-img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;        /* 裁切填滿，不留空白 */
+  object-fit: cover;
   object-position: center center;
   display: block;
   user-select: none;
@@ -742,7 +750,7 @@ body::before {
 
 /* ── 返回主頁：Home 圖示（白色，在 Tiffany Green top-bar 上） ── */
 .btn-home {
-  width: 38px; height: 38px;
+  width: 52px; height: 52px;
   display: flex; align-items: center; justify-content: center;
   border: none;
   background: transparent;
@@ -755,4 +763,5 @@ body::before {
 .btn-home:hover, .btn-home:active {
   background: rgba(255,255,255,0.2);
 }
-.btn-home svg { width: 22px; height: 22px; }
+.btn-home svg { width: 44px; height: 44px; }
+.btn-home img { width: 44px; height: 44px; object-fit: contain; }
