@@ -704,14 +704,17 @@ body::before {
   white-space: nowrap;
 }
 
-/* ── 主選單：圖片全螢幕模式（含 status bar）── */
+/* ── 主選單：真正全螢幕（蓋住 status bar 與 home indicator）── */
 .page#page-home {
-  position: fixed !important;   /* 蓋過 status bar */
-  inset: 0;
-  height: 100%;
-  width: 100%;
-  max-width: none;
-  z-index: 10;
+  position: fixed !important;
+  top: 0; left: 0; right: 0; bottom: 0;
+  /* 突破 max-width 限制，真正全螢幕 */
+  width: 100vw !important;
+  max-width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 50;
+  margin: 0 !important;
 }
 .home-image-wrap {
   position: absolute;
@@ -730,23 +733,24 @@ body::before {
   display: block;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-
-/* 透明點擊熱區 */
+/* 確保點擊熱區使用正確的座標系 */
 .home-hit-area {
   position: absolute;
   background: transparent;
   border: none;
   cursor: pointer;
-  border-radius: 8px;
-  -webkit-tap-highlight-color: rgba(255,255,255,0.15);
+  -webkit-tap-highlight-color: rgba(255,255,255,0.12);
   transition: background var(--dur-fast);
+  border-radius: 12px;
 }
 .home-hit-area:active {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255,255,255,0.15);
 }
-/* Debug mode: 取消下面這行的註解可看到點擊區域的邊框 */
-/* .home-hit-area { border: 2px dashed rgba(255,0,0,0.5); } */
+
+/* Debug mode: 取消下面這行的註解可看到所有點擊區域 */
+/* .home-hit-area { border: 2px dashed rgba(255,0,0,0.6) !important; } */
 
 /* ── 返回主頁：Home 圖示（白色，在 Tiffany Green top-bar 上） ── */
 .btn-home {
