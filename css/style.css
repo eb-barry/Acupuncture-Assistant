@@ -769,3 +769,145 @@ body::before {
 }
 .btn-home svg { width: 44px; height: 44px; }
 .btn-home img { width: 44px; height: 44px; object-fit: contain; }
+
+/* ── 靈龜八法：模式切換 Tab ── */
+.lingui-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--clr-bg-card2);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-bottom: var(--sp-md);
+}
+.lingui-mode-tab {
+  padding: 10px 4px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--clr-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  letter-spacing: 0.02em;
+}
+.lingui-mode-tab.active {
+  background: var(--clr-white);
+  color: var(--clr-teal-dark);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── 依穴取時：穴位選擇晶片 ── */
+.lingui-point-selector {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-sm);
+  margin-bottom: var(--sp-sm);
+}
+.lingui-point-chip {
+  padding: 10px 4px;
+  border: 1.5px solid var(--clr-teal-light);
+  background: var(--clr-bg-card);
+  border-radius: var(--radius-md);
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--clr-teal-dark);
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--dur-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.lingui-point-chip.active {
+  background: var(--clr-teal);
+  border-color: var(--clr-teal);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.lingui-point-chip:active { transform: scale(0.96); }
+
+/* ── 依穴取時：時辰列表 ── */
+.shichen-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--sp-sm);
+}
+.shichen-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-sm);
+  background: var(--clr-bg-card);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-sm) var(--sp-md);
+  position: relative;
+  transition: background var(--dur-fast);
+}
+.shichen-row.shichen-now {
+  background: linear-gradient(135deg, rgba(74,154,170,0.12), rgba(74,154,170,0.06));
+  border-color: var(--clr-teal);
+}
+.shichen-time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+}
+.shichen-zhi {
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--clr-ink);
+}
+.shichen-range {
+  font-size: var(--fs-xs);
+  color: var(--clr-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+}
+.shichen-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shichen-ganzhi {
+  font-size: var(--fs-sm);
+  color: var(--clr-text);
+}
+.shichen-gua {
+  font-size: var(--fs-xs);
+  color: var(--clr-muted);
+}
+.shichen-role {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.role-badge {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+.role-main   { background: rgba(46,125,181,0.15); color: #1a5f8e; }
+.role-paired { background: rgba(61,136,96,0.15);  color: #1f6640; }
+.shichen-partner {
+  font-size: var(--fs-xs);
+  color: var(--clr-muted);
+}
+.shichen-now-badge {
+  position: absolute;
+  top: -8px; right: var(--sp-md);
+  background: var(--clr-teal);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+}
