@@ -911,3 +911,59 @@ body::before {
   padding: 1px 8px;
   border-radius: var(--radius-full);
 }
+
+/* ── 設定頁：免責聲明 ── */
+.disclaimer-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+}
+.disclaimer-block {
+  background: var(--clr-bg-card);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-md) var(--sp-lg);
+}
+.disclaimer-block.disclaimer-warn {
+  background: rgba(192,84,74,0.05);
+  border-color: rgba(192,84,74,0.3);
+}
+.disclaimer-block.disclaimer-agree {
+  background: rgba(74,154,170,0.06);
+  border-color: rgba(74,154,170,0.3);
+}
+.disclaimer-heading {
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--clr-ink);
+  margin-bottom: var(--sp-sm);
+}
+.disclaimer-warn .disclaimer-heading  { color: var(--clr-danger); }
+.disclaimer-agree .disclaimer-heading { color: var(--clr-teal-dark); }
+.disclaimer-block p {
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+  color: var(--clr-text);
+}
+.disclaimer-list {
+  list-style: none;
+  padding: 0; margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+}
+.disclaimer-list li {
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+  color: var(--clr-text);
+  padding-left: var(--sp-md);
+  border-left: 2px solid var(--clr-teal-light);
+}
+.disclaimer-term {
+  display: block;
+  font-weight: 600;
+  color: var(--clr-teal-dark);
+  margin-bottom: 2px;
+  font-size: var(--fs-sm);
+}
