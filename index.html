@@ -62,7 +62,15 @@
   <div class="page" id="page-lingui">
     <div class="top-bar">
       <button class="btn-home" id="back-lingui" aria-label="返回主頁">
-        <img src="assets/home-icon.webp" alt="返回主頁" style="width:44px;height:44px;object-fit:contain;" />
+        <img src="assets/home-icon.png" alt="返回主頁"
+           style="width:44px;height:44px;object-fit:contain;"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="display:none;width:44px;height:44px;color:#fff;">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
       </button>
       <span class="page-title">靈龜八法</span>
       <div style="width:38px"></div>
@@ -81,7 +89,15 @@
   <div class="page" id="page-meridian">
     <div class="top-bar">
       <button class="btn-home" id="back-meridian" aria-label="返回主頁">
-        <img src="assets/home-icon.webp" alt="返回主頁" style="width:44px;height:44px;object-fit:contain;" />
+        <img src="assets/home-icon.png" alt="返回主頁"
+           style="width:44px;height:44px;object-fit:contain;"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="display:none;width:44px;height:44px;color:#fff;">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
       </button>
       <span class="page-title">經絡與穴位</span>
       <div style="width:38px"></div>
@@ -99,7 +115,15 @@
   <div class="page" id="page-rhymes">
     <div class="top-bar">
       <button class="btn-home" id="back-rhymes" aria-label="返回主頁">
-        <img src="assets/home-icon.webp" alt="返回主頁" style="width:44px;height:44px;object-fit:contain;" />
+        <img src="assets/home-icon.png" alt="返回主頁"
+           style="width:44px;height:44px;object-fit:contain;"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="display:none;width:44px;height:44px;color:#fff;">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
       </button>
       <span class="page-title">中醫歌訣</span>
       <div style="width:38px"></div>
@@ -117,7 +141,15 @@
   <div class="page" id="page-settings">
     <div class="top-bar">
       <button class="btn-home" id="back-settings" aria-label="返回主頁">
-        <img src="assets/home-icon.webp" alt="返回主頁" style="width:44px;height:44px;object-fit:contain;" />
+        <img src="assets/home-icon.png" alt="返回主頁"
+           style="width:44px;height:44px;object-fit:contain;"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="display:none;width:44px;height:44px;color:#fff;">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
       </button>
       <span class="page-title">設定</span>
       <div style="width:38px"></div>
@@ -187,6 +219,46 @@
                 <small>版本 1.0.0</small>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="section-title">免責聲明</p>
+          <div class="disclaimer-box">
+
+            <div class="disclaimer-block disclaimer-warn">
+              <p class="disclaimer-heading">⚕ 本 App 不提供醫療建議，亦非醫療行為</p>
+              <p>本應用程式（含穴位圖、治症描述及 AI 生成內容）僅供中醫／針灸教學、學術探討及知識參考之用。嚴禁使用者依據本 App 內容進行自我或他人之針灸、按壓、放血或其他侵入性治療。</p>
+              <p style="margin-top:8px;">若您身體不適或有疾病，請立即尋求合格之中醫師或西醫師診治。延誤就醫或自行針灸可能導致健康風險。</p>
+            </div>
+
+            <div class="disclaimer-block">
+              <p class="disclaimer-heading">免責條款</p>
+              <ul class="disclaimer-list">
+                <li>
+                  <span class="disclaimer-term">非醫療關係</span>
+                  使用本 App 不會在您與任何開發者、資料來源或 AI 模型之間建立醫病關係。
+                </li>
+                <li>
+                  <span class="disclaimer-term">AI 生成限制</span>
+                  App 中的「現代醫學闡釋」及取穴圖由人工智慧生成，未經人體試驗、未經同儕審查、亦不代表正規醫學實證。這些內容可能存有錯誤、偏誤或不適用於您的個人體況。
+                </li>
+                <li>
+                  <span class="disclaimer-term">針灸的風險</span>
+                  針灸為醫療行為，涉及解剖學、無菌技術及急症處理能力。未經正式醫學院訓練及取得執照，擅自施針可能導致氣胸、感染、神經損傷、出血甚至死亡。
+                </li>
+                <li>
+                  <span class="disclaimer-term">資訊更新</span>
+                  穴位治症整理自古典文獻，部分資訊可能與現代醫學衝突；AI 解釋亦可能不完全符合最新研究。本 App 不保證內容的即時準確性。
+                </li>
+              </ul>
+            </div>
+
+            <div class="disclaimer-block disclaimer-agree">
+              <p class="disclaimer-heading">使用者責任條款</p>
+              <p>您明確同意：使用本 App 所產生之任何知識理解，均不可取代醫師親診。若您因參考本 App 內容而自行針灸、請他人施針、停藥或延遲就醫，所衍生之直接或間接傷害、法律責任，本 App 開發者、資料提供者概不負責。</p>
+            </div>
+
           </div>
         </div>
 
