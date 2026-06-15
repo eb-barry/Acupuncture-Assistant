@@ -1,452 +1,1018 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#eef4f7" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>針灸助理</title>
-  <link rel="stylesheet" href="css/style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>針灸定位影像編輯器</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=LXGW+WenKai+TC&family=Ma+Shan+Zheng&family=Zhi+Mang+Xing&family=Kaisei+Tokumin:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f0f;--panel:#161616;--panel-border:#2a2a2a;
+  --surface:#1e1e1e;--surface2:#272727;
+  --accent:#c0392b;--accent-light:#e74c3c;--accent-glow:rgba(192,57,43,.25);
+  --text:#e8e4dc;--text-muted:#7a7672;--text-dim:#4a4846;
+  --radius:6px;--font-body:'Noto Sans TC',sans-serif;--font-display:'Noto Serif TC',serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:13px;overflow:hidden}
+#app{display:flex;height:100vh}
 
-  <!-- PWA manifest -->
-  <link rel="manifest" href="manifest.json" />
+/* ── Sidebar ── */
+#sidebar{width:252px;min-width:252px;background:var(--panel);border-right:1px solid var(--panel-border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-logo{padding:14px 16px 10px;border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.sidebar-logo h1{font-family:var(--font-display);font-size:14px;font-weight:600;color:var(--text);letter-spacing:.05em;line-height:1.4}
+.sidebar-logo span{color:var(--accent)}
+.sidebar-logo p{font-size:10px;color:var(--text-muted);margin-top:2px;letter-spacing:.08em}
 
+/* Profile tabs */
+.profile-tabs{display:flex;border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.profile-tab{flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;font-size:11px;font-family:var(--font-body);transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:2px}
+.profile-tab:hover{color:var(--text);background:var(--surface)}
+.profile-tab.active{color:var(--text);border-bottom-color:var(--accent);background:var(--surface)}
+.profile-tab-label{font-size:9px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px}
+.profile-badge{font-size:15px;line-height:1}
+.profile-name-row{display:flex;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.profile-name-row label{font-size:10px;color:var(--text-muted);flex-shrink:0}
+.profile-name-input{flex:1;background:var(--surface);border:1px solid var(--panel-border);border-radius:4px;color:var(--text);padding:4px 7px;font-size:11px;font-family:var(--font-body);outline:none}
+.profile-name-input:focus{border-color:var(--accent)}
+.save-profile-btn{padding:3px 8px;background:var(--accent);border:none;border-radius:4px;color:#fff;font-size:10px;cursor:pointer;font-family:var(--font-body);white-space:nowrap;transition:background .15s}
+.save-profile-btn:hover{background:var(--accent-light)}
+
+.sidebar-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.sidebar-body::-webkit-scrollbar{width:4px}
+.sidebar-body::-webkit-scrollbar-thumb{background:var(--panel-border);border-radius:2px}
+.s-section{padding:10px 16px;border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.s-label{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;font-weight:500}
+
+/* Color grid */
+.color-grid{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.color-swatch{width:21px;height:21px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s}
+.color-swatch:hover{transform:scale(1.15)}
+.color-swatch.active{border-color:#fff;transform:scale(1.15)}
+.custom-color-row{display:flex;align-items:center;gap:8px}
+.custom-color-row label{font-size:11px;color:var(--text-muted);flex:1}
+.color-picker-btn{width:30px;height:20px;border:none;border-radius:4px;cursor:pointer;background:none;padding:0}
+
+/* Sliders */
+.slider-row{display:flex;align-items:center;gap:8px}
+.slider-row label{font-size:11px;color:var(--text-muted);width:26px;flex-shrink:0}
+.slider-row input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:3px;background:var(--surface2);border-radius:2px;outline:none}
+.slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent-light);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 5px var(--accent-glow)}
+.slider-row span{font-size:11px;color:var(--text);width:34px;text-align:right;flex-shrink:0}
+
+/* Preview */
+#ball-preview-wrap{display:flex;align-items:center;justify-content:center;padding:8px 0 2px}
+
+/* Label section */
+.label-textarea{width:100%;background:var(--surface);border:1px solid var(--panel-border);border-radius:var(--radius);color:var(--text);padding:6px 9px;font-size:12px;font-family:var(--font-body);outline:none;transition:border-color .15s;resize:none;height:66px;line-height:1.5}
+.label-textarea:focus{border-color:var(--accent)}
+.label-textarea::placeholder{color:var(--text-dim)}
+.char-count{font-size:10px;color:var(--text-dim);text-align:right;margin-top:2px}
+.label-color-row{display:flex;align-items:center;gap:8px;margin-top:7px}
+.label-color-row label{font-size:11px;color:var(--text-muted);flex:1}
+.font-select-wrap{margin-top:7px}
+.font-select-wrap label{font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px}
+.styled-select{width:100%;background:var(--surface);border:1px solid var(--panel-border);border-radius:var(--radius);color:var(--text);padding:5px 26px 5px 8px;font-size:11px;outline:none;cursor:pointer;transition:border-color .15s;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237a7672' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+.styled-select:focus{border-color:var(--accent)}
+.styled-select option{background:#1e1e1e}
+
+/* Position grid */
+.pos-grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:4px;width:90px;margin:6px auto 0}
+.pos-btn{width:26px;height:26px;background:var(--surface);border:1px solid var(--panel-border);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s;line-height:1}
+.pos-btn:hover{background:var(--surface2);border-color:var(--text-muted)}
+.pos-btn.active{background:var(--accent);border-color:var(--accent)}
+.pos-btn.center-dot{background:none;border:none;cursor:default;font-size:9px;color:var(--text-dim)}
+.pos-label-hint{font-size:10px;color:var(--text-dim);text-align:center;margin-top:4px}
+
+/* Line style */
+.line-style-row{display:flex;gap:4px}
+.line-style-btn{flex:1;padding:4px 0;background:var(--surface);border:1px solid var(--panel-border);border-radius:var(--radius);color:var(--text-muted);cursor:pointer;font-size:10px;transition:all .15s;font-family:var(--font-body);text-align:center}
+.line-style-btn.active,.line-style-btn:hover{background:var(--surface2);color:var(--text);border-color:var(--accent)}
+
+/* Ball list */
+.ball-list-header{padding:8px 16px 3px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);font-weight:500;flex-shrink:0}
+#ball-list-wrap{flex:1;overflow-y:auto;padding:0 0 8px;min-height:50px}
+#ball-list-wrap::-webkit-scrollbar{width:4px}
+#ball-list-wrap::-webkit-scrollbar-thumb{background:var(--panel-border);border-radius:2px}
+.ball-item{display:flex;align-items:center;gap:7px;padding:5px 16px;cursor:pointer;transition:background .1s;border-left:2px solid transparent}
+.ball-item:hover{background:var(--surface)}
+.ball-item.selected{background:var(--surface);border-left-color:var(--accent)}
+.ball-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ball-name{flex:1;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ball-size-text{font-size:10px;color:var(--text-dim);flex-shrink:0}
+.ball-del{width:16px;height:16px;border-radius:3px;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s;line-height:1;flex-shrink:0}
+.ball-del:hover{color:var(--accent-light);background:rgba(231,76,60,.1)}
+.ball-list-empty{padding:12px 16px;font-size:11px;color:var(--text-dim);text-align:center;line-height:1.6}
+
+/* ── Toolbar ── */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#toolbar{height:44px;background:var(--panel);border-bottom:1px solid var(--panel-border);display:flex;align-items:center;gap:6px;padding:0 12px;flex-shrink:0}
+.tb-btn{height:28px;padding:0 10px;border-radius:var(--radius);border:1px solid var(--panel-border);background:var(--surface);color:var(--text);cursor:pointer;font-size:12px;font-family:var(--font-body);display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all .15s}
+.tb-btn:hover{border-color:var(--text-muted);background:var(--surface2)}
+.tb-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.tb-btn.primary:hover{background:var(--accent-light);border-color:var(--accent-light)}
+.tb-btn.danger:hover{border-color:var(--accent);color:var(--accent-light)}
+.tb-btn:disabled{opacity:.35;cursor:not-allowed}
+.tb-sep{width:1px;height:20px;background:var(--panel-border);margin:0 2px}
+.tb-file-info{font-size:11px;color:var(--text-muted);margin-left:3px}
+.tb-spacer{flex:1}
+.export-wrap{display:flex;gap:4px}
+.fmt-btn{height:28px;padding:0 8px;border-radius:var(--radius);border:1px solid var(--panel-border);background:var(--surface);color:var(--text-muted);cursor:pointer;font-size:11px;font-family:var(--font-body);transition:all .15s}
+.fmt-btn.active{border-color:var(--accent);color:var(--text);background:var(--surface2)}
+.fmt-btn:hover{border-color:var(--text-muted);color:var(--text)}
+.zoom-info{font-size:11px;color:var(--text-dim);margin-right:6px}
+
+/* ── Canvas area ── */
+#canvas-area{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#080808;background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);background-size:24px 24px;cursor:crosshair;position:relative}
+#canvas-wrapper{position:relative;display:inline-block;line-height:0}
+#main-canvas{display:block;cursor:crosshair}
+
+/* Overlays */
+#drop-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s;flex-direction:column;gap:12px}
+#drop-overlay.active{opacity:1;pointer-events:all}
+#drop-overlay p{font-size:20px;color:var(--text);font-family:var(--font-display)}
+#drop-overlay small{font-size:13px;color:var(--text-muted)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface2);border:1px solid var(--panel-border);border-radius:var(--radius);padding:7px 15px;font-size:12px;color:var(--text);opacity:0;transition:opacity .2s,transform .2s;z-index:200;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#welcome{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;pointer-events:none}
+#welcome h2{font-family:var(--font-display);font-size:20px;color:var(--text-dim);font-weight:400}
+#welcome p{font-size:13px;color:var(--text-dim)}
+#welcome .welcome-icon{font-size:44px;opacity:.18}
+
+/* Label drag handle hint */
+.label-drag-tip{font-size:10px;color:var(--text-dim);margin-top:4px;text-align:center;line-height:1.4}
+</style>
 </head>
 <body>
+<div id="drop-overlay"><p>放開以載入影像</p><small>支援 JPG、PNG、WebP</small></div>
+<div id="toast"></div>
 <div id="app">
-
-  <!-- ════════════════════════════════════════
-       PAGE: 主頁 (Home)
-  ═════════════════════════════════════════ -->
-  <div class="page active" id="page-home">
-    <div class="home-image-wrap">
-
-      <!-- 主選單背景圖 -->
-      <img src="assets/main-menu.webp"
-           alt="針灸助理主選單"
-           class="home-bg-img"
-           draggable="false" />
-
-      <!-- 靈龜八法：27.3%~44.6% -->
-      <button class="home-hit-area" id="btn-lingui"
-              style="top:36.1%;left:4%;width:92%;height:13.1%;"
-              aria-label="靈龜八法與子午流注"></button>
-
-      <!-- 經絡與穴位：50.2%~64.6% -->
-      <button class="home-hit-area" id="btn-meridian"
-              style="top:51.2%;left:4%;width:92%;height:13.1%;"
-              aria-label="經絡與穴位"></button>
-
-      <!-- 中醫歌訣：74.5%~80.3% -->
-      <button class="home-hit-area" id="btn-rhymes"
-              style="top:65.8%;left:4%;width:92%;height:13.1%;"
-              aria-label="中醫歌訣"></button>
-
-      <!-- 設定齒輪：89%~97%, 右側 65~95% -->
-      <button class="home-hit-area" id="btn-settings"
-              style="top:89%;left:65%;width:30%;height:8%;"
-              aria-label="設定"></button>
-
+  <div id="sidebar">
+    <div class="sidebar-logo">
+      <h1>針灸<span>定位</span>編輯器</h1>
+      <p>ACUPUNCTURE POINT EDITOR</p>
     </div>
-  </div><!-- /#page-home -->
 
-
-  <!-- ════════════════════════════════════════
-       PAGE: 靈龜八法
-  ═════════════════════════════════════════ -->
-  <div class="page" id="page-lingui">
-    <div class="top-bar">
-      <button class="btn-home" id="back-lingui" aria-label="返回主頁">
-        <img src="assets/home-icon.png" alt="返回主頁"
-           style="width:44px;height:44px;object-fit:contain;"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"
-             style="display:none;width:44px;height:44px;color:#fff;">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-      </button>
-      <span class="page-title">靈龜八法</span>
-      <div style="width:38px"></div>
+    <!-- Profile tabs -->
+    <div class="profile-tabs" id="profile-tabs">
+      <button class="profile-tab active" data-pidx="0"><span class="profile-badge">🔴</span><span class="profile-tab-label" id="ptab-label-0">設定一</span></button>
+      <button class="profile-tab" data-pidx="1"><span class="profile-badge">🟡</span><span class="profile-tab-label" id="ptab-label-1">設定二</span></button>
+      <button class="profile-tab" data-pidx="2"><span class="profile-badge">🔵</span><span class="profile-tab-label" id="ptab-label-2">設定三</span></button>
     </div>
-    <div class="scroll-area" id="lingui-scroll">
-      <!-- Dynamically rendered by lingui.js -->
-      <div id="lingui-content"></div>
-      <div class="safe-bottom"></div>
+    <div class="profile-name-row">
+      <label>名稱</label>
+      <input type="text" class="profile-name-input" id="profile-name-input" maxlength="10" placeholder="設定名稱">
+      <button class="save-profile-btn" id="save-profile-btn">儲存設定</button>
     </div>
-  </div>
 
-
-  <!-- ════════════════════════════════════════
-       PAGE: 經絡與穴位
-  ═════════════════════════════════════════ -->
-  <div class="page" id="page-meridian">
-    <div class="top-bar">
-      <button class="btn-home" id="back-meridian" aria-label="返回主頁">
-        <img src="assets/home-icon.png" alt="返回主頁"
-           style="width:44px;height:44px;object-fit:contain;"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"
-             style="display:none;width:44px;height:44px;color:#fff;">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-      </button>
-      <span class="page-title">經絡與穴位</span>
-      <div style="width:38px"></div>
-    </div>
-    <div class="scroll-area" id="meridian-scroll">
-      <div id="meridian-content"></div>
-      <div class="safe-bottom"></div>
-    </div>
-  </div>
-
-
-  <!-- ════════════════════════════════════════
-       PAGE: 中醫歌訣
-  ═════════════════════════════════════════ -->
-  <div class="page" id="page-rhymes">
-    <div class="top-bar">
-      <button class="btn-home" id="back-rhymes" aria-label="返回主頁">
-        <img src="assets/home-icon.png" alt="返回主頁"
-           style="width:44px;height:44px;object-fit:contain;"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"
-             style="display:none;width:44px;height:44px;color:#fff;">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-      </button>
-      <span class="page-title">中醫歌訣</span>
-      <div style="width:38px"></div>
-    </div>
-    <div class="scroll-area" id="rhymes-scroll">
-      <div id="rhymes-content"></div>
-      <div class="safe-bottom"></div>
-    </div>
-  </div>
-
-
-  <!-- ════════════════════════════════════════
-       PAGE: 設定
-  ═════════════════════════════════════════ -->
-  <div class="page" id="page-settings">
-    <div class="top-bar">
-      <button class="btn-home" id="back-settings" aria-label="返回主頁">
-        <img src="assets/home-icon.png" alt="返回主頁"
-           style="width:44px;height:44px;object-fit:contain;"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"
-             style="display:none;width:44px;height:44px;color:#fff;">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-      </button>
-      <span class="page-title">設定</span>
-      <div style="width:38px"></div>
-    </div>
-    <div class="scroll-area">
-      <div class="flex-col gap-lg">
-
-        <div>
-          <p class="section-title">顯示</p>
-          <div class="settings-section">
-            <div class="settings-row">
-              <div class="settings-row-label">
-                介面字型大小
-                <small>調整按鈕、選單等 UI 文字</small>
-              </div>
-              <div class="font-size-picker" id="font-size-picker">
-                <button data-size="small"  title="小">小</button>
-                <button data-size="medium" title="中">中</button>
-                <button data-size="large"  title="大">大</button>
-              </div>
-            </div>
-            <div class="settings-row">
-              <div class="settings-row-label">
-                說明文字大小
-                <small>穴位主治、取穴等說明的字型</small>
-              </div>
-              <div class="font-size-picker" id="desc-size-picker">
-                <button data-desc="normal" title="標準">標準</button>
-                <button data-desc="large"  title="大">大</button>
-                <button data-desc="xlarge" title="特大">特大</button>
-              </div>
-            </div>
-          </div>
+    <div class="sidebar-body">
+      <!-- Ball color -->
+      <div class="s-section">
+        <div class="s-label">圓球顏色</div>
+        <div class="color-grid" id="color-grid"></div>
+        <div class="custom-color-row">
+          <label>自訂</label>
+          <input type="color" id="custom-color" class="color-picker-btn" value="#c0392b">
         </div>
-
-        <div>
-          <p class="section-title">語音</p>
-          <div class="settings-section">
-            <div class="settings-row">
-              <div class="settings-row-label">
-                TTS 聲音
-                <small>朗讀歌訣時的聲音性別</small>
-              </div>
-              <div class="voice-picker" id="voice-picker">
-                <button data-voice="female">女聲</button>
-                <button data-voice="male">男聲</button>
-              </div>
-            </div>
-            <div class="settings-row">
-              <div class="settings-row-label">
-                語音測試
-                <small>點擊試聽目前設定</small>
-              </div>
-              <button class="btn btn-secondary" id="btn-tts-test" style="font-size:var(--fs-sm);padding:8px 14px;">
-                試聽
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <p class="section-title">關於</p>
-          <div class="settings-section">
-            <div class="settings-row">
-              <div class="settings-row-label">
-                針灸助理
-                <small>版本 1.0.0</small>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <p class="section-title">免責聲明</p>
-          <div class="disclaimer-box">
-
-            <div class="disclaimer-block disclaimer-warn">
-              <p class="disclaimer-heading">⚕ 本 App 不提供醫療建議，亦非醫療行為</p>
-              <p>本應用程式（含穴位圖、治症描述及 AI 生成內容）僅供中醫／針灸教學、學術探討及知識參考之用。嚴禁使用者依據本 App 內容進行自我或他人之針灸、按壓、放血或其他侵入性治療。</p>
-              <p style="margin-top:8px;">若您身體不適或有疾病，請立即尋求合格之中醫師或西醫師診治。延誤就醫或自行針灸可能導致健康風險。</p>
-            </div>
-
-            <div class="disclaimer-block">
-              <p class="disclaimer-heading">免責條款</p>
-              <ul class="disclaimer-list">
-                <li>
-                  <span class="disclaimer-term">非醫療關係</span>
-                  使用本 App 不會在您與任何開發者、資料來源或 AI 模型之間建立醫病關係。
-                </li>
-                <li>
-                  <span class="disclaimer-term">AI 生成限制</span>
-                  App 中的「現代醫學闡釋」及取穴圖由人工智慧生成，未經人體試驗、未經同儕審查、亦不代表正規醫學實證。這些內容可能存有錯誤、偏誤或不適用於您的個人體況。
-                </li>
-                <li>
-                  <span class="disclaimer-term">針灸的風險</span>
-                  針灸為醫療行為，涉及解剖學、無菌技術及急症處理能力。未經正式醫學院訓練及取得執照，擅自施針可能導致氣胸、感染、神經損傷、出血甚至死亡。
-                </li>
-                <li>
-                  <span class="disclaimer-term">資訊更新</span>
-                  穴位治症整理自古典文獻，部分資訊可能與現代醫學衝突；AI 解釋亦可能不完全符合最新研究。本 App 不保證內容的即時準確性。
-                </li>
-              </ul>
-            </div>
-
-            <div class="disclaimer-block disclaimer-agree">
-              <p class="disclaimer-heading">使用者責任條款</p>
-              <p>您明確同意：使用本 App 所產生之任何知識理解，均不可取代醫師親診。若您因參考本 App 內容而自行針灸、請他人施針、停藥或延遲就醫，所衍生之直接或間接傷害、法律責任，本 App 開發者、資料提供者概不負責。</p>
-            </div>
-
-          </div>
-        </div>
-
       </div>
-      <div class="safe-bottom"></div>
+
+      <!-- Ball settings -->
+      <div class="s-section">
+        <div class="s-label">圓球設定</div>
+        <div id="ball-preview-wrap"><canvas id="ball-preview" width="56" height="56"></canvas></div>
+        <div class="slider-row" style="margin-top:9px">
+          <label>大小</label>
+          <input type="range" id="size-slider" min="4" max="80" value="18">
+          <span id="size-val">18px</span>
+        </div>
+        <div class="slider-row" style="margin-top:6px">
+          <label>透明</label>
+          <input type="range" id="opacity-slider" min="20" max="100" value="100">
+          <span id="opacity-val">100%</span>
+        </div>
+      </div>
+
+      <!-- Label section -->
+      <div class="s-section">
+        <div class="s-label">穴位標籤</div>
+        <textarea id="label-input" class="label-textarea"
+          placeholder="輸入穴位名稱（可空白）&#10;Shift+Enter 換行，最多100字"
+          maxlength="100"></textarea>
+        <div class="char-count"><span id="char-count">0</span> / 100</div>
+
+        <div class="slider-row" style="margin-top:7px">
+          <label>字級</label>
+          <input type="range" id="font-size-slider" min="10" max="100" value="14">
+          <span id="font-size-val">14px</span>
+        </div>
+        <div class="label-color-row">
+          <label>文字顏色</label>
+          <input type="color" id="label-color" class="color-picker-btn" value="#ffffff">
+        </div>
+        <div class="font-select-wrap">
+          <label>文字字型</label>
+          <select id="font-select" class="styled-select">
+            <option value="'Noto Serif TC', serif">思源宋體（Noto Serif TC）</option>
+            <option value="'Noto Sans TC', sans-serif">思源黑體（Noto Sans TC）</option>
+            <option value="'LXGW WenKai TC', cursive">霞鶩文楷（WenKai TC）</option>
+            <option value="'Ma Shan Zheng', cursive">馬善政毛筆楷書</option>
+            <option value="'Zhi Mang Xing', cursive">芝芒行書</option>
+            <option value="'Kaisei Tokumin', serif">Kaisei Tokumin</option>
+          </select>
+        </div>
+
+        <!-- Initial position hint -->
+        <div style="margin-top:9px">
+          <div class="s-label" style="margin-bottom:3px">初始位置</div>
+          <div class="pos-grid" id="pos-grid">
+            <button class="pos-btn" data-pos="top-left">↖</button>
+            <button class="pos-btn active" data-pos="top">↑</button>
+            <button class="pos-btn" data-pos="top-right">↗</button>
+            <button class="pos-btn" data-pos="left">←</button>
+            <div class="pos-btn center-dot">●</div>
+            <button class="pos-btn" data-pos="right">→</button>
+            <button class="pos-btn" data-pos="bottom-left">↙</button>
+            <button class="pos-btn" data-pos="bottom">↓</button>
+            <button class="pos-btn" data-pos="bottom-right">↘</button>
+          </div>
+          <div class="pos-label-hint" id="pos-hint">上方（可拖曳自由移動）</div>
+        </div>
+
+        <!-- Indicator line -->
+        <div style="margin-top:9px">
+          <div class="s-label" style="margin-bottom:4px">指示線</div>
+          <div class="line-style-row">
+            <button class="line-style-btn active" data-lstyle="solid">實線</button>
+            <button class="line-style-btn" data-lstyle="dashed">虛線</button>
+            <button class="line-style-btn" data-lstyle="none">無線</button>
+          </div>
+        </div>
+        <div class="slider-row" style="margin-top:7px">
+          <label>線粗</label>
+          <input type="range" id="line-width-slider" min="2" max="12" value="2">
+          <span id="line-width-val">2px</span>
+        </div>
+        <div class="label-color-row" style="margin-top:5px">
+          <label>線條顏色</label>
+          <input type="color" id="line-color" class="color-picker-btn" value="#ffffff">
+        </div>
+        <div class="slider-row" style="margin-top:7px">
+          <label>距離</label>
+          <input type="range" id="label-gap-slider" min="10" max="250" value="20">
+          <span id="label-gap-val">20px</span>
+        </div>
+        <div class="label-drag-tip">💡 點擊標籤文字可自由拖曳位置</div>
+      </div>
+
+      <!-- Ball list -->
+      <div class="ball-list-header">已放置圓球</div>
+      <div id="ball-list-wrap">
+        <div class="ball-list-empty" id="ball-list-empty">尚未放置任何圓球<br>點擊影像開始標記</div>
+        <div id="ball-list"></div>
+      </div>
     </div>
   </div>
 
-</div><!-- /#app -->
-
-<!-- Toast -->
-<div class="toast" id="toast"></div>
-
-<!-- ── Styles for home page hero (page-specific) ── -->
-<style>
-.home-hero {
-  position: relative;
-  padding: 48px var(--sp-lg) var(--sp-xl);
-  text-align: center;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.home-hero-bg {
-  position: absolute; inset: 0;
-  background: linear-gradient(180deg,
-    rgba(184,221,230,0.45) 0%,
-    rgba(238,244,247,0.0) 100%);
-  pointer-events: none;
-}
-.home-hero-content { position: relative; z-index: 1; }
-.home-logo { margin-bottom: var(--sp-md); }
-.yinyang-svg {
-  width: 72px; height: 72px;
-  filter: drop-shadow(0 4px 12px rgba(74,154,170,0.25));
-  animation: floatLogo 4s ease-in-out infinite;
-}
-@keyframes floatLogo {
-  0%,100% { transform: translateY(0); }
-  50%      { transform: translateY(-6px); }
-}
-.home-title {
-  font-family: var(--font-serif);
-  font-size: var(--fs-2xl);
-  font-weight: 700;
-  color: var(--clr-ink);
-  letter-spacing: 0.12em;
-  margin-bottom: var(--sp-sm);
-}
-.home-subtitle {
-  font-size: var(--fs-sm);
-  color: var(--clr-muted);
-  letter-spacing: 0.15em;
-}
-
-.home-cards-area { padding-top: var(--sp-md); }
-
-.home-footer-art {
-  margin-top: var(--sp-xl);
-  width: 100%; height: 160px;
-  overflow: hidden;
-  opacity: 0.85;
-}
-.home-footer-art svg { width: 100%; height: 100%; }
-
-/* Settings FAB */
-.btn-settings-fab {
-  position: fixed;
-  bottom: calc(env(safe-area-inset-bottom) + 20px);
-  right: calc((100vw - min(100vw, var(--max-width))) / 2 + 20px);
-  width: 44px; height: 44px;
-  border-radius: 50%;
-  background: rgba(245,249,251,0.9);
-  border: var(--border);
-  box-shadow: var(--shadow-md);
-  color: var(--clr-teal);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: all var(--dur-fast);
-  z-index: 90;
-}
-.btn-settings-fab:hover { background: var(--clr-teal-light); }
-.btn-settings-fab svg { width: 20px; height: 20px; }
-
-/* FAB visibility controlled by JS */
-</style>
-
-<!-- ── Scripts ── -->
-<script src="js/settings.js"></script>
-<script src="js/cache.js"></script>
-<script src="js/ganzhi.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/lingui.js"></script>
-<script src="js/meridian.js"></script>
-<script src="js/rhymes.js"></script>
+  <div id="main">
+    <div id="toolbar">
+      <button class="tb-btn" id="load-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        載入影像
+      </button>
+      <input type="file" id="file-input" accept="image/*" style="display:none">
+      <span class="tb-file-info" id="file-info">尚未載入</span>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" id="undo-btn" title="Ctrl+Z" disabled>↩ 復原</button>
+      <button class="tb-btn" id="redo-btn" title="Ctrl+Y" disabled>↪ 重做</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn danger" id="clear-btn">清除全部</button>
+      <div class="tb-spacer"></div>
+      <span class="zoom-info" id="zoom-info"></span>
+      <div class="export-wrap">
+        <button class="fmt-btn active" data-fmt="png">PNG</button>
+        <button class="fmt-btn" data-fmt="jpeg">JPEG</button>
+        <button class="fmt-btn" data-fmt="webp">WebP</button>
+      </div>
+      <button class="tb-btn primary" id="export-btn" disabled>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        匯出影像
+      </button>
+    </div>
+    <div id="canvas-area">
+      <div id="welcome">
+        <div class="welcome-icon">⊕</div>
+        <h2>載入影像以開始標記</h2>
+        <p>點擊「載入影像」或直接拖曳圖片至此處</p>
+      </div>
+      <div id="canvas-wrapper"><canvas id="main-canvas"></canvas></div>
+    </div>
+  </div>
+</div>
 
 <script>
-// ── App Bootstrap ──
-(function() {
-  // Apply saved settings immediately
-  Settings.apply();
+// ═══════════════════════════════════════════════════
+// PROFILE SYSTEM
+// ═══════════════════════════════════════════════════
+const DEFAULT_PROFILES = [
+  { name:'設定一', color:'#c0392b', size:18, opacity:1.0, labelFontSize:14, labelColor:'#ffffff', labelFont:"'Noto Serif TC', serif", lineStyle:'solid', lineWidth:2, lineColor:'#ffffff', labelGap:20, labelPos:'top' },
+  { name:'設定二', color:'#e67e22', size:14, opacity:0.9, labelFontSize:14, labelColor:'#fff176', labelFont:"'Noto Sans TC', sans-serif", lineStyle:'dashed', lineWidth:2, lineColor:'#fff176', labelGap:20, labelPos:'top' },
+  { name:'設定三', color:'#2980b9', size:12, opacity:1.0, labelFontSize:13, labelColor:'#b3e5fc', labelFont:"'Noto Serif TC', serif", lineStyle:'solid', lineWidth:2, lineColor:'#b3e5fc', labelGap:20, labelPos:'top' },
+];
 
-  // ── Navigation ──
-  function nav(pageId) {
-    UI.showPage(pageId);
-  }
+function loadProfiles() {
+  try {
+    const raw = localStorage.getItem('acu_profiles');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length === 3) return parsed;
+    }
+  } catch(e){}
+  return DEFAULT_PROFILES.map(p => Object.assign({}, p));
+}
+function saveProfiles(profiles) {
+  try { localStorage.setItem('acu_profiles', JSON.stringify(profiles)); } catch(e){}
+}
 
-  document.getElementById('btn-lingui').addEventListener('click',   () => { nav('page-lingui');   Lingui.init(); });
-  document.getElementById('btn-meridian').addEventListener('click', () => { nav('page-meridian'); Meridian.init(); });
-  document.getElementById('btn-rhymes').addEventListener('click',   () => { nav('page-rhymes');   Rhymes.init(); });
-  document.getElementById('btn-settings').addEventListener('click', () => { nav('page-settings'); initSettings(); });
+let profiles = loadProfiles();
+let currentProfileIdx = 0;
 
-  document.getElementById('back-lingui').addEventListener('click',   () => nav('page-home'));
-  document.getElementById('back-meridian').addEventListener('click', () => nav('page-home'));
-  document.getElementById('back-rhymes').addEventListener('click',   () => { Rhymes.stop(); nav('page-home'); });
-  document.getElementById('back-settings').addEventListener('click', () => nav('page-home'));
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const state = {
+  img: null, imgW: 0, imgH: 0,
+  balls: [], selectedId: null,
+  // active settings (loaded from profile)
+  color: profiles[0].color,
+  size: profiles[0].size,
+  opacity: profiles[0].opacity,
+  labelText: '',
+  labelFontSize: profiles[0].labelFontSize,
+  labelColor: profiles[0].labelColor,
+  labelFont: profiles[0].labelFont,
+  labelPos: profiles[0].labelPos,
+  labelGap: profiles[0].labelGap,
+  lineStyle: profiles[0].lineStyle,
+  lineWidth: profiles[0].lineWidth,
+  lineColor: profiles[0].lineColor,
+  // app
+  exportFmt: 'png', history: [], historyIdx: -1,
+  dpr: window.devicePixelRatio || 1, scale: 1,
+  // drag modes: 'ball' | 'label' | null
+  dragMode: null,
+  dragId: null,
+  dragOffX: 0, dragOffY: 0,
+};
+let nextId = 1;
 
-  // Keyboard accessibility for card-rows
-  document.querySelectorAll('.card-row[role=button]').forEach(el => {
-    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') el.click(); });
+// ═══════════════════════════════════════════════════
+// DOM REFS
+// ═══════════════════════════════════════════════════
+const canvas        = document.getElementById('main-canvas');
+const ctx           = canvas.getContext('2d');
+const prevCvs       = document.getElementById('ball-preview');
+const prevCtx       = prevCvs.getContext('2d');
+const fileInput     = document.getElementById('file-input');
+const sizeSlider    = document.getElementById('size-slider');
+const sizeVal       = document.getElementById('size-val');
+const opacitySlider = document.getElementById('opacity-slider');
+const opacityVal    = document.getElementById('opacity-val');
+const labelInput    = document.getElementById('label-input');
+const charCount     = document.getElementById('char-count');
+const ballList      = document.getElementById('ball-list');
+const ballListEmpty = document.getElementById('ball-list-empty');
+const undoBtn       = document.getElementById('undo-btn');
+const redoBtn       = document.getElementById('redo-btn');
+const exportBtn     = document.getElementById('export-btn');
+const zoomInfo      = document.getElementById('zoom-info');
+const welcome       = document.getElementById('welcome');
+const canvasArea    = document.getElementById('canvas-area');
+
+// ═══════════════════════════════════════════════════
+// PRESET COLORS
+// ═══════════════════════════════════════════════════
+const PRESET_COLORS = [
+  '#c0392b','#e74c3c','#ff6b6b',
+  '#e67e22','#f39c12','#f1c40f',
+  '#27ae60','#16a085','#2980b9',
+  '#8e44ad','#2c3e50','#ffffff',
+];
+function initColorGrid() {
+  const grid = document.getElementById('color-grid');
+  PRESET_COLORS.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'color-swatch' + (c === state.color ? ' active' : '');
+    s.style.background = c;
+    if (c === '#ffffff') s.style.boxShadow = 'inset 0 0 0 1px #555';
+    s.onclick = () => setColor(c);
+    grid.appendChild(s);
   });
+}
+function setColor(c) {
+  state.color = c;
+  document.getElementById('custom-color').value = c;
+  document.querySelectorAll('.color-swatch').forEach((s, i) => s.classList.toggle('active', PRESET_COLORS[i] === c));
+  drawPreview();
+}
+document.getElementById('custom-color').addEventListener('input', e => {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  state.color = e.target.value; drawPreview();
+});
 
-  // ── Settings Page ──
-  function initSettings() {
-    const prefs = Settings.load();
+// ═══════════════════════════════════════════════════
+// PROFILE UI
+// ═══════════════════════════════════════════════════
+function applyProfileToUI(pidx) {
+  const p = profiles[pidx];
+  // ball
+  setColor(p.color);
+  document.getElementById('custom-color').value = p.color;
+  sizeSlider.value = p.size; sizeVal.textContent = p.size + 'px'; state.size = p.size;
+  opacitySlider.value = Math.round(p.opacity * 100); opacityVal.textContent = Math.round(p.opacity*100)+'%'; state.opacity = p.opacity;
+  // label
+  state.labelFontSize = p.labelFontSize;
+  document.getElementById('font-size-slider').value = p.labelFontSize;
+  document.getElementById('font-size-val').textContent = p.labelFontSize + 'px';
+  state.labelColor = p.labelColor;
+  document.getElementById('label-color').value = p.labelColor;
+  state.labelFont = p.labelFont;
+  document.getElementById('font-select').value = p.labelFont;
+  // line
+  state.lineStyle = p.lineStyle;
+  document.querySelectorAll('.line-style-btn').forEach(b => b.classList.toggle('active', b.dataset.lstyle === p.lineStyle));
+  state.lineWidth = p.lineWidth;
+  document.getElementById('line-width-slider').value = p.lineWidth;
+  document.getElementById('line-width-val').textContent = p.lineWidth + 'px';
+  state.lineColor = p.lineColor;
+  document.getElementById('line-color').value = p.lineColor;
+  state.labelGap = p.labelGap;
+  document.getElementById('label-gap-slider').value = p.labelGap;
+  document.getElementById('label-gap-val').textContent = p.labelGap + 'px';
+  // pos
+  state.labelPos = p.labelPos;
+  document.querySelectorAll('.pos-btn[data-pos]').forEach(b => b.classList.toggle('active', b.dataset.pos === p.labelPos));
+  document.getElementById('pos-hint').textContent = POS_HINT[p.labelPos] + '（可拖曳自由移動）';
+  // profile name
+  document.getElementById('profile-name-input').value = p.name;
 
-    // 介面字型大小
-    document.querySelectorAll('#font-size-picker button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.size === prefs.fontSize);
-      btn.addEventListener('click', () => {
-        Settings.set('fontSize', btn.dataset.size);
-        document.querySelectorAll('#font-size-picker button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        UI.toast('介面字型已更新');
-      });
-    });
+  drawPreview();
+}
 
-    // 說明文字大小
-    document.querySelectorAll('#desc-size-picker button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.desc === prefs.descSize);
-      btn.addEventListener('click', () => {
-        Settings.set('descSize', btn.dataset.desc);
-        document.querySelectorAll('#desc-size-picker button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        UI.toast('說明文字大小已更新');
-      });
-    });
+function collectProfileFromUI() {
+  return {
+    name: document.getElementById('profile-name-input').value || ('設定' + (currentProfileIdx+1)),
+    color: state.color,
+    size: state.size,
+    opacity: state.opacity,
+    labelFontSize: state.labelFontSize,
+    labelColor: state.labelColor,
+    labelFont: state.labelFont,
+    labelPos: state.labelPos,
+    labelGap: state.labelGap,
+    lineStyle: state.lineStyle,
+    lineWidth: state.lineWidth,
+    lineColor: state.lineColor,
+  };
+}
 
-    // Voice picker
-    document.querySelectorAll('#voice-picker button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.voice === prefs.voiceGender);
-      btn.addEventListener('click', () => {
-        Settings.set('voiceGender', btn.dataset.voice);
-        document.querySelectorAll('#voice-picker button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        UI.toast('聲音設定已更新');
-      });
-    });
+function refreshProfileTabs() {
+  profiles.forEach((p, i) => {
+    document.getElementById('ptab-label-' + i).textContent = p.name;
+  });
+}
 
-    // TTS test
-    document.getElementById('btn-tts-test').addEventListener('click', () => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utt = new SpeechSynthesisUtterance('針灸助理，全人醫療，調和陰陽。');
-        utt.lang = 'zh-TW';
-        const gender = Settings.get('voiceGender');
-        const voices = window.speechSynthesis.getVoices();
-        const picked = voices.find(v => v.lang.startsWith('zh') && (gender === 'female' ? /female|woman|girl/i.test(v.name) : /male|man/i.test(v.name)))
-                    || voices.find(v => v.lang.startsWith('zh'))
-                    || null;
-        if (picked) utt.voice = picked;
-        window.speechSynthesis.speak(utt);
-      } else {
-        UI.toast('您的裝置不支援語音功能');
+document.querySelectorAll('.profile-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    currentProfileIdx = parseInt(tab.dataset.pidx);
+    document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    applyProfileToUI(currentProfileIdx);
+    showToast('已切換至：' + profiles[currentProfileIdx].name);
+  });
+});
+
+document.getElementById('save-profile-btn').addEventListener('click', () => {
+  profiles[currentProfileIdx] = collectProfileFromUI();
+  saveProfiles(profiles);
+  refreshProfileTabs();
+  showToast('已儲存「' + profiles[currentProfileIdx].name + '」');
+});
+
+// ═══════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════
+const POS_HINT = {
+  'top-left':'左上','top':'上方','top-right':'右上',
+  'left':'左方','right':'右方',
+  'bottom-left':'左下','bottom':'下方','bottom-right':'右下'
+};
+
+document.getElementById('label-color').addEventListener('input', e => { state.labelColor = e.target.value; });
+document.getElementById('font-select').addEventListener('change', e => { state.labelFont = e.target.value; });
+document.querySelectorAll('.pos-btn[data-pos]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pos-btn[data-pos]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.labelPos = btn.dataset.pos;
+    document.getElementById('pos-hint').textContent = POS_HINT[state.labelPos] + '（可拖曳自由移動）';
+  });
+});
+document.querySelectorAll('.line-style-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.line-style-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); state.lineStyle = btn.dataset.lstyle;
+  });
+});
+labelInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) e.preventDefault(); });
+labelInput.addEventListener('input', () => {
+  if (labelInput.value.length > 100) labelInput.value = labelInput.value.slice(0,100);
+  state.labelText = labelInput.value;
+  charCount.textContent = labelInput.value.length;
+});
+document.getElementById('font-size-slider').addEventListener('input', e => {
+  state.labelFontSize = parseInt(e.target.value);
+  document.getElementById('font-size-val').textContent = e.target.value + 'px';
+});
+document.getElementById('line-width-slider').addEventListener('input', e => {
+  state.lineWidth = parseInt(e.target.value);
+  document.getElementById('line-width-val').textContent = e.target.value + 'px';
+});
+document.getElementById('line-color').addEventListener('input', e => { state.lineColor = e.target.value; });
+document.getElementById('label-gap-slider').addEventListener('input', e => {
+  state.labelGap = parseInt(e.target.value);
+  document.getElementById('label-gap-val').textContent = e.target.value + 'px';
+});
+sizeSlider.addEventListener('input', () => { state.size = parseInt(sizeSlider.value); sizeVal.textContent = sizeSlider.value+'px'; drawPreview(); });
+opacitySlider.addEventListener('input', () => { state.opacity = parseInt(opacitySlider.value)/100; opacityVal.textContent = opacitySlider.value+'%'; drawPreview(); });
+
+// ═══════════════════════════════════════════════════
+// 3D BALL RENDERER
+// ═══════════════════════════════════════════════════
+function draw3DBall(ctx2, cx, cy, r, hexColor, alpha) {
+  if (r < 1) return;
+  alpha = alpha === undefined ? 1 : alpha;
+  ctx2.save(); ctx2.globalAlpha = alpha;
+  const br = parseInt(hexColor.slice(1,3),16);
+  const bg = parseInt(hexColor.slice(3,5),16);
+  const bb = parseInt(hexColor.slice(5,7),16);
+  // shadow
+  ctx2.beginPath();
+  ctx2.ellipse(cx, cy+r*0.85, r*0.8, r*0.22, 0, 0, Math.PI*2);
+  const shG = ctx2.createRadialGradient(cx,cy+r*0.85,0,cx,cy+r*0.85,r*0.8);
+  shG.addColorStop(0,'rgba(0,0,0,0.38)'); shG.addColorStop(1,'rgba(0,0,0,0)');
+  ctx2.fillStyle = shG; ctx2.fill();
+  // body
+  const bG = ctx2.createRadialGradient(cx-r*0.3,cy-r*0.3,r*0.05,cx,cy,r);
+  bG.addColorStop(0,`rgba(${Math.min(255,br+90)},${Math.min(255,bg+90)},${Math.min(255,bb+90)},1)`);
+  bG.addColorStop(0.45,`rgba(${br},${bg},${bb},1)`);
+  bG.addColorStop(1,`rgba(${Math.max(0,br-80)},${Math.max(0,bg-80)},${Math.max(0,bb-80)},1)`);
+  ctx2.beginPath(); ctx2.arc(cx,cy,r,0,Math.PI*2); ctx2.fillStyle=bG; ctx2.fill();
+  // specular
+  const sG = ctx2.createRadialGradient(cx-r*0.32,cy-r*0.32,0,cx-r*0.32,cy-r*0.32,r*0.38);
+  sG.addColorStop(0,'rgba(255,255,255,0.88)'); sG.addColorStop(0.35,'rgba(255,255,255,0.28)'); sG.addColorStop(1,'rgba(255,255,255,0)');
+  ctx2.beginPath(); ctx2.arc(cx,cy,r,0,Math.PI*2); ctx2.fillStyle=sG; ctx2.fill();
+  // rim
+  const rG = ctx2.createRadialGradient(cx+r*0.5,cy+r*0.5,0,cx+r*0.5,cy+r*0.5,r*0.3);
+  rG.addColorStop(0,'rgba(255,255,255,0.25)'); rG.addColorStop(1,'rgba(255,255,255,0)');
+  ctx2.beginPath(); ctx2.arc(cx,cy,r,0,Math.PI*2); ctx2.fillStyle=rG; ctx2.fill();
+  ctx2.restore();
+}
+
+// ═══════════════════════════════════════════════════
+// LABEL LAYOUT — free offset system
+// ═══════════════════════════════════════════════════
+// Each ball stores labelOffsetX, labelOffsetY (in image-space px)
+// These are the offset of the label CENTER from the ball CENTER.
+// On first placement, computed from labelPos + labelGap.
+// After drag, updated directly.
+
+function getInitialLabelOffset(b) {
+  const DIR = {
+    'top':         [0,-1],'bottom':      [0,1],
+    'left':        [-1,0],'right':       [1,0],
+    'top-left':    [-0.707,-0.707],'top-right':   [0.707,-0.707],
+    'bottom-left': [-0.707,0.707],'bottom-right': [0.707,0.707],
+  };
+  const [dx,dy] = DIR[b.labelPos||'top']||[0,-1];
+  const gap = (b.labelGap||20);
+  const dist = b.size + gap;
+  return { ox: dx*dist, oy: dy*dist };
+}
+
+// Compute label bounding box in display coords
+// Returns { x, y, w, h, lines, fs, lineH, fontStr }
+function getLabelBox(ctx2, b, scale) {
+  if (!b.label) return null;
+  const fs = (b.fontSize||14) * scale;
+  const fontFamily = b.labelFont || "'Noto Serif TC', serif";
+  const fontStr = `${fs}px ${fontFamily}`;
+  ctx2.font = fontStr;
+  const lines = b.label.split('\n');
+  const lineGap = 4 * scale;
+  const lineH = fs + lineGap;
+  const maxW = Math.max(...lines.map(l => ctx2.measureText(l).width));
+  const totalH = lines.length * fs + (lines.length-1) * lineGap;
+
+  // label CENTER in display coords
+  const cx_d = b.x * scale;
+  const cy_d = b.y * scale;
+  let ox = b.labelOffsetX !== undefined ? b.labelOffsetX : getInitialLabelOffset(b).ox;
+  let oy = b.labelOffsetY !== undefined ? b.labelOffsetY : getInitialLabelOffset(b).oy;
+
+  const labelCX = cx_d + ox * scale;
+  const labelCY = cy_d + oy * scale;
+
+  return {
+    x: labelCX - maxW/2,
+    y: labelCY - totalH/2,
+    w: maxW, h: totalH,
+    cx: labelCX, cy: labelCY,
+    lines, fs, lineH, fontStr,
+    totalH,
+  };
+}
+
+// ═══════════════════════════════════════════════════
+// DRAW LABEL + LINE
+// ═══════════════════════════════════════════════════
+function drawLabel(ctx2, b, scale) {
+  if (!b.label) return;
+  const box = getLabelBox(ctx2, b, scale);
+  if (!box) return;
+
+  const lineStyle = b.lineStyle || 'solid';
+  const lineColor = b.lineColor || '#ffffff';
+  const lineWidth = (b.lineWidth||2) * scale;
+  const color     = b.labelColor || '#ffffff';
+
+  // Ball edge → label: line from ball edge toward label center
+  const ballCX = b.x * scale, ballCY = b.y * scale, r = b.size * scale;
+  const dx = box.cx - ballCX, dy = box.cy - ballCY;
+  const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+  const edgeX = ballCX + (dx/dist)*r;
+  const edgeY = ballCY + (dy/dist)*r;
+
+  // line end: nearest point of text box toward ball
+  const lineEndX = box.cx - (dx/dist)*(box.w/2 * Math.abs(dx/dist) + box.h/2 * Math.abs(dy/dist)) * 0.5;
+  const lineEndY = box.cy - (dy/dist)*(box.w/2 * Math.abs(dx/dist) + box.h/2 * Math.abs(dy/dist)) * 0.5;
+
+  // Draw line
+  if (lineStyle !== 'none') {
+    ctx2.save();
+    ctx2.strokeStyle = lineColor;
+    ctx2.lineWidth = lineWidth;
+    ctx2.globalAlpha = 0.8;
+    if (lineStyle === 'dashed') ctx2.setLineDash([5*scale,4*scale]);
+    else ctx2.setLineDash([]);
+    ctx2.beginPath();
+    ctx2.moveTo(edgeX, edgeY);
+    ctx2.lineTo(box.cx, box.cy);
+    ctx2.stroke();
+    ctx2.setLineDash([]);
+    ctx2.restore();
+  }
+
+  // Draw text
+  ctx2.save();
+  ctx2.font = box.fontStr;
+  ctx2.textBaseline = 'top';
+  ctx2.fillStyle = color;
+  ctx2.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx2.shadowBlur = Math.max(3, 4*scale);
+  ctx2.shadowOffsetX = 0; ctx2.shadowOffsetY = 0;
+  box.lines.forEach((line, i) => {
+    ctx2.fillText(line, box.x, box.y + i*box.lineH);
+  });
+  ctx2.restore();
+}
+
+// ═══════════════════════════════════════════════════
+// PREVIEW
+// ═══════════════════════════════════════════════════
+function drawPreview() {
+  const dpr = state.dpr;
+  prevCvs.width = 56*dpr; prevCvs.height = 56*dpr;
+  prevCvs.style.width = '56px'; prevCvs.style.height = '56px';
+  prevCtx.scale(dpr, dpr);
+  prevCtx.clearRect(0,0,56,56);
+  const r = Math.min(state.size*1.2, 24);
+  draw3DBall(prevCtx, 28, 28, r, state.color, state.opacity);
+}
+
+// ═══════════════════════════════════════════════════
+// CANVAS SETUP + REDRAW
+// ═══════════════════════════════════════════════════
+function setupCanvas(img) {
+  state.img = img; state.imgW = img.naturalWidth; state.imgH = img.naturalHeight;
+  welcome.style.display = 'none';
+  const area = canvasArea.getBoundingClientRect();
+  const maxW = area.width-40, maxH = area.height-40;
+  state.scale = Math.min(1, maxW/state.imgW, maxH/state.imgH);
+  const dispW = Math.round(state.imgW*state.scale);
+  const dispH = Math.round(state.imgH*state.scale);
+  canvas.style.width = dispW+'px'; canvas.style.height = dispH+'px';
+  canvas.width = dispW*state.dpr; canvas.height = dispH*state.dpr;
+  ctx.scale(state.dpr, state.dpr);
+  zoomInfo.textContent = state.imgW+'×'+state.imgH+'px  |  '+Math.round(state.scale*100)+'%';
+  redraw();
+  exportBtn.disabled = false;
+  document.getElementById('file-info').textContent = state.imgW+' × '+state.imgH;
+}
+
+function redraw() {
+  if (!state.img) return;
+  const dW = canvas.width/state.dpr, dH = canvas.height/state.dpr;
+  ctx.clearRect(0,0,dW,dH);
+  ctx.drawImage(state.img,0,0,dW,dH);
+  state.balls.forEach(b => {
+    const cx = b.x*state.scale, cy = b.y*state.scale, r = b.size*state.scale;
+    if (b.id === state.selectedId) {
+      ctx.beginPath(); ctx.arc(cx,cy,r+4,0,Math.PI*2);
+      ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5;
+      ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    draw3DBall(ctx, cx, cy, r, b.color, b.opacity);
+    drawLabel(ctx, b, state.scale);
+
+    // label drag handle: small dot on label center when selected
+    if (b.id === state.selectedId && b.label) {
+      const box = getLabelBox(ctx, b, state.scale);
+      if (box) {
+        ctx.beginPath(); ctx.arc(box.cx, box.cy, 4, 0, Math.PI*2);
+        ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fill();
       }
-    });
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// HIT TESTS
+// ═══════════════════════════════════════════════════
+function canvasXY(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x:(e.clientX-rect.left)/state.scale, y:(e.clientY-rect.top)/state.scale };
+}
+// Returns ball if click hits ball circle (image coords)
+function hitTestBall(x, y) {
+  for (let i = state.balls.length-1; i>=0; i--) {
+    const b = state.balls[i];
+    const dx=x-b.x, dy=y-b.y;
+    if (Math.sqrt(dx*dx+dy*dy) <= b.size) return b;
+  }
+  return null;
+}
+// Returns ball if click hits label bounding box (image coords → convert to display for box check)
+function hitTestLabel(xImg, yImg) {
+  const xD = xImg * state.scale, yD = yImg * state.scale;
+  for (let i = state.balls.length-1; i>=0; i--) {
+    const b = state.balls[i];
+    if (!b.label) continue;
+    const box = getLabelBox(ctx, b, state.scale);
+    if (!box) continue;
+    const pad = 6;
+    if (xD >= box.x-pad && xD <= box.x+box.w+pad && yD >= box.y-pad && yD <= box.y+box.h+pad) return b;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════
+// CANVAS EVENTS
+// ═══════════════════════════════════════════════════
+canvas.addEventListener('mousedown', e => {
+  if (!state.img) return;
+  const {x, y} = canvasXY(e);
+
+  // Priority 1: label hit
+  const labelHit = hitTestLabel(x, y);
+  if (labelHit) {
+    state.dragMode = 'label';
+    state.dragId = labelHit.id;
+    state.selectedId = labelHit.id;
+    // offset in image-space between mouse and current label offset
+    const curOX = labelHit.labelOffsetX !== undefined ? labelHit.labelOffsetX : getInitialLabelOffset(labelHit).ox;
+    const curOY = labelHit.labelOffsetY !== undefined ? labelHit.labelOffsetY : getInitialLabelOffset(labelHit).oy;
+    // mouse position relative to ball in image-space
+    state.dragOffX = (x - labelHit.x) - curOX;
+    state.dragOffY = (y - labelHit.y) - curOY;
+    updateBallList(); redraw(); e.preventDefault(); return;
   }
 
-})();
-  // ── Service Worker (PWA offline support) ──
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .catch(err => console.warn('SW registration failed:', err));
-    });
+  // Priority 2: ball hit
+  const ballHit = hitTestBall(x, y);
+  if (ballHit) {
+    state.dragMode = 'ball';
+    state.dragId = ballHit.id;
+    state.selectedId = ballHit.id;
+    state.dragOffX = x - ballHit.x;
+    state.dragOffY = y - ballHit.y;
+    updateBallList(); redraw(); e.preventDefault(); return;
   }
 
+  // Priority 3: place new ball
+  const { ox, oy } = getInitialLabelOffset({ labelPos: state.labelPos, labelGap: state.labelGap, size: state.size });
+  const ball = {
+    id: nextId++, x, y,
+    size: state.size, color: state.color, opacity: state.opacity,
+    label: state.labelText, fontSize: state.labelFontSize,
+    labelColor: state.labelColor, labelFont: state.labelFont,
+    labelPos: state.labelPos, labelGap: state.labelGap,
+    labelOffsetX: ox, labelOffsetY: oy,
+    lineStyle: state.lineStyle, lineWidth: state.lineWidth, lineColor: state.lineColor,
+  };
+  state.balls.push(ball);
+  state.selectedId = ball.id;
+  pushHistory(); updateBallList(); redraw();
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!state.img) return;
+  const {x, y} = canvasXY(e);
+
+  if (state.dragMode === 'label' && state.dragId !== null) {
+    const b = state.balls.find(b => b.id === state.dragId);
+    if (b) {
+      // Update label offset in image-space
+      b.labelOffsetX = (x - b.x) - state.dragOffX;
+      b.labelOffsetY = (y - b.y) - state.dragOffY;
+      redraw();
+    }
+    return;
+  }
+
+  if (state.dragMode === 'ball' && state.dragId !== null) {
+    const b = state.balls.find(b => b.id === state.dragId);
+    if (b) { b.x = x-state.dragOffX; b.y = y-state.dragOffY; redraw(); }
+    return;
+  }
+
+  // Cursor feedback
+  if (hitTestLabel(x, y)) {
+    canvas.style.cursor = 'grab';
+  } else if (hitTestBall(x, y)) {
+    canvas.style.cursor = 'move';
+  } else {
+    canvas.style.cursor = 'crosshair';
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  if (state.dragMode !== null) { pushHistory(); state.dragMode = null; state.dragId = null; }
+});
+canvas.addEventListener('mouseleave', () => {
+  if (state.dragMode !== null) { pushHistory(); state.dragMode = null; state.dragId = null; }
+});
+
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (!state.img) return;
+  const {x,y} = canvasXY(e);
+  const hit = hitTestBall(x,y);
+  if (hit) {
+    state.balls = state.balls.filter(b => b.id !== hit.id);
+    if (state.selectedId === hit.id) state.selectedId = null;
+    pushHistory(); updateBallList(); redraw(); showToast('已刪除圓球');
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// BALL LIST
+// ═══════════════════════════════════════════════════
+function updateBallList() {
+  ballListEmpty.style.display = state.balls.length===0 ? '' : 'none';
+  ballList.innerHTML = '';
+  [...state.balls].reverse().forEach(b => {
+    const div = document.createElement('div');
+    div.className = 'ball-item'+(b.id===state.selectedId?' selected':'');
+    const lbl = b.label ? b.label.replace(/\n/g,' ') : '（無標籤）';
+    div.innerHTML = '<div class="ball-dot" style="background:'+b.color+'"></div>'
+      +'<div class="ball-name" title="'+lbl+'">'+lbl+'</div>'
+      +'<div class="ball-size-text">'+b.size+'px</div>'
+      +'<button class="ball-del" title="刪除">×</button>';
+    div.addEventListener('click', ev => {
+      if (ev.target.classList.contains('ball-del')) {
+        state.balls = state.balls.filter(x => x.id!==b.id);
+        if (state.selectedId===b.id) state.selectedId=null;
+        pushHistory(); updateBallList(); redraw();
+      } else { state.selectedId=b.id; updateBallList(); redraw(); }
+    });
+    ballList.appendChild(div);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════════════
+function pushHistory() {
+  const snap = JSON.stringify(state.balls.map(b => Object.assign({},b)));
+  state.history = state.history.slice(0, state.historyIdx+1);
+  state.history.push(snap);
+  state.historyIdx = state.history.length-1;
+  updateHistoryBtns();
+}
+function undo() {
+  if (state.historyIdx<=0) return;
+  state.historyIdx--;
+  state.balls = JSON.parse(state.history[state.historyIdx]);
+  state.selectedId=null; updateBallList(); redraw(); updateHistoryBtns();
+}
+function redo() {
+  if (state.historyIdx>=state.history.length-1) return;
+  state.historyIdx++;
+  state.balls = JSON.parse(state.history[state.historyIdx]);
+  state.selectedId=null; updateBallList(); redraw(); updateHistoryBtns();
+}
+function updateHistoryBtns() {
+  undoBtn.disabled = state.historyIdx<=0;
+  redoBtn.disabled = state.historyIdx>=state.history.length-1;
+}
+document.getElementById('undo-btn').onclick = undo;
+document.getElementById('redo-btn').onclick = redo;
+
+// ═══════════════════════════════════════════════════
+// LOAD / EXPORT / CLEAR
+// ═══════════════════════════════════════════════════
+document.getElementById('load-btn').onclick = () => fileInput.click();
+fileInput.addEventListener('change', e => { const f=e.target.files[0]; if(f) loadFile(f); fileInput.value=''; });
+function loadFile(file) {
+  if (!file.type.startsWith('image/')) { showToast('請選擇圖片檔案'); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    state.balls=[]; state.history=[]; state.historyIdx=-1; state.selectedId=null;
+    pushHistory(); setupCanvas(img); updateBallList(); showToast('已載入：'+file.name);
+  };
+  img.src = url;
+}
+
+const dropOverlay = document.getElementById('drop-overlay');
+document.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('active'); });
+document.addEventListener('dragleave', e => { if(!e.relatedTarget) dropOverlay.classList.remove('active'); });
+document.addEventListener('drop', e => { e.preventDefault(); dropOverlay.classList.remove('active'); const f=e.dataTransfer.files[0]; if(f) loadFile(f); });
+
+document.querySelectorAll('.fmt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); state.exportFmt = btn.dataset.fmt;
+  });
+});
+
+document.getElementById('export-btn').onclick = () => {
+  if (!state.img) return;
+  const off = document.createElement('canvas');
+  off.width = state.imgW; off.height = state.imgH;
+  const offCtx = off.getContext('2d');
+  offCtx.drawImage(state.img, 0, 0, state.imgW, state.imgH);
+  state.balls.forEach(b => {
+    draw3DBall(offCtx, b.x, b.y, b.size, b.color, b.opacity);
+    drawLabel(offCtx, b, 1);
+  });
+  const mime = {png:'image/png',jpeg:'image/jpeg',webp:'image/webp'}[state.exportFmt];
+  const quality = state.exportFmt==='png' ? undefined : 0.92;
+  const a = document.createElement('a');
+  a.href = off.toDataURL(mime, quality);
+  a.download = 'acupuncture_'+Date.now()+'.'+state.exportFmt;
+  a.click();
+  showToast('已匯出 '+state.exportFmt.toUpperCase()+'（'+state.imgW+'×'+state.imgH+'）');
+};
+
+document.getElementById('clear-btn').onclick = () => {
+  if (!state.balls.length) return;
+  state.balls=[]; state.selectedId=null;
+  pushHistory(); updateBallList(); redraw(); showToast('已清除所有圓球');
+};
+
+// ═══════════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='TEXTAREA'||e.target.tagName==='INPUT') return;
+  if ((e.ctrlKey||e.metaKey)&&e.key==='z') { e.preventDefault(); undo(); }
+  if ((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))) { e.preventDefault(); redo(); }
+  if ((e.key==='Delete'||e.key==='Backspace')&&state.selectedId!==null) {
+    state.balls=state.balls.filter(b=>b.id!==state.selectedId);
+    state.selectedId=null; pushHistory(); updateBallList(); redraw();
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+initColorGrid();
+applyProfileToUI(0);
+refreshProfileTabs();
+drawPreview();
+pushHistory();
 </script>
 </body>
 </html>
