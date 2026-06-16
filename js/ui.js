@@ -2,15 +2,8 @@
  * ui.js
  * 共用 UI 工具：頁面切換、Toast、穴位資訊面板
  *
- * 圖片全寬策略（最終版）：
- *   圖片區與文字區完全分開，不共用任何父容器。
- *   圖片直接撐滿 scroll-area（左右無 padding），
- *   文字區加回 page-content padding。
- *
- *   DOM 結構：
- *     container
- *       ├─ <div class="point-img-block">    ← 全寬圖片，無包裹容器
- *       └─ <div class="point-text-block">   ← 文字說明，有 padding
+ * 圖片使用 WebP 格式，載入速度快（~100KB），
+ * 移除所有 loading spinner、slow-notice 及 timeout 邏輯。
  */
 
 const UI = (() => {
@@ -42,56 +35,20 @@ const UI = (() => {
     _toastTimer = setTimeout(() => el.classList.remove('show'), duration);
   }
 
-  /* ── 依序嘗試多個圖片 URL ── */
-  function _loadImageWithFallback(urls, imgEl, phEl, slowEl) {
-    let idx = 0;
-    let timer = null;
-
-    function tryNext() {
-      if (idx >= urls.length) {
-        clearTimeout(timer);
-        if (phEl) phEl.innerHTML =
-          `<span style="color:var(--clr-muted);font-size:var(--fs-sm)">穴位圖暫未提供</span>`;
-        slowEl && slowEl.classList.remove('visible');
-        return;
-      }
-      const url = urls[idx++];
-
-      // 每個 URL 最多等 8 秒，超時自動嘗試下一個
-      clearTimeout(timer);
-      timer = setTimeout(() => { imgEl.onerror(null); }, 8000);
-
-      imgEl.onerror = () => { clearTimeout(timer); tryNext(); };
-      imgEl.onload  = () => {
-        clearTimeout(timer);
-        if (phEl) phEl.style.display = 'none';
-        imgEl.style.display = 'block';
-        slowEl && slowEl.classList.remove('visible');
-      };
-      imgEl.src = url;
-    }
-    tryNext();
-  }
-
   /* ── 穴位資訊面板 ──
+   * DOM 結構：
+   *   container
+   *     ├─ <div class="point-img-block">   ← 全寬圖片
+   *     └─ <div class="point-text-block">  ← 文字說明
    *
-   * 圖片區（point-img-block）：
-   *   - 無父容器限制，直接在 scroll-area 內
-   *   - scroll-area 左右 padding=0，所以 width:100% 即為螢幕全寬
-   *   - 用 padding-bottom 維持圖片比例（aspect-ratio fallback）
-   *
-   * 文字區（point-text-block）：
-   *   - 加回左右 padding
-   *   - 有背景色、圓角（底部）、邊框
+   * meta: string（badge 標籤）或 { meridian, attributes[] }
    */
   async function renderPointPanel(container, pointName, meta) {
     const uid    = pointName.replace(/[^\w]/g, '_') + '_' + Date.now();
     const imgId  = `pi_${uid}`;
-    const phId   = `pp_${uid}`;
-    const slowId = `ps_${uid}`;
     const descId = `pd_${uid}`;
 
-    // meta: string (badge) 或 { meridian, attributes[] }
+    // 組合標題 HTML
     let headerHTML = '';
     if (meta && typeof meta === 'object') {
       const attrTags = (meta.attributes || []).map(a =>
@@ -112,38 +69,31 @@ const UI = (() => {
     }
 
     container.innerHTML = `
-
       <div class="point-img-block">
-        <div class="img-placeholder" id="${phId}">
-          <div class="spinner"></div>
-          <span>穴位圖載入中</span>
-        </div>
         <img id="${imgId}" src="" alt="${pointName}穴位圖"
-             style="display:none;width:100%;height:100%;object-fit:contain;" />
+             style="width:100%;height:100%;object-fit:contain;"
+             onerror="this.style.opacity='0';" />
       </div>
-      <p class="slow-notice" id="${slowId}"
-         style="text-align:center;padding:var(--sp-xs) var(--sp-md);">
-        圖片載入較慢，請稍候…
-      </p>
-
       <div class="point-text-block">
         ${headerHTML}
-        <div id="${descId}" style="margin-top:var(--sp-sm);">
-          <div class="img-placeholder" style="position:relative;height:56px;">
-            <div class="spinner"></div>
-          </div>
-        </div>
-      </div>
-    `;
+        <div id="${descId}" style="margin-top:var(--sp-sm);"></div>
+      </div>`;
 
-    const imgEl  = document.getElementById(imgId);
-    const phEl   = document.getElementById(phId);
-    const slowEl = document.getElementById(slowId);
+    // 載入圖片（多 CDN 備援，WebP 格式）
+    const imgEl = document.getElementById(imgId);
+    const urls  = Cache.pointImageUrls(pointName);
+    let   idx   = 0;
+    function tryNext() {
+      if (idx >= urls.length) { imgEl.style.opacity = '0'; return; }
+      const url = urls[idx++];
+      imgEl.onerror = tryNext;
+      imgEl.onload  = () => { imgEl.style.opacity = '1'; };
+      imgEl.src = url;
+    }
+    tryNext();
+
+    // 載入文字說明
     const descEl = document.getElementById(descId);
-
-    setTimeout(() => slowEl?.classList.add('visible'), 5000);
-    _loadImageWithFallback(Cache.pointImageUrls(pointName), imgEl, phEl, slowEl);
-
     try {
       const d = await Cache.loadPointData(pointName);
       if (descEl) descEl.innerHTML = _renderPointFields(d);
@@ -153,12 +103,13 @@ const UI = (() => {
     }
   }
 
+  /* ── 穴位說明欄位 ── */
   function _renderPointFields(d) {
     const fields = [
       { key: '主治',         icon: '◉', color: 'var(--clr-teal-dark)' },
-      { key: '現代醫學闡釋', icon: '◈', color: 'var(--clr-teal)' },
-      { key: '取穴要領',     icon: '◎', color: 'var(--clr-ink)' },
-      { key: '簡易取穴法',   icon: '◌', color: 'var(--clr-text)' },
+      { key: '現代醫學闡釋', icon: '◈', color: 'var(--clr-teal)'      },
+      { key: '取穴要領',     icon: '◎', color: 'var(--clr-ink)'       },
+      { key: '簡易取穴法',   icon: '◌', color: 'var(--clr-text)'      },
     ];
     let html = '';
     for (const f of fields) {
@@ -173,7 +124,9 @@ const UI = (() => {
         <div class="point-field-label" style="color:var(--clr-danger)">⚠ 針灸禁忌</div>
         <div class="point-field-value">
           <strong>${d['針灸禁忌']}</strong>
-          ${d['禁忌說明'] ? `<br><span style="font-size:var(--fs-xs);color:var(--clr-muted)">${d['禁忌說明']}</span>` : ''}
+          ${d['禁忌說明']
+            ? `<br><span style="font-size:var(--fs-xs);color:var(--clr-muted)">${d['禁忌說明']}</span>`
+            : ''}
         </div>
       </div>`;
     }
