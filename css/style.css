@@ -305,15 +305,22 @@ body::before {
 /* ── 穴位圖片區：全寬，維持比例 ── */
 .point-img-block {
   position: relative;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  padding-bottom: 75%;
+  /* 寬度設為 95vw，並用負 margin 置中突破父容器限制 */
+  width: 95vw;
+  max-width: calc(var(--max-width) * 0.95);
+  margin-left: 50%;
+  transform: translateX(-50%);
+  /* 依圖片原始比例維持：aspect-ratio 由瀏覽器自動計算 */
+  aspect-ratio: auto;          /* 讓圖片本身的比例決定高度 */
   background: linear-gradient(135deg, var(--clr-bg), var(--clr-bg-card2));
   overflow: hidden;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-radius: var(--radius-md);
 }
-@supports (aspect-ratio: 1) {
-  .point-img-block { padding-bottom: 0; }
+.point-img-block img {
+  width: 100%;
+  height: auto;               /* 高度依圖片原始比例自動調整 */
+  display: block;
+  object-fit: contain;
 }
 
 
@@ -327,12 +334,17 @@ body::before {
 
 /* ── 穴位說明文字區 ── */
 .point-text-block {
-  padding: var(--sp-md) var(--sp-md);
+  width: 95vw;
+  max-width: calc(var(--max-width) * 0.95);
+  margin-left: 50%;
+  transform: translateX(-50%);
+  padding: var(--sp-md) var(--sp-lg);
   background: var(--clr-bg-card);
   border: var(--border);
   border-top: none;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   box-shadow: var(--shadow-sm);
+  margin-top: 0;
 }
 
 
