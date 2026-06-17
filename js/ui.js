@@ -71,7 +71,7 @@ const UI = (() => {
     container.innerHTML = `
       <div class="point-img-block">
         <img id="${imgId}" src="" alt="${pointName}穴位圖"
-             style="width:100%;height:100%;object-fit:contain;"
+             style="width:100%;height:auto;display:block;"
              onerror="this.style.opacity='0';" />
       </div>
       <div class="point-text-block">
