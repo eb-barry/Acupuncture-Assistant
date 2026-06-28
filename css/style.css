@@ -980,3 +980,32 @@ body::before {
   border-radius: var(--radius-full);
   white-space: nowrap;
 }
+
+/* ── 穴位詳情：國際代碼 + 經脈 inline meta row ── */
+.point-field-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--sp-sm) 0 var(--sp-xs);
+  border-bottom: 0.5px solid rgba(74,154,170,0.15);
+  margin-bottom: 2px;
+}
+.intl-code-inline {
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: rgba(200,168,107,0.18);
+  color: #7a5010;
+  border: 1.5px solid var(--clr-gold-light);
+  padding: 3px 12px;
+  border-radius: var(--radius-full);
+}
+.meridian-inline {
+  font-size: var(--fs-xs);
+  color: var(--clr-teal-dark);
+  background: rgba(74,154,170,0.1);
+  border: 1px solid var(--clr-teal-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
