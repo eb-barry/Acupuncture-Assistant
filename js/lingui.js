@@ -547,7 +547,7 @@ const Lingui = (() => {
   }
 
   /* ── 依時取穴：穴位點擊 ── */
-  function _onPointClick(btn) {
+  async function _onPointClick(btn) {
     document.querySelectorAll('#lingui-btns .btn-point')
       .forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -555,7 +555,17 @@ const Lingui = (() => {
     _currentText = { name, label };
     document.getElementById('lingui-divider').style.display = '';
     const panel = document.getElementById('lingui-panel');
-    UI.renderPointPanel(panel, name, label);
+    // 載入完整穴位資料以顯示國際代碼與精確屬性細節
+    let meta = label;
+    try {
+      const d = await Cache.loadPointData(name);
+      meta = {
+        meridian:   d['所屬經脈']   || '',
+        intlCode:   d['國際代碼']   || '',
+        attributes: d['經穴屬性']   || [],
+      };
+    } catch {}
+    UI.renderPointPanel(panel, name, meta);
     setTimeout(() => panel.scrollIntoView({behavior:'smooth',block:'nearest'}), 120);
   }
 

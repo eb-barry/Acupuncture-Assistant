@@ -108,7 +108,15 @@ const UI = (() => {
   function _renderPointFields(d) {
     let html = '';
 
-    // 精確屬性細節
+    // 國際代碼（始終顯示於最上方）
+    if (d['國際代碼']) {
+      html += `<div class="point-field-meta">
+        <span class="intl-code-inline">${d['國際代碼']}</span>
+        ${d['所屬經脈'] ? `<span class="meridian-inline">${d['所屬經脈']}</span>` : ''}
+      </div>`;
+    }
+
+    // 精確屬性細節（交會穴說明等）
     if (d['精確屬性細節']) {
       html += `<div class="point-field">
         <div class="point-field-label" style="color:var(--clr-gold)">◆ 精確屬性資料</div>
@@ -143,5 +151,6 @@ const UI = (() => {
     return html || `<p style="color:var(--clr-muted);font-size:var(--fs-sm)">暫無資料</p>`;
   }
 
+  
   return { showPage, toast, renderPointPanel };
 })();
