@@ -356,9 +356,9 @@ const Meridian = (() => {
     const panel = document.getElementById('meri-panel');
     const d     = _data[pointName];
 
-    // 穴位名稱 + 所屬經脈 + 所有相關特性 → 傳給 UI
     const meta = {
       meridian:   d['所屬經脈']  || '',
+      intlCode:   d['國際代碼']  || '',
       attributes: d['經穴屬性'] || [],
     };
     UI.renderPointPanel(panel, pointName, meta);

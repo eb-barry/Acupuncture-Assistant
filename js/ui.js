@@ -58,6 +58,7 @@ const UI = (() => {
         <div class="point-header">
           <span class="point-title">${pointName}</span>
           ${meta.meridian ? `<span class="meridian-tag">${meta.meridian}</span>` : ''}
+          ${meta.intlCode ? `<span class="intl-code-tag">${meta.intlCode}</span>` : ''}
         </div>
         ${attrTags ? `<div class="point-attr-row">${attrTags}</div>` : ''}`;
     } else {
@@ -105,13 +106,22 @@ const UI = (() => {
 
   /* ── 穴位說明欄位 ── */
   function _renderPointFields(d) {
+    let html = '';
+
+    // 精確屬性細節
+    if (d['精確屬性細節']) {
+      html += `<div class="point-field">
+        <div class="point-field-label" style="color:var(--clr-gold)">◆ 精確屬性資料</div>
+        <div class="point-field-value">${d['精確屬性細節']}</div>
+      </div>`;
+    }
+
     const fields = [
       { key: '主治',         icon: '◉', color: 'var(--clr-teal-dark)' },
       { key: '現代醫學闡釋', icon: '◈', color: 'var(--clr-teal)'      },
       { key: '取穴要領',     icon: '◎', color: 'var(--clr-ink)'       },
       { key: '簡易取穴法',   icon: '◌', color: 'var(--clr-text)'      },
     ];
-    let html = '';
     for (const f of fields) {
       if (!d[f.key]) continue;
       html += `<div class="point-field">

@@ -523,12 +523,18 @@ const Lingui = (() => {
       </button>`;
 
     bBtns.querySelectorAll('.btn-point').forEach(btn =>
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         bBtns.querySelectorAll('.btn-point').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('b-point-divider').style.display = '';
         const panel = document.getElementById('b-point-panel');
-        UI.renderPointPanel(panel, btn.dataset.point, btn.dataset.label);
+        let meta = btn.dataset.label;
+        try {
+          const d = await Cache.loadPointData(btn.dataset.point);
+          meta = { meridian: d['所屬經脈']||'', intlCode: d['國際代碼']||'',
+                   attributes: d['經穴屬性']||[] };
+        } catch {}
+        UI.renderPointPanel(panel, btn.dataset.point, meta);
         setTimeout(() => panel.scrollIntoView({behavior:'smooth',block:'nearest'}), 120);
       })
     );
