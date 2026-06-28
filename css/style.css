@@ -966,3 +966,17 @@ body::before {
   margin-bottom: 2px;
   font-size: var(--fs-sm);
 }
+
+/* ── 國際代碼標籤 ── */
+.intl-code-tag {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  background: rgba(200,168,107,0.18);
+  color: #8a6820;
+  border: 1px solid var(--clr-gold-light);
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
