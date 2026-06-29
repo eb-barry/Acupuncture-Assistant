@@ -357,9 +357,10 @@ const Meridian = (() => {
     const d     = _data[pointName];
 
     const meta = {
-      meridian:   d['所屬經脈']  || '',
-      intlCode:   d['國際代碼']  || '',
-      attributes: d['經穴屬性'] || [],
+      meridian:   d['所屬經脈']    || '',
+      intlCode:   d['國際代碼']    || '',
+      attributes: d['經穴屬性']   || [],
+      detail:     d['經穴屬性細節'] || '',
     };
     UI.renderPointPanel(panel, pointName, meta);
     setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 120);

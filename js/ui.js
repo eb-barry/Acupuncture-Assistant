@@ -60,7 +60,10 @@ const UI = (() => {
           ${meta.meridian ? `<span class="meridian-tag">${meta.meridian}</span>` : ''}
           ${meta.intlCode ? `<span class="intl-code-tag">${meta.intlCode}</span>` : ''}
         </div>
-        ${attrTags ? `<div class="point-attr-row">${attrTags}</div>` : ''}`;
+        ${(attrTags || meta.detail) ? `<div class="point-attr-row">
+          ${attrTags}
+          ${meta.detail ? `<span class="detail-tag">${meta.detail}</span>` : ''}
+        </div>` : ''}`;
     } else {
       headerHTML = `
         <div class="point-header">
@@ -108,21 +111,7 @@ const UI = (() => {
   function _renderPointFields(d) {
     let html = '';
 
-    // 國際代碼（始終顯示於最上方）
-    if (d['國際代碼']) {
-      html += `<div class="point-field-meta">
-        <span class="intl-code-inline">${d['國際代碼']}</span>
-        ${d['所屬經脈'] ? `<span class="meridian-inline">${d['所屬經脈']}</span>` : ''}
-      </div>`;
-    }
-
-    // 經穴屬性細節（交會穴說明等）
-    if (d['經穴屬性細節']) {
-      html += `<div class="point-field">
-        <div class="point-field-label" style="color:var(--clr-gold)">◆ 經穴屬性細節</div>
-        <div class="point-field-value">${d['經穴屬性細節']}</div>
-      </div>`;
-    }
+    // 國際代碼、所屬經脈、經穴屬性細節已顯示於標題列，此處不重複
 
     const fields = [
       { key: '主治',         icon: '◉', color: 'var(--clr-teal-dark)' },

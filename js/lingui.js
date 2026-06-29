@@ -532,7 +532,7 @@ const Lingui = (() => {
         try {
           const d = await Cache.loadPointData(btn.dataset.point);
           meta = { meridian: d['所屬經脈']||'', intlCode: d['國際代碼']||'',
-                   attributes: d['經穴屬性']||[] };
+                   attributes: d['經穴屬性']||[], detail: d['經穴屬性細節']||'' };
         } catch {}
         UI.renderPointPanel(panel, btn.dataset.point, meta);
         setTimeout(() => panel.scrollIntoView({behavior:'smooth',block:'nearest'}), 120);
@@ -560,9 +560,10 @@ const Lingui = (() => {
     try {
       const d = await Cache.loadPointData(name);
       meta = {
-        meridian:   d['所屬經脈']   || '',
-        intlCode:   d['國際代碼']   || '',
+        meridian:   d['所屬經脈']    || '',
+        intlCode:   d['國際代碼']    || '',
         attributes: d['經穴屬性']   || [],
+        detail:     d['經穴屬性細節'] || '',
       };
     } catch {}
     UI.renderPointPanel(panel, name, meta);
