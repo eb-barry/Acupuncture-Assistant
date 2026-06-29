@@ -116,11 +116,11 @@ const UI = (() => {
       </div>`;
     }
 
-    // 精確屬性細節（交會穴說明等）
-    if (d['精確屬性細節']) {
+    // 經穴屬性細節（交會穴說明等）
+    if (d['經穴屬性細節']) {
       html += `<div class="point-field">
-        <div class="point-field-label" style="color:var(--clr-gold)">◆ 精確屬性資料</div>
-        <div class="point-field-value">${d['精確屬性細節']}</div>
+        <div class="point-field-label" style="color:var(--clr-gold)">◆ 經穴屬性細節</div>
+        <div class="point-field-value">${d['經穴屬性細節']}</div>
       </div>`;
     }
 

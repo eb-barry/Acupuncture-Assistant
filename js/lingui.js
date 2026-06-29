@@ -555,7 +555,7 @@ const Lingui = (() => {
     _currentText = { name, label };
     document.getElementById('lingui-divider').style.display = '';
     const panel = document.getElementById('lingui-panel');
-    // 載入完整穴位資料以顯示國際代碼與精確屬性細節
+    // 載入完整穴位資料以顯示國際代碼與經穴屬性細節
     let meta = label;
     try {
       const d = await Cache.loadPointData(name);
