@@ -51,19 +51,25 @@ const UI = (() => {
     // 組合標題 HTML
     let headerHTML = '';
     if (meta && typeof meta === 'object') {
-      const attrTags = (meta.attributes || []).map(a =>
-        `<span class="attr-tag">${a}</span>`
+      // 每個屬性一個膠囊，有細節時緊接在同一屬性後面
+      const pairs = meta.attrPairs || [];
+      const attrRow = pairs.map(p =>
+        `<span class="attr-tag">${p['屬性']}</span>` +
+        (p['細節'] ? `<span class="detail-tag">${p['細節']}</span>` : '')
       ).join('');
+      // fallback：若無配對資料則用純屬性陣列
+      const fallback = !pairs.length
+        ? (meta.attributes || []).map(a => `<span class="attr-tag">${a}</span>`).join('')
+        : '';
+      const attrHTML = attrRow || fallback;
+
       headerHTML = `
         <div class="point-header">
           <span class="point-title">${pointName}</span>
           ${meta.meridian ? `<span class="meridian-tag">${meta.meridian}</span>` : ''}
           ${meta.intlCode ? `<span class="intl-code-tag">${meta.intlCode}</span>` : ''}
         </div>
-        ${(attrTags || meta.detail) ? `<div class="point-attr-row">
-          ${attrTags}
-          ${meta.detail ? `<span class="detail-tag">${meta.detail}</span>` : ''}
-        </div>` : ''}`;
+        ${attrHTML ? `<div class="point-attr-row">${attrHTML}</div>` : ''}`;
     } else {
       headerHTML = `
         <div class="point-header">
@@ -111,7 +117,7 @@ const UI = (() => {
   function _renderPointFields(d) {
     let html = '';
 
-    // 國際代碼、所屬經脈、經穴屬性細節已顯示於標題列，此處不重複
+    // 國際代碼、所屬經脈、經穴屬性、屬性細節已顯示於標題列，此處不重複
 
     const fields = [
       { key: '主治',         icon: '◉', color: 'var(--clr-teal-dark)' },

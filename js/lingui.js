@@ -531,8 +531,12 @@ const Lingui = (() => {
         let meta = btn.dataset.label;
         try {
           const d = await Cache.loadPointData(btn.dataset.point);
-          meta = { meridian: d['所屬經脈']||'', intlCode: d['國際代碼']||'',
-                   attributes: d['經穴屬性']||[], detail: d['經穴屬性細節']||'' };
+          meta = {
+            meridian:   d['所屬經脈']      || '',
+            intlCode:   d['國際代碼']      || '',
+            attributes: d['經穴屬性']     || [],
+            attrPairs:  d['經穴屬性配對'] || [],
+          };
         } catch {}
         UI.renderPointPanel(panel, btn.dataset.point, meta);
         setTimeout(() => panel.scrollIntoView({behavior:'smooth',block:'nearest'}), 120);
@@ -558,12 +562,12 @@ const Lingui = (() => {
     // 載入完整穴位資料以顯示國際代碼與經穴屬性細節
     let meta = label;
     try {
-      const d = await Cache.loadPointData(name);
+  const d = await Cache.loadPointData(name);
       meta = {
-        meridian:   d['所屬經脈']    || '',
-        intlCode:   d['國際代碼']    || '',
-        attributes: d['經穴屬性']   || [],
-        detail:     d['經穴屬性細節'] || '',
+        meridian:   d['所屬經脈']      || '',
+        intlCode:   d['國際代碼']      || '',
+        attributes: d['經穴屬性']     || [],
+        attrPairs:  d['經穴屬性配對'] || [],
       };
     } catch {}
     UI.renderPointPanel(panel, name, meta);

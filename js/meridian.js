@@ -358,73 +358,16 @@ const Meridian = (() => {
     const d     = _data[pointName];
 
     const meta = {
-      meridian:   d['所屬經脈']    || '',
-      intlCode:   d['國際代碼']    || '',
-      attributes: d['經穴屬性']   || [],
-      detail:     d['經穴屬性細節'] || '',
+      meridian:   d['所屬經脈']      || '',
+      intlCode:   d['國際代碼']      || '',
+      attributes: d['經穴屬性']     || [],
+      attrPairs:  d['經穴屬性配對'] || [],
     };
     UI.renderPointPanel(panel, pointName, meta);
     setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 120);
   }
 
-  /* ── Tab D：依病症搜尋 ── */
-  function _bindTabD() {
-    const inp     = document.getElementById('inp-symptom');
-    const btnSrch = document.getElementById('btn-d-search');
-    const selP    = document.getElementById('sel-d-point');
-    const btnOk   = document.getElementById('btn-d-confirm');
-    const countEl = document.getElementById('d-result-count');
-    const rowEl   = document.getElementById('d-select-row');
-
-    function doSearch() {
-      const q = inp.value.trim();
-      if (!q) { UI.toast('請輸入病症關鍵字'); return; }
-
-      // 搜尋主治 + 現代醫學闡釋 中包含關鍵字的穴位
-      const keywords = q.split(/[，,、\s]+/).filter(Boolean);
-      const results = [];
-
-      for (const [name, d] of Object.entries(_data)) {
-        const text = [d['主治'] || '', d['現代醫學闡釋'] || ''].join('');
-        const matched = keywords.some(kw => text.includes(kw));
-        if (matched) {
-          // 找出匹配到的關鍵字
-          const hits = keywords.filter(kw => text.includes(kw));
-          results.push({ name, meridian: d['所屬經脈'], hits });
-        }
-      }
-
-      // 更新結果數量
-      countEl.style.display = '';
-      if (!results.length) {
-        countEl.textContent = `未找到與「${q}」相關的穴位`;
-        countEl.style.color = 'var(--clr-muted)';
-        rowEl.style.display = 'none';
-        return;
-      }
-
-      countEl.textContent = `找到 ${results.length} 個相關穴位`;
-      countEl.style.color = 'var(--clr-teal-dark)';
-
-      // 填入選單
-      selP.innerHTML = '<option value="">— 請選擇穴位 —</option>';
-      results.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r.name;
-        opt.textContent = `${r.name}（${r.meridian}）`;
-        opt.title = `相關：${r.hits.join('、')}`;
-        selP.appendChild(opt);
-      });
-      rowEl.style.display = 'grid';
-      btnOk.disabled = true;
-    }
-
-    btnSrch.addEventListener('click', doSearch);
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
-    selP.addEventListener('change', () => { btnOk.disabled = !selP.value; });
-    btnOk.addEventListener('click', () => { if (selP.value) _showResult(selP.value); });
-  }
-
+  
   /* ── Helpers ── */
   function _spinnerHTML(h) {
     return `<div class="img-placeholder page-content" style="position:relative;height:${h}px;">
