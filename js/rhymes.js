@@ -7,37 +7,28 @@ const Rhymes = (() => {
   let _data    = null;
   let _inited  = false;
   let _synth   = window.speechSynthesis || null;
-  let _voices  = [];
   let _playing = false;
   let _curText = '';
 
   if (_synth) {
-    _voices = _synth.getVoices();
-    _synth.onvoiceschanged = () => { _voices = _synth.getVoices(); };
+    _synth.onvoiceschanged = () => {};
   }
 
   /* ── TTS ── */
-  function _pickVoice() {
-    const gender = Settings.get('voiceGender') || 'female';
-    const zhList = _voices.filter(v => v.lang && v.lang.startsWith('zh'));
-    if (!zhList.length) return null;
-    const femaleKw = /female|woman|girl|Ting|Mei|Yating|Yaoyao|Huihui/i;
-    const maleKw   = /male|man|Ming|Liang|Kangkang/i;
-    return gender === 'female'
-      ? (zhList.find(v => femaleKw.test(v.name)) || zhList[0])
-      : (zhList.find(v => maleKw.test(v.name))   || zhList[0]);
-  }
-
   function play(text) {
     if (!_synth) { UI.toast('您的裝置不支援語音功能'); return; }
-    _voices = _synth.getVoices();
     _synth.cancel();
     const utt = new SpeechSynthesisUtterance(text);
-    utt.lang  = 'zh-TW';
     utt.rate  = 0.88;
-    const v   = _pickVoice();
-    if (v) utt.voice = v;
-    else UI.toast('找不到中文語音，使用系統預設聲音');
+    const gender = Settings.get('voiceGender') || 'female';
+    const v = Settings.pickTTSVoice(gender);
+    if (v) {
+      utt.voice = v;
+      utt.lang  = v.lang || 'zh-TW';
+    } else {
+      utt.lang = 'zh-TW';
+      UI.toast('找不到中文語音，使用系統預設聲音');
+    }
     utt.onstart = () => { _playing = true;  _updateBtn(); };
     utt.onend   = () => { _playing = false; _updateBtn(); };
     utt.onerror = (e) => {

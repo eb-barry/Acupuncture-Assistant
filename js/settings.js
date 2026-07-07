@@ -88,9 +88,43 @@ const Settings = (() => {
     }
   }
 
+  const FEMALE_VOICE_RE = /female|woman|girl|女|huihui|yaoyao|yating|ting-?ting|mei-?jia|hanhan/i;
+  const MALE_VOICE_RE   = /male|man|boy|男|kangkang|yunxi|yunyang|yunfeng|yufeng|ming|liang|sin-?ji|bo|zhiwei|li-?mu/i;
+
+  function _ttsVoicePool(voices) {
+    const zh = voices.filter(v => v.lang && /^zh/i.test(v.lang));
+    if (!zh.length) return [];
+    const tw = zh.filter(v => /^zh-TW/i.test(v.lang));
+    if (tw.length) return tw;
+    const cn = zh.filter(v => /^zh-CN/i.test(v.lang));
+    if (cn.length) return cn;
+    return zh;
+  }
+
+  /** 依設定選擇 TTS 語音；男聲時排除已知女聲，避免誤回退為女聲 */
+  function pickTTSVoice(gender) {
+    if (!('speechSynthesis' in window)) return null;
+    const pool = _ttsVoicePool(window.speechSynthesis.getVoices());
+    if (!pool.length) return null;
+
+    const isFemale = v => FEMALE_VOICE_RE.test(v.name);
+    const isMale   = v => MALE_VOICE_RE.test(v.name);
+    const wantMale = gender === 'male';
+
+    if (wantMale) {
+      return pool.find(isMale)
+          || pool.find(v => !isFemale(v))
+          || pool[pool.length - 1];
+    }
+    return pool.find(isFemale)
+        || pool.find(v => !isMale(v))
+        || pool[0];
+  }
+
   return {
     apply, set, get, load,
     hasTermsConsent, getTermsAcceptedAt, setTermsConsent, formatTermsAcceptedAt,
+    pickTTSVoice,
     FONT_SIZES, DESC_SIZES,
   };
 })();

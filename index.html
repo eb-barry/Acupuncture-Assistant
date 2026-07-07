@@ -508,13 +508,14 @@
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance('針灸助理，全人醫療，調和陰陽。');
-        utt.lang = 'zh-TW';
-        const gender = Settings.get('voiceGender');
-        const voices = window.speechSynthesis.getVoices();
-        const picked = voices.find(v => v.lang.startsWith('zh') && (gender === 'female' ? /female|woman|girl/i.test(v.name) : /male|man/i.test(v.name)))
-                    || voices.find(v => v.lang.startsWith('zh'))
-                    || null;
-        if (picked) utt.voice = picked;
+        const gender = Settings.get('voiceGender') || 'female';
+        const picked = Settings.pickTTSVoice(gender);
+        if (picked) {
+          utt.voice = picked;
+          utt.lang = picked.lang || 'zh-TW';
+        } else {
+          utt.lang = 'zh-TW';
+        }
         window.speechSynthesis.speak(utt);
       } else {
         UI.toast('您的裝置不支援語音功能');
