@@ -712,27 +712,38 @@ body::before {
   max-width: 100vw !important;
   height: 100vh !important;
   height: 100dvh !important;
+  height: 100svh !important;
   z-index: 50;
   margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
 }
 .home-image-wrap {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  min-height: 100dvh;
+  min-height: 100svh;
   overflow: hidden;
+  /* 與主選單圖上方底色一致，避免未覆蓋區域露白 */
+  background: #eef4f7;
 }
 .home-bg-img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  min-width: 100%;
+  min-height: 100%;
+  /* 主選單圖比例（1320×2868）與手機直式螢幕相近，fill 可完整覆蓋且維持熱區對位 */
+  object-fit: fill;
   object-position: center center;
   display: block;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  pointer-events: none;
 }
 /* 確保點擊熱區使用正確的座標系 */
 .home-hit-area {
