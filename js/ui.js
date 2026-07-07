@@ -48,16 +48,22 @@ const UI = (() => {
     const imgId  = `pi_${uid}`;
     const descId = `pd_${uid}`;
 
+    let pointData = null;
+    try {
+      pointData = await Cache.loadPointData(pointName);
+    } catch {}
+
+    const meridian = pointData?.['所屬經脈'] || meta?.meridian || '';
+    const intlCode = pointData?.['國際代碼'] || meta?.intlCode || '';
+    const pairs    = pointData ? Cache.buildAttrPairs(pointData) : (meta?.attrPairs || []);
+
     // 組合標題 HTML
     let headerHTML = '';
     if (meta && typeof meta === 'object') {
-      // 每個屬性一個膠囊，有細節時緊接在同一屬性後面
-      const pairs = meta.attrPairs || [];
       const attrRow = pairs.map(p =>
         `<span class="attr-tag">${p['屬性']}</span>` +
         (p['細節'] ? `<span class="detail-tag">${p['細節']}</span>` : '')
       ).join('');
-      // fallback：若無配對資料則用純屬性陣列
       const fallback = !pairs.length
         ? (meta.attributes || []).map(a => `<span class="attr-tag">${a}</span>`).join('')
         : '';
@@ -104,11 +110,10 @@ const UI = (() => {
 
     // 載入文字說明
     const descEl = document.getElementById(descId);
-    try {
-      const d = await Cache.loadPointData(pointName);
-      if (descEl) descEl.innerHTML = _renderPointFields(d);
-    } catch {
-      if (descEl) descEl.innerHTML =
+    if (pointData && descEl) {
+      descEl.innerHTML = _renderPointFields(pointData);
+    } else if (descEl) {
+      descEl.innerHTML =
         `<p style="color:var(--clr-muted);font-size:var(--fs-sm);">取穴說明暫未提供。</p>`;
     }
   }
