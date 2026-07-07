@@ -213,6 +213,20 @@ const Meridian = (() => {
   }
 
   /* ── Tab A：直接輸入，autocomplete ── */
+  function _filterPointNames(allNames, query) {
+    const q = query.trim();
+    if (!q) return [];
+
+    return allNames
+      .filter(n => n.includes(q))
+      .sort((a, b) => {
+        const aStarts = a.startsWith(q);
+        const bStarts = b.startsWith(q);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        return a.localeCompare(b, 'zh-Hant');
+      });
+  }
+
   function _bindTabA(allNames) {
     const inp  = document.getElementById('inp-point-name');
     const sugg = document.getElementById('inp-suggestions');
@@ -221,7 +235,7 @@ const Meridian = (() => {
     inp.addEventListener('input', () => {
       const q = inp.value.trim();
       if (!q) { sugg.style.display = 'none'; return; }
-      const matches = allNames.filter(n => n.includes(q)).slice(0, 8);
+      const matches = _filterPointNames(allNames, q);
       if (!matches.length) { sugg.style.display = 'none'; return; }
       sugg.innerHTML = matches.map(n =>
         `<div class="suggestion-item" data-name="${n}">${n}</div>`
