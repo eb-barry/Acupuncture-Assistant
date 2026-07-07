@@ -1116,6 +1116,19 @@ body.consent-locked #app {
   line-height: 1.8;
   color: var(--clr-text);
   max-width: 360px;
+  margin-bottom: var(--sp-lg);
+}
+
+.consent-exit-close-btn {
+  min-width: 200px;
+  margin-bottom: var(--sp-md);
+}
+
+.consent-exit-hint {
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--clr-muted);
+  max-width: 320px;
 }
 
 /* ── 國際代碼標籤 ── */
