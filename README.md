@@ -4,15 +4,27 @@
 
 一款以 HTML + JavaScript 為基礎的手機端 PWA 應用程式，涵蓋中醫針灸的三大核心功能模組，專為中醫師、針灸學習者及學術探討設計。
 
+**版本 1.0.0**
+
 ---
 
 ## 📱 線上使用
 
 **GitHub Pages：** [https://eb-barry.github.io/Acupuncture-Assistant/](https://eb-barry.github.io/Acupuncture-Assistant/)
 
+支援加入主畫面，可離線使用（PWA）。
+
 ---
 
 ## ✨ 功能概覽
+
+### 首次啟動：條款同意
+
+- 首次開啟 App 時顯示「重要事項與條款」視窗
+- 須捲動至文末，才可勾選「我同意」並點擊「繼續使用」
+- 選擇「不同意」將離開應用程式，並可點擊「關閉此頁面」
+- 同意紀錄儲存於本機（`localStorage`），設定頁可查看同意日期時間
+- 條款全文亦可在設定頁隨時查閱
 
 ### 1. 靈龜八法與子午流注
 
@@ -37,22 +49,36 @@
 
 | 模式 | 說明 |
 |------|------|
-| 輸入穴位 | 直接輸入穴位名稱，支援即時 Autocomplete |
+| 輸入穴位 | 直接輸入穴位名稱，支援即時 Autocomplete（優先顯示名稱開頭相符者） |
 | 依經脈 | 選擇十四經脈 → 穴位特性 → 穴位名稱，三層連動 |
 | 依特性 | 選擇穴位特性（如合穴、八脈交會穴），列出所有符合穴位及所屬經脈 |
 | 依病症 | 輸入病症關鍵字，搜尋主治及現代醫學闡釋，列出相關穴位 |
 
 查詢結果顯示：
 - 全寬穴位圖（WebP 格式，多 CDN 備援）
-- 所屬經脈標籤 + 所有相關穴位特性標籤
+- 所屬經脈標籤、國際代碼
+- **經穴屬性與細節配對標籤**（如：交會穴 → 手足太陽、少陽之會；八會穴 → 骨會）
 - 結構化說明：主治、現代醫學闡釋、取穴要領、簡易取穴法、針灸禁忌
 
 ### 3. 中醫歌訣
 
-- 9 首經典中醫歌訣（醫學三字經、四總穴歌、十問歌等）
+- 9 首經典中醫歌訣（醫學三字經、四總穴歌、十問歌、八綱辨證歌等）
 - 顯示歌訣說明與全文
 - TTS 語音朗讀，支援中文女聲／男聲切換
 - 可暫停、停止播放
+
+### 4. 設定
+
+- **介面字型大小**：小 / 中 / 大
+- **說明文字大小**：標準 / 大 / 特大（穴位主治、取穴等說明）
+- **TTS 聲音**：女聲 / 男聲，附語音試聽
+- **重要事項與條款**：完整條款查閱
+- **條款同意紀錄**：顯示首次同意之日期時間
+
+### 主畫面
+
+- 全螢幕背景圖（`main-menu.webp`，1320×2868），適配各種手機螢幕比例
+- 透明熱區按鈕對應三大功能模組與設定
 
 ---
 
@@ -60,11 +86,12 @@
 
 ```
 Acupuncture-Assistant/
-├── index.html                  # 主頁面（含所有子頁面框架）
+├── index.html                  # 主頁面（含所有子頁面框架、條款模板）
 ├── manifest.json               # PWA 設定
-├── sw.js                       # Service Worker（離線快取）
+├── sw.js                       # Service Worker（離線快取，shell v5）
 ├── favicon.svg                 # 網站圖示
 ├── favicon.ico                 # 網站圖示（備援）
+├── LICENSE                     # GNU General Public License v3.0
 │
 ├── css/
 │   └── style.css               # 全域樣式（CSS 變數、元件、版面）
@@ -72,17 +99,19 @@ Acupuncture-Assistant/
 ├── js/
 │   ├── ganzhi.js               # 天干地支核心計算模組
 │   ├── lingui.js               # 靈龜八法頁面邏輯
-│   ├── meridian.js             # 經絡與穴位頁面邏輯
+│   ├── meridian.js             # 經絡與穴位頁面邏輯（四種查詢模式）
 │   ├── rhymes.js               # 中醫歌訣頁面邏輯
-│   ├── settings.js             # 設定管理（localStorage）
-│   ├── cache.js                # 按需載入與 Session 快取
+│   ├── settings.js             # 設定管理（localStorage、條款同意紀錄）
+│   ├── consent.js              # 首次啟動條款同意視窗
+│   ├── cache.js                # 按需載入、Session 快取、屬性配對建構
 │   └── ui.js                   # 共用 UI 工具（頁面切換、Toast、穴位面板）
 │
 └── assets/
-    ├── main-menu.webp          # 主選單背景圖（1320×2868）
+    ├── main-menu.webp          # 主選單全螢幕背景圖（1320×2868）
     ├── home-icon.png           # 功能頁返回主頁圖示
+    ├── icons/                  # PWA 圖示（192×192、512×512）
     ├── acupuncture-data.json   # 十四經脈穴位特性對照表
-    ├── points-data.json        # 155 個穴位完整說明資料
+    ├── points-data.json        # 362 個穴位完整說明資料（含經穴屬性配對）
     ├── rhymes-data.json        # 9 首歌訣清單
     ├── points/                 # 穴位圖片（*.webp）
     └── rhymes/                 # 歌訣內文（*.txt）
@@ -100,7 +129,8 @@ Acupuncture-Assistant/
 | 農曆計算 | Julian Day Number（JDN）算法，基準日 2024/1/1 甲子日，經 lunar-python 驗證 |
 | 語音朗讀 | Web Speech API（speechSynthesis），中文女聲優先 |
 | 離線支援 | PWA Service Worker，App Shell 預快取 + 資產按需快取 |
-| 圖片載入 | 多 CDN 備援（GitHub Pages → raw.githubusercontent.com → jsDelivr），8 秒 timeout 自動切換 |
+| 圖片載入 | 多 CDN 備援（GitHub Pages → raw.githubusercontent.com → jsDelivr） |
+| 資料快取 | 併發請求 dedup（in-flight promise 共用），避免首次載入競態 |
 | 資料格式 | JSON（穴位資料、歌訣清單），WebP 圖片 |
 | 部署平台 | GitHub Pages |
 
@@ -197,6 +227,8 @@ Acupuncture-Assistant/
 
 使用本 App 所產生之任何知識理解，均不可取代醫師親診。開發者對使用者依據本 App 內容所採取之任何行動概不負責。
 
+完整條款請於 App 內「設定 → 重要事項與條款」查閱。
+
 ---
 
 ## 🚀 本機開發
@@ -213,14 +245,24 @@ python3 -m http.server 8080
 
 > **注意：** Service Worker 需在 HTTPS 或 `localhost` 環境下才能正常運作。
 
+### 安裝為 PWA（加入主畫面）
+
+**iOS（Safari）**
+1. 開啟上述 GitHub Pages 網址
+2. 點擊分享按鈕 →「加入主畫面」
+
+**Android（Chrome）**
+1. 開啟上述 GitHub Pages 網址
+2. 點擊選單 →「安裝應用程式」或「加入主畫面」
+
 ---
 
 ## 📄 License
 
-本專案資料整理自中醫古典文獻，程式碼及設計由開發者原創。
+本專案程式碼以 [GNU General Public License v3.0](LICENSE) 授權。
 
-AI 生成內容（現代醫學闡釋）未經臨床驗證，僅供學術探討。
+穴位資料整理自中醫古典文獻；程式碼及介面設計由開發者原創。AI 生成內容（現代醫學闡釋）未經臨床驗證，僅供學術探討。
 
 ---
 
-*針灸助理 © 2025 | 全人醫療・調和陰陽・扶正祛邪*
+*針灸助理 © 2025–2026 | 全人醫療・調和陰陽・扶正祛邪*
