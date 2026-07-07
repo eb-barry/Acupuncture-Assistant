@@ -13,6 +13,7 @@ const Cache = (() => {
   const PAGES_BASE = `https://eb-barry.github.io/Acupuncture-Assistant/assets`;
 
   const _mem = {};
+  const _pending = {};
   let _pointsData = null;
 
   function _enc(str) { return encodeURIComponent(str); }
@@ -26,19 +27,29 @@ const Cache = (() => {
     return text;
   }
 
-  /** 載入 JSON 資料檔 */
+  /** 載入 JSON 資料檔（併發請求共用同一 in-flight promise） */
   async function loadJSON(filename) {
     const url = `${RAW_BASE}/${filename}`;
     if (_mem[url]) return _mem[url];
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Cannot load ${filename}: HTTP ${res.status}`);
-    const data = await res.json();
-    _mem[url] = data;
-    return data;
+    if (_pending[url]) return _pending[url];
+
+    _pending[url] = (async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Cannot load ${filename}: HTTP ${res.status}`);
+      const data = await res.json();
+      _mem[url] = data;
+      return data;
+    })();
+
+    try {
+      return await _pending[url];
+    } finally {
+      delete _pending[url];
+    }
   }
 
-  /** 確保 points-data.json 已載入 */
-  async function _ensurePointsData() {
+  /** 載入完整穴位資料表（points-data.json） */
+  async function loadAllPointsData() {
     if (_pointsData) return _pointsData;
     _pointsData = await loadJSON('points-data.json');
     return _pointsData;
@@ -46,7 +57,7 @@ const Cache = (() => {
 
   /** 取得單一穴位完整資料物件 */
   async function loadPointData(pointName) {
-    const data = await _ensurePointsData();
+    const data = await loadAllPointsData();
     const entry = data[pointName];
     if (!entry) throw new Error(`找不到穴位資料：${pointName}`);
     return entry;
@@ -84,6 +95,7 @@ const Cache = (() => {
 
   return {
     loadJSON,
+    loadAllPointsData,
     loadPointData,
     pointImageUrl,
     pointImageUrls,

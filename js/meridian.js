@@ -10,9 +10,10 @@
  */
 
 const Meridian = (() => {
-  let _data       = null;   // points-data.json  { 穴位名稱: {...} }
-  let _inited     = false;
-  let _activeTab  = 'A';    // 'A' | 'B' | 'C'
+  let _data        = null;   // points-data.json  { 穴位名稱: {...} }
+  let _inited      = false;
+  let _initPromise = null;
+  let _activeTab   = 'A';    // 'A' | 'B' | 'C'
 
   // 穴位特性顯示順序（依 points-data.json 實際資料，共 16 種）
   const CATEGORIES = [
@@ -24,15 +25,24 @@ const Meridian = (() => {
   /* ── Init ── */
   async function init() {
     if (_inited) { _rebuildUI(); return; }
+    if (_initPromise) return _initPromise;
+
     const container = document.getElementById('meridian-content');
     container.innerHTML = _spinnerHTML(120);
-    try {
-      _data   = await Cache.loadJSON('points-data.json');
-      _inited = true;
-      _buildUI(container);
-    } catch (e) {
-      container.innerHTML = _errHTML('資料載入失敗，請檢查網路連線。', e.message);
-    }
+
+    _initPromise = (async () => {
+      try {
+        _data   = await Cache.loadAllPointsData();
+        _inited = true;
+        _buildUI(container);
+      } catch (e) {
+        container.innerHTML = _errHTML('資料載入失敗，請檢查網路連線。', e.message);
+      } finally {
+        _initPromise = null;
+      }
+    })();
+
+    return _initPromise;
   }
 
   function _rebuildUI() {
