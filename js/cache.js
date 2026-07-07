@@ -84,6 +84,10 @@ const Cache = (() => {
   const BAHUI_KW = ['脈會','氣會','血會','筋會','骨會','髓會','臟會','腑會'];
   const BAMAI_KW = ['任脈','督脈','衝脈','帶脈','陰維','陽維','陰蹻','陽蹻'];
   const ORGANS   = ['肺','心','肝','脾','腎','胃','心包','三焦','膽','大腸','小腸','膀胱'];
+  const BAHUI_BY_POINT = {
+    '章門': '臟會', '中脘': '腑會', '膻中': '氣會', '膈俞': '血會',
+    '陽陵泉': '筋會', '太淵': '脈會', '大杼': '骨會', '懸鐘': '髓會',
+  };
 
   function _cleanDetail(text) {
     if (!text) return null;
@@ -109,7 +113,7 @@ const Cache = (() => {
   function _detailMatchesAttr(attr, detail) {
     if (!detail) return false;
     if (attr === '八會穴') {
-      return BAHUI_KW.some(kw => detail.includes(kw)) || ORGANS.includes(detail);
+      return BAHUI_KW.some(kw => detail.includes(kw));
     }
     if (attr === '八脈交會穴') {
       return BAMAI_KW.some(kw => detail.includes(kw));
@@ -126,19 +130,31 @@ const Cache = (() => {
     return false;
   }
 
+  function _enrichAttrPairs(pairs, pointName) {
+    if (!pointName || !pairs.length) return pairs;
+
+    const bahuiDetail = BAHUI_BY_POINT[pointName];
+    if (bahuiDetail) {
+      const bahuiPair = pairs.find(p => p['屬性'] === '八會穴');
+      if (bahuiPair && !bahuiPair['細節']) bahuiPair['細節'] = bahuiDetail;
+    }
+
+    return pairs;
+  }
+
   /**
    * 將經穴屬性與經穴屬性細節組合成 [{ 屬性, 細節 }, ...]
    * 優先使用 經穴屬性配對；否則依屬性陣列與細節文字自動配對。
    */
-  function buildAttrPairs(d) {
+  function buildAttrPairs(d, pointName) {
     if (!d) return [];
 
     const existing = d['經穴屬性配對'];
     if (Array.isArray(existing) && existing.length) {
-      return existing.map(p => ({
+      return _enrichAttrPairs(existing.map(p => ({
         屬性: p['屬性'],
         細節: _cleanDetail(p['細節']),
-      }));
+      })), pointName);
     }
 
     const attrs = _uniqueAttrs(d['經穴屬性']);
@@ -149,31 +165,34 @@ const Cache = (() => {
       ? rawDetail.map(_cleanDetail).filter(Boolean)
       : _splitDetails(rawDetail);
 
-    if (parts.length === attrs.length) {
-      return attrs.map((attr, i) => ({ 屬性: attr, 細節: parts[i] || null }));
-    }
-    if (parts.length === 1 && attrs.length === 1) {
-      return [{ 屬性: attrs[0], 細節: parts[0] }];
-    }
+    let pairs;
 
-    const assigned = {};
-    for (const part of parts) {
-      for (const attr of attrs) {
-        if (assigned[attr]) continue;
-        if (_detailMatchesAttr(attr, part)) {
-          assigned[attr] = part;
-          break;
+    if (parts.length === attrs.length) {
+      pairs = attrs.map((attr, i) => ({ 屬性: attr, 細節: parts[i] || null }));
+    } else if (parts.length === 1 && attrs.length === 1) {
+      pairs = [{ 屬性: attrs[0], 細節: parts[0] }];
+    } else {
+      const assigned = {};
+      for (const part of parts) {
+        for (const attr of attrs) {
+          if (assigned[attr]) continue;
+          if (_detailMatchesAttr(attr, part)) {
+            assigned[attr] = part;
+            break;
+          }
         }
       }
+
+      const unmatchedParts = parts.filter(part => !Object.values(assigned).includes(part));
+      const unmatchedAttrs = attrs.filter(attr => !assigned[attr]);
+      unmatchedParts.forEach((part, i) => {
+        if (unmatchedAttrs[i]) assigned[unmatchedAttrs[i]] = part;
+      });
+
+      pairs = attrs.map(attr => ({ 屬性: attr, 細節: assigned[attr] || null }));
     }
 
-    const unmatchedParts = parts.filter(part => !Object.values(assigned).includes(part));
-    const unmatchedAttrs = attrs.filter(attr => !assigned[attr]);
-    unmatchedParts.forEach((part, i) => {
-      if (unmatchedAttrs[i]) assigned[unmatchedAttrs[i]] = part;
-    });
-
-    return attrs.map(attr => ({ 屬性: attr, 細節: assigned[attr] || null }));
+    return _enrichAttrPairs(pairs, pointName);
   }
 
   /** 載入歌訣文字 */

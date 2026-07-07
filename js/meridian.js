@@ -439,7 +439,7 @@ const Meridian = (() => {
       meridian:   d['所屬經脈']      || '',
       intlCode:   d['國際代碼']      || '',
       attributes: d['經穴屬性']     || [],
-      attrPairs:  Cache.buildAttrPairs(d),
+      attrPairs:  Cache.buildAttrPairs(d, pointName),
     };
     UI.renderPointPanel(panel, pointName, meta);
     setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 120);

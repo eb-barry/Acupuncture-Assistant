@@ -55,7 +55,7 @@ const UI = (() => {
 
     const meridian = pointData?.['所屬經脈'] || meta?.meridian || '';
     const intlCode = pointData?.['國際代碼'] || meta?.intlCode || '';
-    const pairs    = pointData ? Cache.buildAttrPairs(pointData) : (meta?.attrPairs || []);
+    const pairs    = pointData ? Cache.buildAttrPairs(pointData, pointName) : (meta?.attrPairs || []);
 
     // 組合標題 HTML
     let headerHTML = '';

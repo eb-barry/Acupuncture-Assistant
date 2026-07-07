@@ -535,7 +535,7 @@ const Lingui = (() => {
             meridian:   d['所屬經脈']      || '',
             intlCode:   d['國際代碼']      || '',
             attributes: d['經穴屬性']     || [],
-            attrPairs:  Cache.buildAttrPairs(d),
+            attrPairs:  Cache.buildAttrPairs(d, btn.dataset.point),
           };
         } catch {}
         UI.renderPointPanel(panel, btn.dataset.point, meta);
@@ -567,7 +567,7 @@ const Lingui = (() => {
         meridian:   d['所屬經脈']      || '',
         intlCode:   d['國際代碼']      || '',
         attributes: d['經穴屬性']     || [],
-        attrPairs:  Cache.buildAttrPairs(d),
+        attrPairs:  Cache.buildAttrPairs(d, name),
       };
     } catch {}
     UI.renderPointPanel(panel, name, meta);
