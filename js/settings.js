@@ -17,6 +17,7 @@ const Settings = (() => {
     fontSize:    'medium',
     descSize:    'normal',
     voiceGender: 'female',
+    termsAcceptedAt: null,
   };
 
   function load() {
@@ -58,5 +59,38 @@ const Settings = (() => {
 
   function get(key) { return load()[key]; }
 
-  return { apply, set, get, load, FONT_SIZES, DESC_SIZES };
+  function hasTermsConsent() {
+    return !!load().termsAcceptedAt;
+  }
+
+  function getTermsAcceptedAt() {
+    return load().termsAcceptedAt || null;
+  }
+
+  function setTermsConsent(isoString) {
+    return set('termsAcceptedAt', isoString);
+  }
+
+  function formatTermsAcceptedAt(iso) {
+    if (!iso) return '尚未同意';
+    try {
+      return new Date(iso).toLocaleString('zh-TW', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+    } catch {
+      return iso;
+    }
+  }
+
+  return {
+    apply, set, get, load,
+    hasTermsConsent, getTermsAcceptedAt, setTermsConsent, formatTermsAcceptedAt,
+    FONT_SIZES, DESC_SIZES,
+  };
 })();

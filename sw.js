@@ -5,7 +5,7 @@
  *   Data files & assets     → Network-First with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v1';
+const SHELL_CACHE   = 'acupuncture-shell-v2';
 const CONTENT_CACHE = 'acupuncture-content-v1';
 
 const SHELL_FILES = [
@@ -13,6 +13,7 @@ const SHELL_FILES = [
   './index.html',
   './css/style.css',
   './js/settings.js',
+  './js/consent.js',
   './js/cache.js',
   './js/ganzhi.js',
   './js/ui.js',
