@@ -25,6 +25,29 @@ const Consent = (() => {
     }
   }
 
+  function _tryClosePage() {
+    let closed = false;
+
+    try {
+      window.open('', '_self');
+      window.close();
+      closed = window.closed;
+    } catch {}
+
+    if (!closed) {
+      try {
+        window.location.replace('about:blank');
+      } catch {
+        try { window.location.href = 'about:blank'; } catch {}
+      }
+    }
+
+    setTimeout(() => {
+      const hint = document.getElementById('consent-exit-hint');
+      if (hint && !window.closed) hint.hidden = false;
+    }, 400);
+  }
+
   function _exitApp() {
     const overlay = document.getElementById('consent-overlay');
     if (overlay) overlay.hidden = true;
@@ -35,7 +58,12 @@ const Consent = (() => {
         <div class="consent-exit-screen">
           <p class="consent-exit-title">已離開應用程式</p>
           <p class="consent-exit-text">您選擇不同意重要事項與條款，因此無法使用針灸助理。<br>若改變主意，請重新開啟本應用程式並閱讀條款後同意。</p>
+          <button type="button" class="btn btn-primary consent-exit-close-btn" id="consent-exit-close-btn">關閉此頁面</button>
+          <p class="consent-exit-hint" id="consent-exit-hint" hidden>若無法自動關閉，請使用瀏覽器關閉分頁，或從主畫面切換離開此 App。</p>
         </div>`;
+
+      document.getElementById('consent-exit-close-btn')
+        ?.addEventListener('click', _tryClosePage);
     }
     document.body.classList.remove('consent-locked');
   }
@@ -75,8 +103,8 @@ const Consent = (() => {
     };
 
     btnDismiss.onclick = () => {
-      try { window.close(); } catch {}
-      setTimeout(_exitApp, 120);
+      _exitApp();
+      _tryClosePage();
     };
   }
 
