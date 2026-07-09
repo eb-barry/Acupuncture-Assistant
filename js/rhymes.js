@@ -4,11 +4,12 @@
  */
 
 const Rhymes = (() => {
-  let _data    = null;
-  let _inited  = false;
-  let _synth   = window.speechSynthesis || null;
-  let _playing = false;
-  let _curText = '';
+  let _data        = null;
+  let _inited      = false;
+  let _initPromise = null;
+  let _synth       = window.speechSynthesis || null;
+  let _playing     = false;
+  let _curText     = '';
 
   if (_synth) {
     _synth.onvoiceschanged = () => {};
@@ -70,16 +71,24 @@ const Rhymes = (() => {
   /* ── Init ── */
   async function init() {
     stop();
-    if (_inited) { _restoreUI(); return; }
+    if (_initPromise) return _initPromise;
+
     const container = document.getElementById('rhymes-content');
-    container.innerHTML = _loadingHTML(120);
-    try {
-      _data   = await Cache.loadJSON('rhymes-data.json');
-      _inited = true;
-      _buildUI(container);
-    } catch (e) {
-      container.innerHTML = _errorHTML('資料載入失敗，請檢查網路連線。', e.message);
-    }
+    if (!_inited) container.innerHTML = _loadingHTML(120);
+
+    _initPromise = (async () => {
+      try {
+        _data   = await Cache.loadRhymesCatalog();
+        _inited = true;
+        _buildUI(container);
+      } catch (e) {
+        container.innerHTML = _errorHTML('資料載入失敗，請檢查網路連線。', e.message);
+      } finally {
+        _initPromise = null;
+      }
+    })();
+
+    return _initPromise;
   }
 
   function _restoreUI() {
@@ -152,8 +161,12 @@ const Rhymes = (() => {
         return;
       }
 
-      descEl.querySelector('p').textContent = rec['說明'];
-      descEl.style.display = 'block';
+      if (rec['說明']) {
+        descEl.querySelector('p').textContent = rec['說明'];
+        descEl.style.display = 'block';
+      } else {
+        descEl.style.display = 'none';
+      }
 
       divider.style.display = '';
       panel.innerHTML = `<div class="info-panel"><div class="info-text">
