@@ -27,24 +27,36 @@ const Cache = (() => {
     return text;
   }
 
-  /** 載入 JSON 資料檔（併發請求共用同一 in-flight promise） */
+  /** 載入 JSON 資料檔（多來源備援 + 併發請求 dedup） */
   async function loadJSON(filename) {
-    const url = `${RAW_BASE}/${filename}`;
-    if (_mem[url]) return _mem[url];
-    if (_pending[url]) return _pending[url];
+    const cacheKey = `json:${filename}`;
+    if (_mem[cacheKey]) return _mem[cacheKey];
+    if (_pending[cacheKey]) return _pending[cacheKey];
 
-    _pending[url] = (async () => {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Cannot load ${filename}: HTTP ${res.status}`);
-      const data = await res.json();
-      _mem[url] = data;
-      return data;
+    const urls = [
+      `${PAGES_BASE}/${filename}`,
+      `${RAW_BASE}/${filename}`,
+      `${CDN_BASE}/${filename}`,
+    ];
+
+    _pending[cacheKey] = (async () => {
+      let lastErr;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          _mem[cacheKey] = data;
+          return data;
+        } catch (e) { lastErr = e; }
+      }
+      throw lastErr || new Error(`Cannot load ${filename}`);
     })();
 
     try {
-      return await _pending[url];
+      return await _pending[cacheKey];
     } finally {
-      delete _pending[url];
+      delete _pending[cacheKey];
     }
   }
 
@@ -195,11 +207,77 @@ const Cache = (() => {
     return _enrichAttrPairs(pairs, pointName);
   }
 
+  /** 透過 GitHub API 列出 assets/rhymes 目錄下的 .txt 檔案 */
+  async function _discoverRhymeFiles() {
+    const apiUrl = `https://api.github.com/repos/${REPO}/contents/assets/rhymes?ref=${BRANCH}`;
+    const res = await fetch(apiUrl, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!res.ok) throw new Error(`GitHub API HTTP ${res.status}`);
+    const items = await res.json();
+    if (!Array.isArray(items)) throw new Error('Invalid rhyme directory listing');
+    return items
+      .filter(item => item.type === 'file' && /\.txt$/i.test(item.name))
+      .map(item => item.name.replace(/\.txt$/i, ''));
+  }
+
+  function _buildRhymeCatalog(stems, metaList) {
+    const metaByFile = {};
+    for (const item of metaList) {
+      if (item && item['檔名']) metaByFile[item['檔名']] = item;
+    }
+
+    return [...new Set(stems)]
+      .filter(Boolean)
+      .map(stem => {
+        const meta = metaByFile[stem];
+        return {
+          檔名: stem,
+          名稱: meta?.['名稱'] || stem,
+          類別: meta?.['類別'] || '中醫歌訣',
+          說明: meta?.['說明'] || '',
+        };
+      })
+      .sort((a, b) => a['名稱'].localeCompare(b['名稱'], 'zh-Hant'));
+  }
+
+  /**
+   * 載入歌訣清單：優先掃描 assets/rhymes 目錄（GitHub API），
+   * 並與 rhymes-data.json 的說明資料合併。
+   */
+  async function loadRhymesCatalog() {
+    if (_pending['rhymes-catalog']) return _pending['rhymes-catalog'];
+
+    _pending['rhymes-catalog'] = (async () => {
+      let meta = [];
+      try { meta = await loadJSON('rhymes-data.json'); } catch {}
+
+      let stems = [];
+      try {
+        stems = await _discoverRhymeFiles();
+      } catch {
+        stems = meta.map(item => item['檔名']).filter(Boolean);
+      }
+
+      const catalog = _buildRhymeCatalog(
+        [...stems, ...meta.map(item => item['檔名'])],
+        meta,
+      );
+      if (!catalog.length) throw new Error('找不到歌訣資料');
+      return catalog;
+    })();
+
+    try {
+      return await _pending['rhymes-catalog'];
+    } finally {
+      delete _pending['rhymes-catalog'];
+    }
+  }
+
   /** 載入歌訣文字 */
   async function loadRhymeText(filename) {
     const urls = [
-      `${RAW_BASE}/rhymes/${_enc(filename)}.txt`,
       `${PAGES_BASE}/rhymes/${_enc(filename)}.txt`,
+      `${RAW_BASE}/rhymes/${_enc(filename)}.txt`,
+      `${CDN_BASE}/rhymes/${_enc(filename)}.txt`,
     ];
     for (const url of urls) {
       try { return await _fetchText(url); } catch {}
@@ -215,5 +293,6 @@ const Cache = (() => {
     pointImageUrl,
     pointImageUrls,
     loadRhymeText,
+    loadRhymesCatalog,
   };
 })();
