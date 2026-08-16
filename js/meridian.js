@@ -22,6 +22,14 @@ const Meridian = (() => {
     '募穴','背俞穴','下合穴','八脈交會穴','八會穴','交會穴'
   ];
 
+  // 十四經脈主流注順序：十二正經（肺→肝）＋任督二脈；經外奇穴置於最後
+  const MERIDIAN_ORDER = [
+    '手太陰肺經', '手陽明大腸經', '足陽明胃經', '足太陰脾經',
+    '手少陰心經', '手太陽小腸經', '足太陽膀胱經', '足少陰腎經',
+    '手厥陰心包經', '手少陽三焦經', '足少陽膽經', '足厥陰肝經',
+    '任脈', '督脈', '經外'
+  ];
+
   /* ── Init ── */
   async function init() {
     if (_inited) { _rebuildUI(); return; }
@@ -53,9 +61,9 @@ const Meridian = (() => {
   function _buildUI(container) {
     // 取得所有唯一值
     const allNames    = Object.keys(_data).sort();
-    const allMeridians = [...new Set(
+    const allMeridians = _sortMeridians([...new Set(
       Object.values(_data).map(d => d['所屬經脈']).filter(Boolean)
-    )].sort();
+    )]);
     const allCats = CATEGORIES.filter(c =>
       Object.values(_data).some(d => d['經穴屬性']?.includes(c))
     );
@@ -295,8 +303,8 @@ const Meridian = (() => {
         selC.appendChild(o);
       });
 
-      // 預先列出該經脈全部穴位
-      _populatePoints(selP, pts.map(([n]) => n).sort());
+      // 預先列出該經脈全部穴位（依國際標準碼升冪）
+      _populatePoints(selP, _sortPointNamesByIntlCode(pts.map(([n]) => n)));
       selP.disabled  = false;
       btn.disabled   = selP.value === '';
     });
@@ -318,7 +326,7 @@ const Meridian = (() => {
         selP.disabled = true;
         return;
       }
-      _populatePoints(selP, pts.map(([n]) => n).sort());
+      _populatePoints(selP, _sortPointNamesByIntlCode(pts.map(([n]) => n)));
       selP.disabled = false;
       btn.disabled  = selP.value === '';
     });
@@ -363,6 +371,42 @@ const Meridian = (() => {
 
     selP.addEventListener('change', () => { btn.disabled = !selP.value; });
     btn.addEventListener('click', () => { if (selP.value) _showResult(selP.value); });
+  }
+
+  /* ── 經脈／國際代碼排序 ── */
+  function _sortMeridians(names) {
+    return names.slice().sort((a, b) => {
+      const ia = MERIDIAN_ORDER.indexOf(a);
+      const ib = MERIDIAN_ORDER.indexOf(b);
+      const ra = ia === -1 ? MERIDIAN_ORDER.length : ia;
+      const rb = ib === -1 ? MERIDIAN_ORDER.length : ib;
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b, 'zh-Hant');
+    });
+  }
+
+  function _parseIntlCode(code) {
+    const s = String(code || '');
+    const m = s.match(/^([A-Za-z]+)(?:-([A-Za-z]+))?(\d+)(.*)$/);
+    if (!m) return { prefix: s, mid: '', num: 0, rest: '' };
+    return { prefix: m[1], mid: m[2] || '', num: parseInt(m[3], 10), rest: m[4] || '' };
+  }
+
+  function _compareIntlCode(a, b) {
+    const pa = _parseIntlCode(a);
+    const pb = _parseIntlCode(b);
+    if (pa.prefix !== pb.prefix) return pa.prefix.localeCompare(pb.prefix);
+    if (pa.mid !== pb.mid) return pa.mid.localeCompare(pb.mid);
+    if (pa.num !== pb.num) return pa.num - pb.num;
+    return pa.rest.localeCompare(pb.rest);
+  }
+
+  function _sortPointNamesByIntlCode(names) {
+    return names.slice().sort((a, b) => {
+      const ca = _data[a]?.['國際代碼'] || '';
+      const cb = _data[b]?.['國際代碼'] || '';
+      return _compareIntlCode(ca, cb) || a.localeCompare(b, 'zh-Hant');
+    });
   }
 
   /* ── 填入穴位選項 ── */
