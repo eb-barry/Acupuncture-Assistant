@@ -26,28 +26,33 @@
   <div class="page active" id="page-home">
     <div class="home-image-wrap">
 
-      <!-- 主選單背景圖 -->
-      <img src="assets/main-menu.webp"
+      <!-- 主選單背景圖（四功能版；query 避免舊圖快取） -->
+      <img src="assets/main-menu.webp?v=2"
            alt="針灸助理主選單"
            class="home-bg-img"
            draggable="false" />
 
-      <!-- 靈龜八法：27.3%~44.6% -->
+      <!-- 靈龜八法：距頂 31% -->
       <button class="home-hit-area" id="btn-lingui"
-              style="top:36.1%;left:4%;width:92%;height:13.1%;"
+              style="top:31%;left:4%;width:92%;height:13.1%;"
               aria-label="靈龜八法與子午流注"></button>
 
-      <!-- 經絡與穴位：50.2%~64.6% -->
+      <!-- 經絡與穴位：距頂 46.7% -->
       <button class="home-hit-area" id="btn-meridian"
-              style="top:51.2%;left:4%;width:92%;height:13.1%;"
+              style="top:46.7%;left:4%;width:92%;height:13.1%;"
               aria-label="經絡與穴位"></button>
 
-      <!-- 中醫歌訣：74.5%~80.3% -->
+      <!-- 3D 經絡模型：距頂 61.5% -->
+      <button class="home-hit-area" id="btn-meridian-3d"
+              style="top:61.5%;left:4%;width:92%;height:13.1%;"
+              aria-label="3D 經絡模型"></button>
+
+      <!-- 中醫歌訣：距頂 76% -->
       <button class="home-hit-area" id="btn-rhymes"
-              style="top:65.8%;left:4%;width:92%;height:13.1%;"
+              style="top:76%;left:4%;width:92%;height:13.1%;"
               aria-label="中醫歌訣"></button>
 
-      <!-- 設定齒輪：89%~97%, 右側 65~95% -->
+      <!-- 設定齒輪：89%~97%, 右側 65~95%（位置未改） -->
       <button class="home-hit-area" id="btn-settings"
               style="top:89%;left:65%;width:30%;height:8%;"
               aria-label="設定"></button>
@@ -104,6 +109,32 @@
     </div>
     <div class="scroll-area" id="meridian-scroll">
       <div id="meridian-content"></div>
+      <div class="safe-bottom"></div>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════
+       PAGE: 3D 經絡模型（開發中占位）
+  ═════════════════════════════════════════ -->
+  <div class="page" id="page-meridian-3d">
+    <div class="top-bar">
+      <button class="btn-home" id="back-meridian-3d" aria-label="返回主頁">
+        <img src="assets/home-icon.png" alt="返回主頁"
+           style="width:44px;height:44px;object-fit:contain;"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="display:none;width:44px;height:44px;color:#fff;">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
+      <span class="page-title">3D 經絡模型</span>
+      <div style="width:38px"></div>
+    </div>
+    <div class="scroll-area coming-soon-area">
+      <p class="coming-soon-msg">正在開發當中</p>
       <div class="safe-bottom"></div>
     </div>
   </div>
@@ -450,11 +481,13 @@
 
   document.getElementById('btn-lingui').addEventListener('click',   () => { nav('page-lingui');   Lingui.init(); });
   document.getElementById('btn-meridian').addEventListener('click', () => { nav('page-meridian'); Meridian.init(); });
+  document.getElementById('btn-meridian-3d').addEventListener('click', () => { nav('page-meridian-3d'); });
   document.getElementById('btn-rhymes').addEventListener('click',   () => { nav('page-rhymes');   Rhymes.init(); });
   document.getElementById('btn-settings').addEventListener('click', () => { nav('page-settings'); initSettings(); });
 
   document.getElementById('back-lingui').addEventListener('click',   () => nav('page-home'));
   document.getElementById('back-meridian').addEventListener('click', () => nav('page-home'));
+  document.getElementById('back-meridian-3d').addEventListener('click', () => nav('page-home'));
   document.getElementById('back-rhymes').addEventListener('click',   () => { Rhymes.stop(); nav('page-home'); });
   document.getElementById('back-settings').addEventListener('click', () => nav('page-home'));
 

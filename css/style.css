@@ -736,7 +736,7 @@ body::before {
   height: 100%;
   min-width: 100%;
   min-height: 100%;
-  /* 主選單圖比例（1320×2868）與手機直式螢幕相近，fill 可完整覆蓋且維持熱區對位 */
+  /* 主選單圖比例（921×2000）與手機直式螢幕相近，fill 可完整覆蓋且維持熱區對位 */
   object-fit: fill;
   object-position: center center;
   display: block;
@@ -761,6 +761,23 @@ body::before {
 
 /* Debug mode: 取消下面這行的註解可看到所有點擊區域 */
 /* .home-hit-area { border: 2px dashed rgba(255,0,0,0.6) !important; } */
+
+/* ── 3D 經絡模型：開發中占位 ── */
+.coming-soon-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.coming-soon-msg {
+  font-family: var(--font-serif);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  color: var(--clr-ink);
+  letter-spacing: 0.12em;
+  text-align: center;
+  margin: 0;
+}
 
 /* ── 返回主頁：Home 圖示（白色，在 Tiffany Green top-bar 上） ── */
 .btn-home {
