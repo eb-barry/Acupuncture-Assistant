@@ -82,16 +82,22 @@ const Meridian3D = (() => {
     return POINT_COLOR;
   }
 
+  function setCalloutsVisible(on) {
+    const svg = $('m3d-callouts');
+    if (!svg) return;
+    if (on) svg.removeAttribute('hidden');
+    else svg.setAttribute('hidden', '');
+  }
+
   function clearCallouts() {
     const svg = $('m3d-callouts');
     if (!svg) return;
     svg.innerHTML = '';
-    svg.hidden = true;
+    setCalloutsVisible(false);
   }
 
   function hideCallouts() {
-    const svg = $('m3d-callouts');
-    if (svg) svg.hidden = true;
+    setCalloutsVisible(false);
   }
 
   function noteCameraMoving(ms = 240) {
@@ -701,17 +707,17 @@ const Meridian3D = (() => {
     const svg = $('m3d-callouts');
     if (!svg || !camera || !renderer) return;
     if (orbiting || performance.now() < movingUntil) {
-      svg.hidden = true;
+      setCalloutsVisible(false);
       return;
     }
-    if ($('m3d-modal') && !$('m3d-modal').hidden) { svg.hidden = true; return; }
-    if ($('m3d-loading') && !$('m3d-loading').hidden) { svg.hidden = true; return; }
-    if ($('m3d-point-overlay') && !$('m3d-point-overlay').hidden) { svg.hidden = true; return; }
+    if ($('m3d-modal') && !$('m3d-modal').hidden) { setCalloutsVisible(false); return; }
+    if ($('m3d-loading') && !$('m3d-loading').hidden) { setCalloutsVisible(false); return; }
+    if ($('m3d-point-overlay') && !$('m3d-point-overlay').hidden) { setCalloutsVisible(false); return; }
 
     const selected = selectedMeridians();
     if (selected.length === 0 || selected.length > MAX_LABELED_MERIDIANS) {
       svg.innerHTML = '';
-      svg.hidden = true;
+      setCalloutsVisible(false);
       return;
     }
 
@@ -772,7 +778,7 @@ const Meridian3D = (() => {
 
     svg.innerHTML = '';
     if (!laid.length) {
-      svg.hidden = true;
+      setCalloutsVisible(false);
       return;
     }
     laid.forEach((item) => {
@@ -792,7 +798,7 @@ const Meridian3D = (() => {
       text.textContent = item.rec.name;
       svg.appendChild(text);
     });
-    svg.hidden = false;
+    setCalloutsVisible(true);
   }
 
   function tourPoints(meridianId) {
