@@ -5,7 +5,7 @@
  *   Data files & assets     → Network-First with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v9';
+const SHELL_CACHE   = 'acupuncture-shell-v10';
 const CONTENT_CACHE = 'acupuncture-content-v1';
 
 const SHELL_FILES = [
@@ -20,6 +20,10 @@ const SHELL_FILES = [
   './js/lingui.js',
   './js/meridian.js',
   './js/rhymes.js',
+  './js/meridian3d.js',
+  './assets/icons/play-3d.png',
+  './assets/icons/stop-3d.png',
+  './assets/icons/menu-3d.png',
   './manifest.json',
   'https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js',
   'https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap',
