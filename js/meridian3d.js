@@ -149,10 +149,10 @@ const Meridian3D = (() => {
 
   async function loadThree() {
     if (three) return three;
-    const THREE = await import(`${THREE_BASE}/build/three.module.js`);
-    const { OrbitControls } = await import(`${THREE_BASE}/examples/jsm/controls/OrbitControls.js`);
-    const { GLTFLoader } = await import(`${THREE_BASE}/examples/jsm/loaders/GLTFLoader.js`);
-    const { MeshoptDecoder } = await import(`${THREE_BASE}/examples/jsm/libs/meshopt_decoder.module.js`);
+    const THREE = await import('three');
+    const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+    const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+    const { MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js');
     three = { THREE, OrbitControls, GLTFLoader, MeshoptDecoder };
     return three;
   }
