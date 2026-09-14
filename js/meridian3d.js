@@ -346,7 +346,9 @@ const Meridian3D = (() => {
           else tangent.set(1, 0, 0);
           const bitangent = new THREE.Vector3().crossVectors(nrm, tangent).normalize();
           label.position.copy(pos).addScaledVector(bitangent, bodyHeight * 0.022);
-          label.lookAt(pos.clone().add(nrm));
+          // 貼在皮膚上，但預設正面要能讀字：略朝 +Z（面對使用者）
+          const face = nrm.clone().multiplyScalar(0.25).add(new THREE.Vector3(0, 0, 1)).normalize();
+          label.lookAt(pos.clone().add(face));
           label.userData.point = rec;
           annotRoot.add(label);
           pickables.push(label);
