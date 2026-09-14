@@ -805,7 +805,7 @@ body::before {
 }
 .m3d-callouts .callout-name {
   font-family: var(--font-serif); font-size: var(--fs-sm); font-weight: 600;
-  fill: #111111; stroke: rgba(255,255,255,0.9); stroke-width: 3.5px;
+  fill: #111111; stroke: rgba(255,255,255,0.92); stroke-width: 2.4px;
   paint-order: stroke; dominant-baseline: middle;
 }
 
