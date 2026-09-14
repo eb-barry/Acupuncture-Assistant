@@ -679,21 +679,14 @@ const Meridian3D = (() => {
   }
 
   function packSlots(items, height, slotH, pad) {
-    const used = [];
-    const top = pad;
-    const bot = height - pad;
     items.sort((a, b) => a.py - b.py);
+    let next = pad;
+    const bot = height - pad;
     items.forEach((item) => {
-      let y = Math.min(bot, Math.max(top, item.py));
-      const overlaps = (yy) => used.some((u) => Math.abs(u - yy) < slotH);
-      if (overlaps(y)) {
-        for (let d = slotH; d < height; d += slotH) {
-          if (y + d <= bot && !overlaps(y + d)) { y += d; break; }
-          if (y - d >= top && !overlaps(y - d)) { y -= d; break; }
-        }
-      }
-      used.push(y);
+      let y = Math.max(next, item.py);
+      if (y > bot) y = bot;
       item.slotY = y;
+      next = y + slotH;
     });
   }
 
