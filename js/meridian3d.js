@@ -108,17 +108,16 @@ const Meridian3D = (() => {
 
   function labelSideByMeridian(selected) {
     const sides = new Map();
-    const flexible = [];
     selected.forEach((m) => {
-      if (m.id === 'CV' || m.id === 'GV') sides.set(m.id, 'left');
-      else flexible.push(m);
-    });
-    let right = true;
-    flexible.forEach((m) => {
-      sides.set(m.id, right ? 'right' : 'left');
-      right = !right;
+      sides.set(m.id, (m.id === 'CV' || m.id === 'GV') ? 'left' : 'right');
     });
     return sides;
+  }
+
+  function calloutPointAllowed(rec) {
+    if (!rec) return false;
+    if (rec.meridianId === 'CV' || rec.meridianId === 'GV' || rec.side === 'midline') return true;
+    return rec.side === 'right';
   }
 
   function worldPerMm() {
@@ -727,6 +726,7 @@ const Meridian3D = (() => {
     pickables.forEach((obj) => {
       if (obj.userData.kind !== 'marker' || !obj.userData.point) return;
       const rec = obj.userData.point;
+      if (!calloutPointAllowed(rec)) return;
       if (!isPointVisible(rec, width, height)) return;
       const screen = projectToScreen(rec.position, width, height);
       if (!screen) return;
