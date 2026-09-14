@@ -1,6 +1,6 @@
 /**
- * meridian3d.js — 3D 經絡模型第一版
- * 延遲載入 Three.js；Play 才載 GLB。自動模式走畫面右側（hamburger 側）。
+ * meridian3d.js — 3D 經絡檢視（讀取經脈繪圖室出版地圖）
+ * 延遲載入 Three.js；Play 才載 GLB。自動模式鎖定畫面右側（hamburger / +X）。
  */
 const Meridian3D = (() => {
 
@@ -21,6 +21,18 @@ const Meridian3D = (() => {
     { id: 'GV', name: '督脈', group: 'ren-du' },
   ];
   const LINE_COLOR = { yin: '#22c55e', yang: '#ef4444', 'ren-du': '#3b82f6' };
+  const YANG_POINT_COLOR = '#111111';
+  const SKIN_COLOR = 0xd4a88a;
+  const REFERENCE_BODY_HEIGHT_M = 1.75;
+  const RIBBON_WIDTH_MM = 3.5;
+  const MARKER_DIAMETER_MM = 7;
+  const SKIN_LIFT_MM = 0.4;
+  const SAMPLE_STEP_MM = 2;
+
+  const MAP_URL = {
+    male: 'assets/meridians/male.json',
+    female: 'assets/meridians/female.json',
+  };
 
   const opts = {
     gender: 'male',
@@ -39,15 +51,39 @@ const Meridian3D = (() => {
   let raf = 0;
   let playingAuto = false;
   let autoAbort = false;
-  let autoCursor = null; // { mIndex, pIndex, phase }
+  let autoCursor = null;
+  let autoLockedSide = 'right';
   let currentPoint = null;
   let pickables = [];
   let highlighted = null;
   let pointsData = null;
   let entered = false;
   let movingUntil = 0;
+  let mapCache = { male: null, female: null };
+  let mapFit = { scale: 1, cx: 0, cy: 0, cz: 0 };
+  let skinMaterial = null;
+  let nailMaterial = null;
+  let playGeneration = 0;
 
   const $ = (id) => document.getElementById(id);
+
+  function meridianMeta(id) {
+    return MERIDIANS.find((m) => m.id === id) || MERIDIANS[0];
+  }
+
+  function lineColorFor(id) {
+    return LINE_COLOR[meridianMeta(id).group] || LINE_COLOR.yang;
+  }
+
+  function markerColorFor(id) {
+    return meridianMeta(id).group === 'yang' ? YANG_POINT_COLOR : lineColorFor(id);
+  }
+
+  function worldPerMm() {
+    const height = Number(bodyHeight) || 0;
+    if (!(height > 0)) return 0.001;
+    return height / (REFERENCE_BODY_HEIGHT_M * 1000);
+  }
 
   function chineseNum(n) {
     const d = '零一二三四五六七八九';
@@ -62,21 +98,19 @@ const Meridian3D = (() => {
     return String(n);
   }
 
-  function codeSeq(code) {
-    const m = /^[A-Z]+(\d+)$/.exec(code || '');
-    return m ? Number(m[1]) : 0;
-  }
-
-  function pointsFor(meridianName) {
-    if (!pointsData) return [];
-    return Object.entries(pointsData)
-      .filter(([, d]) => d && d['所屬經脈'] === meridianName)
-      .map(([name, d]) => ({ name, code: d['國際代碼'] || '', meridian: meridianName }))
-      .sort((a, b) => codeSeq(a.code) - codeSeq(b.code));
-  }
-
   function selectedMeridians() {
     return MERIDIANS.filter((m) => opts.meridians.has(m.id));
+  }
+
+  function currentMap() {
+    const key = opts.gender === 'female' ? 'female' : 'male';
+    return mapCache[key];
+  }
+
+  function sideAllowed(side) {
+    if (opts.mode !== 'auto') return true;
+    if (side === 'midline') return true;
+    return side === autoLockedSide;
   }
 
   function setPlayIcon(kind) {
@@ -121,11 +155,35 @@ const Meridian3D = (() => {
     });
   }
 
+  function unlockSpeech() {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    try {
+      synth.resume();
+      const priming = new SpeechSynthesisUtterance(' ');
+      priming.volume = 0;
+      priming.rate = 10;
+      synth.speak(priming);
+      synth.cancel();
+    } catch {}
+  }
+
+  function waitForVoices() {
+    const synth = window.speechSynthesis;
+    if (!synth) return Promise.resolve();
+    if (synth.getVoices().length) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => { clearTimeout(timer); resolve(); };
+      const timer = setTimeout(done, 900);
+      synth.addEventListener('voiceschanged', done, { once: true });
+    });
+  }
+
   function speak(text, gender) {
     return new Promise((resolve) => {
       const synth = window.speechSynthesis;
-      if (!synth) { resolve(); return; }
-      synth.cancel();
+      if (!synth || autoAbort) { resolve(); return; }
+      try { synth.cancel(); synth.resume(); } catch {}
       const utt = new SpeechSynthesisUtterance(text);
       utt.rate = 0.88;
       const voice = Settings.pickTTSVoice(gender === 'female' ? 'female' : 'male');
@@ -135,9 +193,18 @@ const Meridian3D = (() => {
       } else {
         utt.lang = 'zh-TW';
       }
-      utt.onend = () => resolve();
-      utt.onerror = () => resolve();
-      synth.speak(utt);
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      utt.onend = finish;
+      utt.onerror = finish;
+      const timer = setTimeout(finish, Math.min(12000, Math.max(2200, String(text).length * 420)));
+      try { synth.speak(utt); }
+      catch { finish(); }
     });
   }
 
@@ -155,7 +222,64 @@ const Meridian3D = (() => {
     return three;
   }
 
-  function disposeObject(obj) {
+  function isNailMesh(object) {
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const names = materials.map((material) => (material?.name || '').toLowerCase());
+    const objectName = `${object.name || ''} ${object.parent?.name || ''}`.toLowerCase();
+    const isToeNail = objectName.includes('toenail')
+      || names.some((name) => name.includes('toenail'));
+    const isNail = !isToeNail && (
+      objectName.includes('nail')
+      || names.some((name) => name.includes('fingernail') || name.includes('nail'))
+    );
+    return isToeNail || isNail;
+  }
+
+  function getSkinMaterial(THREE) {
+    if (!skinMaterial) {
+      skinMaterial = new THREE.MeshPhysicalMaterial({
+        color: SKIN_COLOR,
+        roughness: 0.52,
+        metalness: 0,
+        reflectivity: 0.22,
+        clearcoat: 0.12,
+        clearcoatRoughness: 0.48,
+        sheen: 0.55,
+        sheenRoughness: 0.62,
+        sheenColor: new THREE.Color(0xe8b9a4),
+        specularIntensity: 0.35,
+        specularColor: new THREE.Color(0xf0cfc0),
+        flatShading: false,
+      });
+    }
+    return skinMaterial;
+  }
+
+  function getNailMaterial(THREE) {
+    if (!nailMaterial) {
+      nailMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffc8bc,
+        emissive: 0x5a241c,
+        emissiveIntensity: 0.18,
+        metalness: 0.15,
+        roughness: 0.32,
+        flatShading: false,
+        side: THREE.DoubleSide,
+      });
+    }
+    return nailMaterial;
+  }
+
+  function applySurfaceFinish(root, THREE) {
+    const skin = getSkinMaterial(THREE);
+    const nail = getNailMaterial(THREE);
+    root.traverse((object) => {
+      if (!object.isMesh) return;
+      object.material = isNailMesh(object) ? nail : skin;
+    });
+  }
+
+  function disposeObject(obj, { keepShared = false } = {}) {
     if (!obj) return;
     obj.traverse((child) => {
       if (child.geometry) child.geometry.dispose();
@@ -163,6 +287,7 @@ const Meridian3D = (() => {
       if (!mats) return;
       const list = Array.isArray(mats) ? mats : [mats];
       list.forEach((m) => {
+        if (keepShared && (m === skinMaterial || m === nailMaterial)) return;
         if (m.map) m.map.dispose();
         m.dispose();
       });
@@ -182,10 +307,12 @@ const Meridian3D = (() => {
     bodyMeshes = [];
     pickables = [];
     loadedGender = null;
+    if (skinMaterial) { skinMaterial.dispose(); skinMaterial = null; }
+    if (nailMaterial) { nailMaterial.dispose(); nailMaterial = null; }
   }
 
   function applyScale() {
-    if (!camera || !controls || !bodyHeight) return;
+    if (!camera || !controls || !bodyHeight || playingAuto) return;
     const { THREE } = three;
     const fov = THREE.MathUtils.degToRad(camera.fov);
     const dist = (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
@@ -207,7 +334,6 @@ const Meridian3D = (() => {
     const fov = THREE.MathUtils.degToRad(camera.fov);
     const dist = (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
     controls.target.set(0, bodyHeight * 0.42, 0);
-    // 正面：身體朝 +Z，相機在 +Z 看向原點 → 畫面右為 +X（hamburger 側）
     camera.position.set(0, bodyHeight * 0.5, dist);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
@@ -215,10 +341,14 @@ const Meridian3D = (() => {
   }
 
   function lookAtWorld(position, normal) {
-    if (!camera || !controls) return;
+    if (!camera || !controls || !position) return;
     const { THREE } = three;
-    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]).normalize();
-    if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
+    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    if (Math.abs(n.y) > 0.92) {
+      n.add(new THREE.Vector3(0, 0, 0.35)).normalize();
+    }
     const dist = bodyHeight * 0.38 / Math.max(opts.scale, 0.5);
     const target = new THREE.Vector3().fromArray(position);
     const pos = target.clone().addScaledVector(n, dist);
@@ -255,6 +385,7 @@ const Meridian3D = (() => {
     const h = height * 0.028;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
     mesh.userData.kind = 'label';
+    mesh.renderOrder = 4;
     return mesh;
   }
 
@@ -274,96 +405,290 @@ const Meridian3D = (() => {
     return hits[0] || null;
   }
 
+  function jsonBounds(doc) {
+    const pts = (doc && doc.acupoints) || [];
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    pts.forEach((p) => {
+      const pos = p && p.position;
+      if (!pos || pos.length < 3) return;
+      minX = Math.min(minX, pos[0]); maxX = Math.max(maxX, pos[0]);
+      minY = Math.min(minY, pos[1]); maxY = Math.max(maxY, pos[1]);
+      minZ = Math.min(minZ, pos[2]); maxZ = Math.max(maxZ, pos[2]);
+    });
+    if (!Number.isFinite(minX)) {
+      return { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 1, maxZ: 0 };
+    }
+    return { minX, minY, minZ, maxX, maxY, maxZ };
+  }
+
+  function fitMapToUnframed(doc, unframedBox) {
+    const b = jsonBounds(doc);
+    const jsonH = Math.max(b.maxY - b.minY, 1e-6);
+    const meshH = Math.max(unframedBox.max.y - unframedBox.min.y, 1e-6);
+    const jsonCx = (b.minX + b.maxX) * 0.5;
+    const jsonCz = (b.minZ + b.maxZ) * 0.5;
+    const meshCx = (unframedBox.min.x + unframedBox.max.x) * 0.5;
+    const meshCz = (unframedBox.min.z + unframedBox.max.z) * 0.5;
+    const grounded = b.minY >= -0.08 * jsonH && b.minY <= 0.08 * jsonH;
+    const unitMismatch = jsonH > meshH * 2 || meshH > jsonH * 2;
+    if (unitMismatch) {
+      return { scale: meshH / jsonH, cx: jsonCx, cy: b.minY, cz: jsonCz };
+    }
+    if (grounded) {
+      return { scale: 1, cx: 0, cy: 0, cz: 0 };
+    }
+    return { scale: 1, cx: meshCx, cy: unframedBox.min.y, cz: meshCz };
+  }
+
+  function toWorld(pos) {
+    if (!pos || pos.length < 3) return [0, 0, 0];
+    return [
+      (pos[0] - mapFit.cx) * mapFit.scale,
+      (pos[1] - mapFit.cy) * mapFit.scale,
+      (pos[2] - mapFit.cz) * mapFit.scale,
+    ];
+  }
+
+  function snapToSkin(worldPos, normal) {
+    if (!three || !bodyMeshes.length) return { position: worldPos, normal: normal || [0, 0, 1] };
+    const { THREE } = three;
+    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    const mm = worldPerMm();
+    const origin = new THREE.Vector3().fromArray(worldPos).addScaledVector(n, mm * 12);
+    const hit = raycastSkin(THREE, origin, n.clone().negate());
+    if (!hit) return { position: worldPos, normal: [n.x, n.y, n.z] };
+    const mapped = new THREE.Vector3().fromArray(worldPos);
+    if (hit.point.distanceTo(mapped) > mm * 10) {
+      return { position: worldPos, normal: [n.x, n.y, n.z] };
+    }
+    const hn = hit.face && hit.object
+      ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize()
+      : n;
+    if (hn.dot(n) < 0) hn.negate();
+    return { position: [hit.point.x, hit.point.y, hit.point.z], normal: [hn.x, hn.y, hn.z] };
+  }
+
+  function liftPoint(position, normal) {
+    const mm = worldPerMm();
+    return [
+      position[0] + normal[0] * mm * SKIN_LIFT_MM,
+      position[1] + normal[1] * mm * SKIN_LIFT_MM,
+      position[2] + normal[2] * mm * SKIN_LIFT_MM,
+    ];
+  }
+
+  function densifyNodes(nodes) {
+    const mm = worldPerMm();
+    const step = mm * SAMPLE_STEP_MM;
+    const out = [];
+    const prepared = nodes.map((node) => {
+      const n = node.normal || [0, 0, 1];
+      const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
+      return {
+        position: toWorld(node.position),
+        normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
+      };
+    }).filter((n) => n.position);
+    prepared.forEach((node, i) => {
+      if (i === 0) {
+        out.push(node);
+        return;
+      }
+      const prev = prepared[i - 1];
+      const dx = node.position[0] - prev.position[0];
+      const dy = node.position[1] - prev.position[1];
+      const dz = node.position[2] - prev.position[2];
+      const dist = Math.hypot(dx, dy, dz);
+      const segs = Math.max(1, Math.ceil(dist / Math.max(step, 1e-5)));
+      for (let s = 1; s <= segs; s++) {
+        const t = s / segs;
+        const pos = [
+          prev.position[0] + dx * t,
+          prev.position[1] + dy * t,
+          prev.position[2] + dz * t,
+        ];
+        const nrm = [
+          prev.normal[0] + (node.normal[0] - prev.normal[0]) * t,
+          prev.normal[1] + (node.normal[1] - prev.normal[1]) * t,
+          prev.normal[2] + (node.normal[2] - prev.normal[2]) * t,
+        ];
+        const len = Math.hypot(...nrm) || 1;
+        out.push({
+          position: pos,
+          normal: [nrm[0] / len, nrm[1] / len, nrm[2] / len],
+        });
+      }
+    });
+    return out;
+  }
+
+  function addRibbon(THREE, samples, color) {
+    if (!samples || samples.length < 2) return;
+    const mm = worldPerMm();
+    const half = mm * RIBBON_WIDTH_MM * 0.5;
+    const count = samples.length;
+    const position = new Float32Array(count * 2 * 3);
+    const normal = new Float32Array(count * 2 * 3);
+    for (let i = 0; i < count; i++) {
+      const prev = samples[Math.max(0, i - 1)].position;
+      const next = samples[Math.min(count - 1, i + 1)].position;
+      const tangent = [
+        next[0] - prev[0],
+        next[1] - prev[1],
+        next[2] - prev[2],
+      ];
+      const nrm = samples[i].normal.slice();
+      const nLen = Math.hypot(...nrm) || 1;
+      nrm[0] /= nLen; nrm[1] /= nLen; nrm[2] /= nLen;
+      let side = [
+        nrm[1] * tangent[2] - nrm[2] * tangent[1],
+        nrm[2] * tangent[0] - nrm[0] * tangent[2],
+        nrm[0] * tangent[1] - nrm[1] * tangent[0],
+      ];
+      let sLen = Math.hypot(...side);
+      if (sLen < 1e-9) {
+        side = [nrm[1], nrm[2], nrm[0]];
+        sLen = Math.hypot(...side) || 1;
+      }
+      side[0] /= sLen; side[1] /= sLen; side[2] /= sLen;
+      const lifted = liftPoint(samples[i].position, nrm);
+      for (let lane = 0; lane < 2; lane++) {
+        const sign = lane === 0 ? -1 : 1;
+        const base = (i * 2 + lane) * 3;
+        position[base] = lifted[0] + side[0] * half * sign;
+        position[base + 1] = lifted[1] + side[1] * half * sign;
+        position[base + 2] = lifted[2] + side[2] * half * sign;
+        normal[base] = nrm[0];
+        normal[base + 1] = nrm[1];
+        normal[base + 2] = nrm[2];
+      }
+    }
+    const index = new Uint32Array((count - 1) * 6);
+    for (let span = 0; span < count - 1; span++) {
+      const a = span * 2;
+      const w = span * 6;
+      index[w] = a;
+      index[w + 1] = a + 1;
+      index[w + 2] = a + 3;
+      index[w + 3] = a;
+      index[w + 4] = a + 3;
+      index[w + 5] = a + 2;
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    geom.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+    geom.setIndex(new THREE.BufferAttribute(index, 1));
+    const mesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    }));
+    mesh.renderOrder = 2;
+    mesh.raycast = () => {};
+    annotRoot.add(mesh);
+  }
+
+  function addMarker(THREE, rec, color) {
+    const mm = worldPerMm();
+    const radius = mm * MARKER_DIAMETER_MM * 0.5;
+    const lifted = liftPoint(rec.position, rec.normal);
+    const geom = new THREE.CircleGeometry(radius, 20);
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
+    });
+    const marker = new THREE.Mesh(geom, mat);
+    marker.position.fromArray(lifted);
+    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    marker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+    marker.userData.point = rec;
+    marker.userData.kind = 'marker';
+    marker.userData.baseColor = color;
+    marker.renderOrder = 3;
+    annotRoot.add(marker);
+    pickables.push(marker);
+    return marker;
+  }
+
+  function tourPoints(meridianId) {
+    const doc = currentMap();
+    if (!doc) return [];
+    return (doc.acupoints || [])
+      .filter((p) => p.meridianId === meridianId && sideAllowed(p.side))
+      .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+      .map((p) => placedPoint(p));
+  }
+
+  function placedPoint(p) {
+    const mapped = toWorld(p.position);
+    const snapped = snapToSkin(mapped, p.normal);
+    const position = liftPoint(snapped.position, snapped.normal);
+    return {
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      meridian: p.meridianName || meridianMeta(p.meridianId).name,
+      meridianId: p.meridianId,
+      side: p.side,
+      sequence: p.sequence,
+      position,
+      normal: snapped.normal,
+    };
+  }
+
   function placeAnnotations() {
     if (!annotRoot || !three) return;
     const { THREE } = three;
-    disposeObject(annotRoot);
+    disposeObject(annotRoot, { keepShared: true });
     annotRoot.clear();
     pickables = [];
     highlighted = null;
 
+    const doc = currentMap();
     const selected = selectedMeridians();
-    const box = new THREE.Box3();
-    bodyMeshes.forEach((m) => box.expandByObject(m));
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
+    if (!doc || !selected.length) return;
 
-    selected.forEach((meridian, mi) => {
-      const catalog = pointsFor(meridian.name);
-      if (!catalog.length) return;
-      const color = LINE_COLOR[meridian.group] || '#ef4444';
-      const markerColor = meridian.group === 'yang' ? '#111111' : color;
-      const pts = [];
-      const spread = (mi - (selected.length - 1) / 2) * 0.18;
-      const midline = meridian.id === 'CV' || meridian.id === 'GV';
-      const fromBack = meridian.id === 'GV';
+    const selectedIds = new Set(selected.map((m) => m.id));
+    const showLabels = selected.length <= 2;
 
-      catalog.forEach((item, i) => {
-        const t = (i + 0.5) / catalog.length;
-        const y = box.min.y + size.y * (0.92 - t * 0.84);
-        let origin, dir;
-        if (midline) {
-          const zOff = (fromBack ? -1 : 1) * (size.z * 0.9 + 0.15);
-          origin = new THREE.Vector3(spread * 0.02, y, center.z + zOff);
-          dir = new THREE.Vector3(0, 0, fromBack ? 1 : -1);
-        } else {
-          // 畫面右側（+X / hamburger 側）射向身體
-          origin = new THREE.Vector3(box.max.x + size.x * 0.55, y, center.z + spread * size.z);
-          dir = new THREE.Vector3(-1, 0, 0).add(new THREE.Vector3(0, 0, spread)).normalize();
-        }
-        const hit = raycastSkin(THREE, origin, dir);
-        if (!hit) return;
-        const pos = hit.point.clone();
-        const nrm = hit.face && hit.object
-          ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize()
-          : dir.clone().negate();
-        const lift = nrm.clone().multiplyScalar(bodyHeight * 0.006);
-        pos.add(lift);
+    (doc.meridians || []).forEach((route) => {
+      if (!selectedIds.has(route.meridianId) || !sideAllowed(route.side)) return;
+      const color = route.color || lineColorFor(route.meridianId);
+      const samples = densifyNodes(route.nodes || []);
+      addRibbon(THREE, samples, color);
+    });
 
-        const rec = {
-          ...item,
-          meridianId: meridian.id,
-          position: [pos.x, pos.y, pos.z],
-          normal: [nrm.x, nrm.y, nrm.z],
-        };
-        const marker = new THREE.Mesh(
-          new THREE.SphereGeometry(bodyHeight * 0.008, 12, 12),
-          new THREE.MeshStandardMaterial({
-            color: markerColor, roughness: 0.45, metalness: 0.05, emissive: 0x000000,
-          }),
-        );
-        marker.position.copy(pos);
-        marker.userData.point = rec;
-        marker.userData.kind = 'marker';
-        marker.userData.baseColor = markerColor;
-        annotRoot.add(marker);
-
-        pickables.push(marker);
-        if (selected.length <= 2) {
-          const label = makeLabel(THREE, item.name, bodyHeight);
-          const tangent = new THREE.Vector3();
-          if (Math.abs(nrm.y) < 0.9) tangent.crossVectors(nrm, new THREE.Vector3(0, 1, 0)).normalize();
-          else tangent.set(1, 0, 0);
-          const bitangent = new THREE.Vector3().crossVectors(nrm, tangent).normalize();
-          label.position.copy(pos).addScaledVector(bitangent, bodyHeight * 0.022);
-          // 貼在皮膚上，但預設正面要能讀字：略朝 +Z（面對使用者）
-          const face = nrm.clone().multiplyScalar(0.25).add(new THREE.Vector3(0, 0, 1)).normalize();
-          label.lookAt(pos.clone().add(face));
-          label.userData.point = rec;
-          annotRoot.add(label);
-          pickables.push(label);
-        }
-        pts.push(pos);
-      });
-
-      if (pts.length >= 2) {
-        const geom = new THREE.BufferGeometry().setFromPoints(pts);
-        const line = new THREE.Line(
-          geom,
-          new THREE.LineBasicMaterial({ color, linewidth: 2 }),
-        );
-        line.raycast = () => {};
-        annotRoot.add(line);
+    (doc.acupoints || []).forEach((p) => {
+      if (!selectedIds.has(p.meridianId) || !sideAllowed(p.side)) return;
+      const rec = placedPoint(p);
+      const color = markerColorFor(p.meridianId);
+      addMarker(THREE, rec, color);
+      if (showLabels) {
+        const label = makeLabel(THREE, rec.name, bodyHeight);
+        const nrm = new THREE.Vector3().fromArray(rec.normal);
+        const tangent = new THREE.Vector3();
+        if (Math.abs(nrm.y) < 0.9) tangent.crossVectors(nrm, new THREE.Vector3(0, 1, 0)).normalize();
+        else tangent.set(1, 0, 0);
+        const bitangent = new THREE.Vector3().crossVectors(nrm, tangent).normalize();
+        const pos = new THREE.Vector3().fromArray(rec.position);
+        label.position.copy(pos).addScaledVector(bitangent, bodyHeight * 0.022);
+        const face = nrm.clone().multiplyScalar(0.25).add(new THREE.Vector3(0, 0, 1)).normalize();
+        label.lookAt(pos.clone().add(face));
+        label.userData.point = rec;
+        annotRoot.add(label);
+        pickables.push(label);
       }
     });
   }
@@ -372,10 +697,9 @@ const Meridian3D = (() => {
     pickables.forEach((obj) => {
       if (obj.userData.kind !== 'marker') return;
       const mat = obj.material;
-      const isOn = rec && obj.userData.point && obj.userData.point.code === rec.code
-        && obj.userData.point.meridianId === rec.meridianId;
+      const pt = obj.userData.point;
+      const isOn = rec && pt && pt.code === rec.code && pt.meridianId === rec.meridianId && pt.side === rec.side;
       mat.color.set(isOn ? '#facc15' : obj.userData.baseColor);
-      mat.emissive.set(isOn ? '#ca8a04' : '#000000');
     });
     highlighted = rec;
   }
@@ -409,14 +733,19 @@ const Meridian3D = (() => {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
     mount.innerHTML = '';
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xf3f6f8, 0x6a7c82, 1.05));
-    const key = new THREE.DirectionalLight(0xffffff, 1.15);
+    scene.add(new THREE.HemisphereLight(0xfff4ea, 0x6a7c82, 0.95));
+    const key = new THREE.DirectionalLight(0xfff7f0, 1.2);
     key.position.set(2.2, 4.5, 3.2);
     scene.add(key);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+    const fill = new THREE.DirectionalLight(0xdde7ee, 0.35);
+    fill.position.set(-2.4, 1.8, -1.6);
+    scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.28));
 
     modelRoot = new THREE.Group();
     annotRoot = new THREE.Group();
@@ -468,30 +797,49 @@ const Meridian3D = (() => {
     });
   }
 
+  async function loadMap(gender) {
+    const key = gender === 'female' ? 'female' : 'male';
+    if (mapCache[key]) return mapCache[key];
+    const res = await fetch(MAP_URL[key]);
+    if (!res.ok) throw new Error(`地圖載入失敗（${key}）`);
+    const doc = await res.json();
+    if (!doc || !Array.isArray(doc.acupoints) || !Array.isArray(doc.meridians)) {
+      throw new Error('地圖格式不正確');
+    }
+    mapCache[key] = doc;
+    return doc;
+  }
+
   async function loadBody(gender) {
     const { THREE, GLTFLoader, MeshoptDecoder } = await loadThree();
     await ensureScene();
     const wanted = gender === 'female' ? 'female' : 'male';
+    const doc = await loadMap(wanted);
     if (loadedGender === wanted && modelRoot.children.length) {
       placeAnnotations();
-      faceFront();
-      applyScale();
+      if (!playingAuto) {
+        faceFront();
+        applyScale();
+      }
       return;
     }
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
     const gltf = await loader.loadAsync(`assets/models/${wanted}.glb`);
-    disposeObject(modelRoot);
+    disposeObject(modelRoot, { keepShared: true });
     modelRoot.clear();
     const root = gltf.scene;
-    const box = new THREE.Box3().setFromObject(root);
-    const center = box.getCenter(new THREE.Vector3());
+    root.updateMatrixWorld(true);
+    const unframed = new THREE.Box3().setFromObject(root);
+    mapFit = fitMapToUnframed(doc, unframed);
+    const center = unframed.getCenter(new THREE.Vector3());
     root.position.x += -center.x;
     root.position.z += -center.z;
-    root.position.y += -box.min.y;
+    root.position.y += -unframed.min.y;
     root.updateMatrixWorld(true);
     bodyHeight = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y || 1;
     bodyMeshes = [];
+    applySurfaceFinish(root, THREE);
     root.traverse((obj) => {
       if (!obj.isMesh) return;
       obj.castShadow = false;
@@ -513,7 +861,7 @@ const Meridian3D = (() => {
       await loadBody(opts.gender);
     } catch (err) {
       console.warn(err);
-      UI.toast('模型載入失敗，請檢查網路後再試');
+      UI.toast('模型或地圖載入失敗，請檢查網路後再試');
     } finally {
       setLoading(false);
     }
@@ -537,72 +885,81 @@ const Meridian3D = (() => {
   async function playAuto(resume) {
     const list = selectedMeridians();
     if (!list.length) return;
+    const gen = ++playGeneration;
     playingAuto = true;
     autoAbort = false;
+    if (!resume) autoLockedSide = 'right';
     if (controls) controls.enabled = false;
     setPlayIcon('stop');
     $('m3d-hint').hidden = true;
 
-    if (!resume || !loadedGender) {
-      setLoading(true);
-      try { await loadBody(opts.gender); }
-      catch (err) {
-        console.warn(err);
-        UI.toast('模型載入失敗，請檢查網路後再試');
-        stopAuto();
-        setLoading(false);
-        return;
-      }
+    setLoading(true);
+    try {
+      await Promise.all([loadBody(opts.gender), waitForVoices()]);
+    } catch (err) {
+      console.warn(err);
+      UI.toast('模型或地圖載入失敗，請檢查網路後再試');
+      stopAuto();
       setLoading(false);
-      faceFront();
+      return;
     }
+    if (autoAbort || gen !== playGeneration) {
+      setLoading(false);
+      return;
+    }
+    placeAnnotations();
+    if (!resume) faceFront();
+    setLoading(false);
 
     let mIndex = resume && autoCursor ? autoCursor.mIndex : 0;
     let pIndex = resume && autoCursor ? autoCursor.pIndex : -1;
     let phase = resume && autoCursor ? autoCursor.phase : 'name';
 
     for (; mIndex < list.length; mIndex++) {
-      if (autoAbort) return;
+      if (autoAbort || gen !== playGeneration) return;
       const mer = list[mIndex];
-      const pts = pointsFor(mer.name);
+      const pts = tourPoints(mer.id);
       if (!pts.length) continue;
       setTitle(mer.name);
       autoCursor = { mIndex, pIndex: -1, phase: 'name' };
+      if (pts[0] && pts[0].position) {
+        highlightPoint(pts[0]);
+        lookAtWorld(pts[0].position, pts[0].normal);
+      }
 
       if (!resume || phase === 'name' || phase === 'count') {
         if (phase !== 'count') {
           await speak(mer.name, opts.gender);
-          if (autoAbort) return;
+          if (autoAbort || gen !== playGeneration) return;
         }
         await speak(`共${chineseNum(pts.length)}穴`, opts.gender);
-        if (autoAbort) return;
+        if (autoAbort || gen !== playGeneration) return;
         await sleep(2000);
-        if (autoAbort) return;
+        if (autoAbort || gen !== playGeneration) return;
         phase = 'point';
         pIndex = -1;
       }
 
       const startP = pIndex < 0 ? 0 : pIndex;
       for (let i = startP; i < pts.length; i++) {
-        if (autoAbort) return;
-        const rec = pickables
-          .map((o) => o.userData.point)
-          .find((p) => p && p.meridianId === mer.id && p.code === pts[i].code) || pts[i];
+        if (autoAbort || gen !== playGeneration) return;
+        const rec = pts[i];
         currentPoint = rec;
         autoCursor = { mIndex, pIndex: i, phase: 'point' };
         highlightPoint(rec);
-        if (rec.position) lookAtWorld(rec.position, rec.normal);
-        await speak(pts[i].name, opts.gender);
-        if (autoAbort) return;
+        lookAtWorld(rec.position, rec.normal);
+        await speak(rec.name, opts.gender);
+        if (autoAbort || gen !== playGeneration) return;
         highlightPoint(null);
         await sleep(2000);
-        if (autoAbort) return;
+        if (autoAbort || gen !== playGeneration) return;
       }
       phase = 'name';
       pIndex = -1;
       resume = false;
     }
 
+    if (gen !== playGeneration) return;
     playingAuto = false;
     autoCursor = null;
     if (controls) controls.enabled = true;
@@ -623,12 +980,13 @@ const Meridian3D = (() => {
 
   async function onPlayClick() {
     closeOverlay();
-    setModal(false);
     if (playingAuto) {
       stopAuto({ keepCursor: true });
       return;
     }
     if (!validatePlay()) return;
+    unlockSpeech();
+    setModal(false);
     if (opts.mode === 'auto') {
       await playAuto(!!autoCursor);
     } else {
@@ -638,6 +996,7 @@ const Meridian3D = (() => {
 
   function bindUi() {
     const list = $('m3d-meridian-list');
+    if (!list) return;
     list.innerHTML = MERIDIANS.map((m) => (
       `<label><input type="checkbox" data-mid="${m.id}">${m.name}<span style="margin-left:auto;color:var(--clr-muted)">${m.id}</span></label>`
     )).join('');
@@ -668,16 +1027,23 @@ const Meridian3D = (() => {
       const next = btn.dataset.gender;
       const changed = next !== opts.gender;
       opts.gender = next;
-      if (changed && loadedGender && $('m3d-modal').hidden) {
-        playManual();
+      if (changed) {
+        stopAuto();
+        autoCursor = null;
+        if (loadedGender && $('m3d-modal').hidden) playManual();
       }
     };
     $('m3d-mode').onclick = (e) => {
       const btn = e.target.closest('button[data-mode]');
       if (!btn) return;
       $('m3d-mode').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
-      opts.mode = btn.dataset.mode;
-      if (opts.mode === 'manual') stopAuto();
+      const next = btn.dataset.mode;
+      if (next !== opts.mode) {
+        stopAuto();
+        autoCursor = null;
+      }
+      opts.mode = next;
+      if (loadedGender) placeAnnotations();
     };
 
     const scale = $('m3d-scale');
@@ -726,12 +1092,14 @@ const Meridian3D = (() => {
         catch { UI.toast('穴位資料載入失敗'); }
       }
     }
+    loadMap(opts.gender).catch(() => {});
     setModal(true);
     $('m3d-hint').hidden = !!loadedGender;
   }
 
   function leave() {
     entered = false;
+    playGeneration += 1;
     stopAuto();
     closeOverlay();
     setModal(false);
