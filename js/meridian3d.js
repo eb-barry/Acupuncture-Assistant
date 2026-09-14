@@ -21,8 +21,6 @@ const Meridian3D = (() => {
     { id: 'GV', name: '督脈', group: 'ren-du' },
   ];
   const LINE_COLOR = { yin: '#22c55e', yang: '#ef4444', 'ren-du': '#3b82f6' };
-  const THREE_VER = '0.185.1';
-  const THREE_BASE = `https://cdn.jsdelivr.net/npm/three@${THREE_VER}`;
 
   const opts = {
     gender: 'male',
@@ -32,7 +30,7 @@ const Meridian3D = (() => {
   };
 
   let three = null;
-  let scene, camera, renderer, controls, clock;
+  let scene, camera, renderer, controls;
   let modelRoot = null;
   let annotRoot = null;
   let bodyMeshes = [];
@@ -340,17 +338,19 @@ const Meridian3D = (() => {
         marker.userData.baseColor = markerColor;
         annotRoot.add(marker);
 
-        const label = makeLabel(THREE, item.name, bodyHeight);
-        const tangent = new THREE.Vector3();
-        if (Math.abs(nrm.y) < 0.9) tangent.crossVectors(nrm, new THREE.Vector3(0, 1, 0)).normalize();
-        else tangent.set(1, 0, 0);
-        const bitangent = new THREE.Vector3().crossVectors(nrm, tangent).normalize();
-        label.position.copy(pos).addScaledVector(bitangent, bodyHeight * 0.022);
-        label.lookAt(pos.clone().add(nrm));
-        label.userData.point = rec;
-        annotRoot.add(label);
-
-        pickables.push(marker, label);
+        pickables.push(marker);
+        if (selected.length <= 2) {
+          const label = makeLabel(THREE, item.name, bodyHeight);
+          const tangent = new THREE.Vector3();
+          if (Math.abs(nrm.y) < 0.9) tangent.crossVectors(nrm, new THREE.Vector3(0, 1, 0)).normalize();
+          else tangent.set(1, 0, 0);
+          const bitangent = new THREE.Vector3().crossVectors(nrm, tangent).normalize();
+          label.position.copy(pos).addScaledVector(bitangent, bodyHeight * 0.022);
+          label.lookAt(pos.clone().add(nrm));
+          label.userData.point = rec;
+          annotRoot.add(label);
+          pickables.push(label);
+        }
         pts.push(pos);
       });
 
@@ -428,7 +428,6 @@ const Meridian3D = (() => {
     controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     controls.addEventListener('change', () => { movingUntil = performance.now() + 180; });
 
-    clock = new THREE.Clock();
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const moving = performance.now() < movingUntil;
