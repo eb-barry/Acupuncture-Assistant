@@ -21,8 +21,9 @@ const Meridian3D = (() => {
     { id: 'GV', name: '督脈', group: 'ren-du' },
   ];
   const LINE_COLOR = { yin: '#22c55e', yang: '#ef4444', 'ren-du': '#3b82f6' };
-  const YANG_POINT_COLOR = '#111111';
+  const POINT_COLOR = '#111111';
   const SKIN_COLOR = 0xd4a88a;
+  const MAX_LABELED_MERIDIANS = 3;
   const REFERENCE_BODY_HEIGHT_M = 1.75;
   const RIBBON_WIDTH_MM = 3.5;
   const MARKER_DIAMETER_MM = 7;
@@ -64,6 +65,8 @@ const Meridian3D = (() => {
   let skinMaterial = null;
   let nailMaterial = null;
   let playGeneration = 0;
+  let calloutsDirty = true;
+  let orbiting = false;
 
   const $ = (id) => document.getElementById(id);
 
@@ -75,8 +78,41 @@ const Meridian3D = (() => {
     return LINE_COLOR[meridianMeta(id).group] || LINE_COLOR.yang;
   }
 
-  function markerColorFor(id) {
-    return meridianMeta(id).group === 'yang' ? YANG_POINT_COLOR : lineColorFor(id);
+  function markerColorFor() {
+    return POINT_COLOR;
+  }
+
+  function clearCallouts() {
+    const svg = $('m3d-callouts');
+    if (!svg) return;
+    svg.innerHTML = '';
+    svg.hidden = true;
+  }
+
+  function hideCallouts() {
+    const svg = $('m3d-callouts');
+    if (svg) svg.hidden = true;
+  }
+
+  function noteCameraMoving(ms = 240) {
+    movingUntil = performance.now() + ms;
+    calloutsDirty = true;
+    hideCallouts();
+  }
+
+  function labelSideByMeridian(selected) {
+    const sides = new Map();
+    const flexible = [];
+    selected.forEach((m) => {
+      if (m.id === 'CV' || m.id === 'GV') sides.set(m.id, 'left');
+      else flexible.push(m);
+    });
+    let right = true;
+    flexible.forEach((m) => {
+      sides.set(m.id, right ? 'right' : 'left');
+      right = !right;
+    });
+    return sides;
   }
 
   function worldPerMm() {
@@ -134,12 +170,18 @@ const Meridian3D = (() => {
   function setModal(on) {
     const el = $('m3d-modal');
     if (el) el.hidden = !on;
-    if (on) playingAuto && stopAuto({ keepCursor: true });
+    if (on) {
+      playingAuto && stopAuto({ keepCursor: true });
+      hideCallouts();
+    } else {
+      calloutsDirty = true;
+    }
   }
 
   function closeOverlay() {
     const el = $('m3d-point-overlay');
     if (el) el.hidden = true;
+    calloutsDirty = true;
   }
 
   async function openOverlay(point) {
@@ -148,6 +190,7 @@ const Meridian3D = (() => {
     const sheet = $('m3d-point-sheet');
     if (!overlay || !sheet) return;
     overlay.hidden = false;
+    hideCallouts();
     sheet.innerHTML = '';
     await UI.renderPointPanel(sheet, point.name, {
       meridian: point.meridian,
@@ -307,6 +350,7 @@ const Meridian3D = (() => {
     bodyMeshes = [];
     pickables = [];
     loadedGender = null;
+    clearCallouts();
     if (skinMaterial) { skinMaterial.dispose(); skinMaterial = null; }
     if (nailMaterial) { nailMaterial.dispose(); nailMaterial = null; }
   }
@@ -326,6 +370,7 @@ const Meridian3D = (() => {
     controls.minDistance = bodyHeight * 0.08;
     controls.maxDistance = bodyHeight * 12;
     controls.update();
+    calloutsDirty = true;
   }
 
   function faceFront() {
@@ -338,6 +383,7 @@ const Meridian3D = (() => {
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
     controls.update();
+    noteCameraMoving(280);
   }
 
   function lookAtWorld(position, normal) {
@@ -357,46 +403,7 @@ const Meridian3D = (() => {
     camera.up.set(0, 1, 0);
     camera.lookAt(target);
     controls.update();
-  }
-
-  function makeLabel(THREE, text, height) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 256, 64);
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.strokeStyle = 'rgba(44,74,82,0.25)';
-    ctx.lineWidth = 2;
-    roundRect(ctx, 4, 8, 248, 48, 12);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#2c4a52';
-    ctx.font = '600 28px "Noto Serif TC", serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 128, 33);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex, transparent: true, side: THREE.DoubleSide, depthTest: true, depthWrite: false,
-    });
-    const w = height * 0.11;
-    const h = height * 0.028;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-    mesh.userData.kind = 'label';
-    mesh.renderOrder = 4;
-    return mesh;
-  }
-
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+    noteCameraMoving(320);
   }
 
   function raycastSkin(THREE, origin, dir) {
@@ -622,6 +629,172 @@ const Meridian3D = (() => {
     return marker;
   }
 
+  function projectToScreen(world, width, height) {
+    const { THREE } = three;
+    const v = new THREE.Vector3().fromArray(world);
+    v.project(camera);
+    if (!Number.isFinite(v.x) || v.z > 1 || v.z < -1) return null;
+    return {
+      x: (v.x * 0.5 + 0.5) * width,
+      y: (-v.y * 0.5 + 0.5) * height,
+    };
+  }
+
+  function isPointVisible(rec, width, height) {
+    if (!rec || !rec.position || !camera) return false;
+    const { THREE } = three;
+    const world = new THREE.Vector3().fromArray(rec.position);
+    const cam = camera.position;
+    const toCam = cam.clone().sub(world);
+    const dist = toCam.length();
+    if (dist < 1e-4) return false;
+    toCam.multiplyScalar(1 / dist);
+    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    if (n.dot(toCam) < 0.12) return false;
+    const screen = projectToScreen(rec.position, width, height);
+    if (!screen) return false;
+    if (screen.x < -20 || screen.x > width + 20 || screen.y < -20 || screen.y > height + 20) {
+      return false;
+    }
+    const dir = world.clone().sub(cam).normalize();
+    const slack = Math.max(worldPerMm() * 4, dist * 0.012);
+    const ray = new THREE.Raycaster(cam, dir, 0, Math.max(dist - slack, 0));
+    const hits = ray.intersectObjects(bodyMeshes, true);
+    if (hits.length && hits[0].distance < dist - slack) return false;
+    return true;
+  }
+
+  function measureCallout(name) {
+    const css = getComputedStyle(document.documentElement);
+    const fs = parseFloat(css.getPropertyValue('--fs-sm')) || 14;
+    return { w: Math.max(fs, name.length * fs), h: fs * 1.35, fs };
+  }
+
+  function packSlots(items, height, slotH, pad) {
+    const used = [];
+    const top = pad;
+    const bot = height - pad;
+    items.sort((a, b) => a.py - b.py);
+    items.forEach((item) => {
+      let y = Math.min(bot, Math.max(top, item.py));
+      const overlaps = (yy) => used.some((u) => Math.abs(u - yy) < slotH);
+      if (overlaps(y)) {
+        for (let d = slotH; d < height; d += slotH) {
+          if (y + d <= bot && !overlaps(y + d)) { y += d; break; }
+          if (y - d >= top && !overlaps(y - d)) { y -= d; break; }
+        }
+      }
+      used.push(y);
+      item.slotY = y;
+    });
+  }
+
+  function svgEl(name, attrs) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', name);
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+    return el;
+  }
+
+  function updateCallouts() {
+    const svg = $('m3d-callouts');
+    if (!svg || !camera || !renderer) return;
+    if (orbiting || performance.now() < movingUntil) {
+      svg.hidden = true;
+      return;
+    }
+    if ($('m3d-modal') && !$('m3d-modal').hidden) { svg.hidden = true; return; }
+    if ($('m3d-loading') && !$('m3d-loading').hidden) { svg.hidden = true; return; }
+    if ($('m3d-point-overlay') && !$('m3d-point-overlay').hidden) { svg.hidden = true; return; }
+
+    const selected = selectedMeridians();
+    if (selected.length === 0 || selected.length > MAX_LABELED_MERIDIANS) {
+      svg.innerHTML = '';
+      svg.hidden = true;
+      return;
+    }
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    const width = Math.max(1, rect.width);
+    const height = Math.max(1, rect.height);
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('width', String(width));
+    svg.setAttribute('height', String(height));
+
+    const sides = labelSideByMeridian(selected);
+    const pad = 8;
+    const buckets = { left: [], right: [] };
+    pickables.forEach((obj) => {
+      if (obj.userData.kind !== 'marker' || !obj.userData.point) return;
+      const rec = obj.userData.point;
+      if (!isPointVisible(rec, width, height)) return;
+      const screen = projectToScreen(rec.position, width, height);
+      if (!screen) return;
+      const size = measureCallout(rec.name || '');
+      const park = sides.get(rec.meridianId) || 'right';
+      buckets[park].push({
+        rec,
+        px: screen.x,
+        py: screen.y,
+        park,
+        textW: size.w,
+        textH: size.h,
+      });
+    });
+
+    packSlots(buckets.right, height, Math.max(16, (buckets.right[0]?.textH || 16) + 3), pad + 6);
+    packSlots(buckets.left, height, Math.max(16, (buckets.left[0]?.textH || 16) + 3), pad + 6);
+
+    const laid = [];
+    ['right', 'left'].forEach((park) => {
+      buckets[park].forEach((item) => {
+        const slotY = item.slotY;
+        if (park === 'right') {
+          let textX = width - pad - item.textW;
+          if (textX < item.px + 10) textX = item.px + 10;
+          if (textX + item.textW > width - 2) textX = width - item.textW - 2;
+          const joinX = textX;
+          const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
+          const elbowX = Math.max(item.px + 6, joinX - horiz);
+          laid.push({ ...item, textX, elbowX, slotY, park });
+        } else {
+          let textX = pad;
+          if (textX + item.textW + 10 > item.px) textX = item.px - item.textW - 10;
+          if (textX < 2) textX = 2;
+          const joinX = textX + item.textW;
+          const horiz = Math.min(28, Math.max(8, Math.abs(item.px - joinX) * 0.28));
+          const elbowX = Math.min(item.px - 6, joinX + horiz);
+          laid.push({ ...item, textX, elbowX, slotY, park });
+        }
+      });
+    });
+
+    svg.innerHTML = '';
+    if (!laid.length) {
+      svg.hidden = true;
+      return;
+    }
+    laid.forEach((item) => {
+      const joinX = item.park === 'left' ? item.textX + item.textW : item.textX;
+      const aligned = Math.abs(item.slotY - item.py) < 2;
+      const d = aligned
+        ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
+        : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${item.elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
+      svg.appendChild(svgEl('path', { class: 'leader-halo', d }));
+      svg.appendChild(svgEl('path', { class: 'leader', d }));
+      const text = svgEl('text', {
+        class: 'callout-name',
+        x: item.textX.toFixed(1),
+        y: item.slotY.toFixed(1),
+        'text-anchor': 'start',
+      });
+      text.textContent = item.rec.name;
+      svg.appendChild(text);
+    });
+    svg.hidden = false;
+  }
+
   function tourPoints(meridianId) {
     const doc = currentMap();
     if (!doc) return [];
@@ -658,10 +831,12 @@ const Meridian3D = (() => {
 
     const doc = currentMap();
     const selected = selectedMeridians();
-    if (!doc || !selected.length) return;
+    if (!doc || !selected.length) {
+      clearCallouts();
+      return;
+    }
 
     const selectedIds = new Set(selected.map((m) => m.id));
-    const showLabels = selected.length <= 2;
 
     (doc.meridians || []).forEach((route) => {
       if (!selectedIds.has(route.meridianId) || !sideAllowed(route.side)) return;
@@ -673,24 +848,9 @@ const Meridian3D = (() => {
     (doc.acupoints || []).forEach((p) => {
       if (!selectedIds.has(p.meridianId) || !sideAllowed(p.side)) return;
       const rec = placedPoint(p);
-      const color = markerColorFor(p.meridianId);
-      addMarker(THREE, rec, color);
-      if (showLabels) {
-        const label = makeLabel(THREE, rec.name, bodyHeight);
-        const nrm = new THREE.Vector3().fromArray(rec.normal);
-        const tangent = new THREE.Vector3();
-        if (Math.abs(nrm.y) < 0.9) tangent.crossVectors(nrm, new THREE.Vector3(0, 1, 0)).normalize();
-        else tangent.set(1, 0, 0);
-        const bitangent = new THREE.Vector3().crossVectors(nrm, tangent).normalize();
-        const pos = new THREE.Vector3().fromArray(rec.position);
-        label.position.copy(pos).addScaledVector(bitangent, bodyHeight * 0.022);
-        const face = nrm.clone().multiplyScalar(0.25).add(new THREE.Vector3(0, 0, 1)).normalize();
-        label.lookAt(pos.clone().add(face));
-        label.userData.point = rec;
-        annotRoot.add(label);
-        pickables.push(label);
-      }
+      addMarker(THREE, rec, markerColorFor());
     });
+    calloutsDirty = true;
   }
 
   function highlightPoint(rec) {
@@ -757,11 +917,13 @@ const Meridian3D = (() => {
     controls.dampingFactor = 0.08;
     controls.touches.ONE = THREE.TOUCH.ROTATE;
     controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
-    controls.addEventListener('change', () => { movingUntil = performance.now() + 180; });
+    controls.addEventListener('change', () => { noteCameraMoving(220); });
+    controls.addEventListener('start', () => { orbiting = true; hideCallouts(); });
+    controls.addEventListener('end', () => { orbiting = false; noteCameraMoving(260); });
 
     const loop = () => {
       raf = requestAnimationFrame(loop);
-      const moving = performance.now() < movingUntil;
+      const moving = orbiting || performance.now() < movingUntil;
       const cap = moving ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
       if (Math.abs(renderer.getPixelRatio() - cap) > 0.05) renderer.setPixelRatio(cap);
       controls.update();
@@ -774,6 +936,11 @@ const Meridian3D = (() => {
         camera.updateProjectionMatrix();
       }
       renderer.render(scene, camera);
+      if (moving) hideCallouts();
+      else if (calloutsDirty) {
+        updateCallouts();
+        calloutsDirty = false;
+      }
     };
     loop();
 
@@ -794,6 +961,7 @@ const Meridian3D = (() => {
     window.addEventListener('resize', () => {
       if (!renderer) return;
       applyScale();
+      calloutsDirty = true;
     });
   }
 
@@ -1104,6 +1272,7 @@ const Meridian3D = (() => {
     closeOverlay();
     setModal(false);
     teardownRenderer();
+    clearCallouts();
     $('m3d-hint').hidden = false;
   }
 
