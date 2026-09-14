@@ -430,7 +430,7 @@ const Meridian3D = (() => {
     const jsonCz = (b.minZ + b.maxZ) * 0.5;
     const meshCx = (unframedBox.min.x + unframedBox.max.x) * 0.5;
     const meshCz = (unframedBox.min.z + unframedBox.max.z) * 0.5;
-    const grounded = b.minY > -0.15 && b.minY < 0.15 && jsonH < 3;
+    const grounded = b.minY >= -0.08 * jsonH && b.minY <= 0.08 * jsonH;
     const unitMismatch = jsonH > meshH * 2 || meshH > jsonH * 2;
     if (unitMismatch) {
       return { scale: meshH / jsonH, cx: jsonCx, cy: b.minY, cz: jsonCz };
@@ -922,6 +922,10 @@ const Meridian3D = (() => {
       if (!pts.length) continue;
       setTitle(mer.name);
       autoCursor = { mIndex, pIndex: -1, phase: 'name' };
+      if (pts[0] && pts[0].position) {
+        highlightPoint(pts[0]);
+        lookAtWorld(pts[0].position, pts[0].normal);
+      }
 
       if (!resume || phase === 'name' || phase === 'count') {
         if (phase !== 'count') {
@@ -1023,16 +1027,22 @@ const Meridian3D = (() => {
       const next = btn.dataset.gender;
       const changed = next !== opts.gender;
       opts.gender = next;
-      if (changed && loadedGender && $('m3d-modal').hidden) {
-        playManual();
+      if (changed) {
+        stopAuto();
+        autoCursor = null;
+        if (loadedGender && $('m3d-modal').hidden) playManual();
       }
     };
     $('m3d-mode').onclick = (e) => {
       const btn = e.target.closest('button[data-mode]');
       if (!btn) return;
       $('m3d-mode').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
-      opts.mode = btn.dataset.mode;
-      if (opts.mode === 'manual') stopAuto();
+      const next = btn.dataset.mode;
+      if (next !== opts.mode) {
+        stopAuto();
+        autoCursor = null;
+      }
+      opts.mode = next;
       if (loadedGender) placeAnnotations();
     };
 
