@@ -143,32 +143,48 @@ const Meridian3D = (() => {
     return clusters;
   }
 
+  function clusterMedian(cluster) {
+    return cluster.reduce((sum, it) => sum + it.px, 0) / cluster.length;
+  }
+
+  function clusterScore(cluster) {
+    const ys = cluster.map((it) => it.py);
+    return cluster.length * (Math.max(...ys) - Math.min(...ys) + 12);
+  }
+
   function pickEdgeItems(items, park, width) {
     if (!items.length) return items;
-    const xs = items.map((it) => it.px);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const mid = (minX + maxX) * 0.5;
-    const span = maxX - minX;
     const clusters = clusterByX(items, width);
-    if (clusters.length >= 2) {
-      const slack = Math.max(10, width * 0.02);
-      const kept = [];
-      clusters.forEach((cluster, i) => {
-        const med = cluster.reduce((sum, it) => sum + it.px, 0) / cluster.length;
-        const nearPark = park === 'right' ? i >= clusters.length - 2 : i <= 1;
-        const onParkHalf = park === 'right' ? med >= mid - slack : med <= mid + slack;
-        if (nearPark || onParkHalf) kept.push(...cluster);
-      });
-      if (kept.length) return kept;
+    const screenMid = width * 0.5;
+    const slack = width * 0.06;
+    let parkClusters = clusters.filter((cluster) => {
+      const med = clusterMedian(cluster);
+      return park === 'right' ? med >= screenMid - slack : med <= screenMid + slack;
+    });
+    if (parkClusters.length < 2) {
+      parkClusters = park === 'right' ? clusters.slice(-3) : clusters.slice(0, 3);
     }
-    if (span > Math.max(24, width * 0.07)) {
-      const half = park === 'right'
-        ? items.filter((it) => it.px >= mid - 6)
-        : items.filter((it) => it.px <= mid + 6);
-      if (half.length) return half;
-    }
-    return items;
+    if (!parkClusters.length) return items;
+    const ranked = [...parkClusters].sort((a, b) => clusterScore(b) - clusterScore(a));
+    const main = ranked.slice(0, 2);
+    const kept = new Set(main);
+    const mainMeds = main.map(clusterMedian);
+    const innerBound = park === 'right' ? Math.min(...mainMeds) : Math.max(...mainMeds);
+    parkClusters.forEach((cluster) => {
+      if (kept.has(cluster)) return;
+      const med = clusterMedian(cluster);
+      const moreMedial = park === 'right' ? med <= innerBound + 6 : med >= innerBound - 6;
+      if (moreMedial && cluster.length >= 3) kept.add(cluster);
+    });
+    const out = [];
+    kept.forEach((cluster) => out.push(...cluster));
+    items.forEach((it) => {
+      const name = it.rec && it.rec.name;
+      if (name === '會陽' || (name && name.endsWith('髎'))) {
+        if (!out.includes(it)) out.push(it);
+      }
+    });
+    return out.length ? out : items;
   }
 
   function splitCalloutColumns(items, park, width) {
@@ -475,6 +491,21 @@ const Meridian3D = (() => {
     camera.far = bodyHeight * 40;
     camera.updateProjectionMatrix();
     camera.position.set(0, bodyHeight * 0.5, dist);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(controls.target);
+    controls.update();
+    noteCameraMoving(280);
+  }
+
+  function faceBack() {
+    if (!camera || !controls) return;
+    const dist = framingDistance();
+    controls.target.set(0, bodyHeight * 0.42, 0);
+    camera.zoom = 1;
+    camera.near = Math.max(bodyHeight / 200, 0.01);
+    camera.far = bodyHeight * 40;
+    camera.updateProjectionMatrix();
+    camera.position.set(0, bodyHeight * 0.5, -dist);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
     controls.update();
@@ -875,13 +906,15 @@ const Meridian3D = (() => {
 
   function packSlots(items, height, slotH, pad) {
     items.sort((a, b) => a.py - b.py);
+    const avail = Math.max(slotH, height - pad * 2);
+    const used = items.length * slotH > avail ? avail / items.length : slotH;
     let next = pad;
     const bot = height - pad;
     items.forEach((item) => {
       let y = Math.max(next, item.py);
       if (y > bot) y = bot;
       item.slotY = y;
-      next = y + slotH;
+      next = y + used;
     });
   }
 
@@ -1481,8 +1514,26 @@ const Meridian3D = (() => {
     $('m3d-hint').hidden = false;
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindUi);
-  else bindUi();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindUi);
+    else bindUi();
 
-  return { enter, leave };
+    window.__m3dTest = {
+      faceFront: () => { faceFront(); calloutsDirty = true; },
+      faceBack: () => { faceBack(); calloutsDirty = true; },
+      yaw(deg) {
+        if (!camera || !controls || !three) return;
+        const { THREE } = three;
+        const q = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0),
+          THREE.MathUtils.degToRad(deg),
+        );
+        camera.position.sub(controls.target).applyQuaternion(q).add(controls.target);
+        camera.lookAt(controls.target);
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
+    };
+
+    return { enter, leave };
 })();
