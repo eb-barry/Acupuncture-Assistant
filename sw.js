@@ -5,7 +5,7 @@
  *   Data files & assets     → Network-First with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v16';
+const SHELL_CACHE   = 'acupuncture-shell-v17';
 const CONTENT_CACHE = 'acupuncture-content-v1';
 
 const SHELL_FILES = [
