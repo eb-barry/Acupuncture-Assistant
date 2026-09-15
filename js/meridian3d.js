@@ -1817,6 +1817,7 @@ const Meridian3D = (() => {
       playingAuto: () => playingAuto,
       viewScale,
       bodyHeight: () => bodyHeight,
+      cameraMoving: () => orbiting || performance.now() < movingUntil,
       lastReframe: () => lastReframeName,
       reframeLog: () => reframeLog.slice(),
       stopAfter: '',
