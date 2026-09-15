@@ -1,6 +1,6 @@
 /**
  * meridian3d.js — 3D 經絡檢視（讀取經脈繪圖室出版地圖）
- * 延遲載入 Three.js；Play 才載 GLB。自動模式固定 2.5 倍全身構圖、鎖定解剖學右側，並依穴位朝向翻面。
+ * 延遲載入 Three.js；Play 才載 GLB。自動模式固定 5 倍、第一穴置中面對使用者；靠近畫面邊緣 10% 才再置中。
  */
 const Meridian3D = (() => {
 
@@ -35,8 +35,9 @@ const Meridian3D = (() => {
   const RIBBON_HUG_MM = 36;
   const MAX_PAIR_HANDLES = 5;
   const ROUTE_BREAK_MM = 200;
-  const AUTO_SCALE = 2.5;
+  const AUTO_SCALE = 5;
   const EDGE_MARGIN = 0.1;
+  const FACE_DOT_MIN = 0.35;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -75,6 +76,8 @@ const Meridian3D = (() => {
   let playGeneration = 0;
   let calloutsDirty = true;
   let orbiting = false;
+  let lastReframeName = '';
+  let reframeLog = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -571,68 +574,13 @@ const Meridian3D = (() => {
     return n;
   }
 
-  function panPoseToKeepPoint(pose, position) {
-    if (!camera || !three || !position) return pose;
-    const { THREE } = three;
-    const { width, height } = viewportSize();
-    const point = new THREE.Vector3().fromArray(position);
-    const dist = framingDistance();
-    const cam = camera.clone();
-    cam.position.copy(pose.pos);
-    cam.up.set(0, 1, 0);
-    cam.lookAt(pose.target);
-    cam.updateMatrixWorld(true);
-    const ndc = point.clone().project(cam);
-    if (!Number.isFinite(ndc.x) || ndc.z > 1 || ndc.z < -1) {
-      const dir = pose.pos.clone().sub(pose.target);
-      if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1);
-      else dir.normalize();
-      pose.target.lerp(point, 0.35);
-      pose.pos.copy(pose.target).addScaledVector(dir, dist);
-      pose.pos.y = frameCameraY();
-      return pose;
-    }
-    const sx = (ndc.x * 0.5 + 0.5) * width;
-    const sy = (-ndc.y * 0.5 + 0.5) * height;
-    const mx = width * EDGE_MARGIN;
-    const my = height * EDGE_MARGIN;
-    let dsx = 0;
-    let dsy = 0;
-    if (sx < mx) dsx = mx - sx;
-    else if (sx > width - mx) dsx = (width - mx) - sx;
-    if (sy < my) dsy = my - sy;
-    else if (sy > height - my) dsy = (height - my) - sy;
-    if (!dsx && !dsy) return pose;
-    const fov = THREE.MathUtils.degToRad(camera.fov);
-    const halfH = dist * Math.tan(fov / 2);
-    const halfW = halfH * (width / Math.max(height, 1));
-    const zAxis = pose.pos.clone().sub(pose.target);
-    if (zAxis.lengthSq() < 1e-8) zAxis.set(0, 0, 1);
-    else zAxis.normalize();
-    const right = new THREE.Vector3(0, 1, 0).cross(zAxis);
-    if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
-    else right.normalize();
-    const up = zAxis.clone().cross(right).normalize();
-    const pan = right.multiplyScalar(-dsx / width * 2 * halfW)
-      .add(up.multiplyScalar(dsy / height * 2 * halfH));
-    pose.target.add(pan);
-    pose.pos.add(pan);
-    return pose;
-  }
-
   function cameraPoseForPoint(position, normal) {
     const { THREE } = three;
     const n = viewNormal(normal);
     const dist = framingDistance();
-    const target = new THREE.Vector3(0, frameLookAtY(), 0);
-    const pos = new THREE.Vector3(0, frameCameraY(), 0).addScaledVector(n, dist);
-    const pose = panPoseToKeepPoint({ pos, target }, position);
-    const dir = pose.pos.clone().sub(pose.target);
-    if (dir.lengthSq() > 1e-8) {
-      dir.normalize();
-      pose.pos.copy(pose.target).addScaledVector(dir, dist);
-    }
-    return pose;
+    const target = new THREE.Vector3().fromArray(position);
+    const pos = target.clone().addScaledVector(n, dist);
+    return { pos, target };
   }
 
   function viewportSize() {
@@ -647,24 +595,14 @@ const Meridian3D = (() => {
     const { width, height } = viewportSize();
     const screen = projectToScreen(rec.position, width, height);
     if (!screen) return true;
-    const m = Math.min(width, height) * EDGE_MARGIN;
-    if (screen.x < m || screen.x > width - m || screen.y < m || screen.y > height - m) return true;
-    const pose = cameraPoseForPoint(rec.position, rec.normal);
-    const curDir = camera.position.clone().sub(controls.target).normalize();
-    const wantDir = pose.pos.clone().sub(pose.target).normalize();
-    if (curDir.angleTo(wantDir) > THREE.MathUtils.degToRad(35)) return true;
+    const mx = width * EDGE_MARGIN;
+    const my = height * EDGE_MARGIN;
+    if (screen.x < mx || screen.x > width - mx || screen.y < my || screen.y > height - my) return true;
     const world = new THREE.Vector3().fromArray(rec.position);
-    const orbit = camera.position.distanceTo(controls.target);
-    const want = framingDistance();
-    if (orbit > want * 1.25 || orbit < want * 0.75) return true;
     const toCam = camera.position.clone().sub(world);
     if (toCam.lengthSq() < 1e-8) return true;
     toCam.normalize();
-    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
-    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
-    else n.normalize();
-    if (n.dot(toCam) < 0.2) return true;
-    return false;
+    return viewNormal(rec.normal).dot(toCam) < FACE_DOT_MIN;
   }
 
   function easeInOutCubic(t) {
@@ -730,6 +668,8 @@ const Meridian3D = (() => {
   async function framePointIfNeeded(rec, force, gen) {
     if (!rec) return;
     if (!force && !needsReframe(rec)) return;
+    lastReframeName = rec.name;
+    reframeLog.push(rec.name);
     await animateCameraTo(rec.position, rec.normal, gen);
     if (autoAbort || (gen && gen !== playGeneration)) return;
     await sleep(300);
@@ -1591,6 +1531,9 @@ const Meridian3D = (() => {
     const gen = ++playGeneration;
     playingAuto = true;
     autoAbort = false;
+    lastReframeName = '';
+    reframeLog = [];
+    if (window.__m3dTest) window.__m3dTest.trace = [];
     if (!resume) autoLockedSide = 'right';
     if (controls) controls.enabled = false;
     setPlayIcon('stop');
@@ -1650,6 +1593,10 @@ const Meridian3D = (() => {
         currentPoint = rec;
         autoCursor = { mIndex, pIndex: i, phase: 'point' };
         highlightPoint(rec);
+        if (window.__m3dTest) {
+          if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
+          window.__m3dTest.trace.push(rec.name);
+        }
         await framePointIfNeeded(rec, false, gen);
         if (autoAbort || gen !== playGeneration) return;
         await holdForTest(rec);
@@ -1711,17 +1658,20 @@ const Meridian3D = (() => {
       if (!id) return;
       if (e.target.checked) opts.meridians.add(id);
       else opts.meridians.delete(id);
+      autoCursor = null;
       if (loadedGender) placeAnnotations();
     });
 
     $('m3d-select-all').onclick = () => {
       MERIDIANS.forEach((m) => opts.meridians.add(m.id));
       list.querySelectorAll('input').forEach((el) => { el.checked = true; });
+      autoCursor = null;
       if (loadedGender) placeAnnotations();
     };
     $('m3d-select-none').onclick = () => {
       opts.meridians.clear();
       list.querySelectorAll('input').forEach((el) => { el.checked = false; });
+      autoCursor = null;
       if (loadedGender) placeAnnotations();
     };
 
@@ -1816,12 +1766,46 @@ const Meridian3D = (() => {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindUi);
     else bindUi();
 
+    function testRecord(name) {
+      if (!name) return currentPoint;
+      const hit = pickables.find((obj) => obj.userData.point && obj.userData.point.name === name);
+      return hit ? hit.userData.point : currentPoint;
+    }
+
     window.__m3dTest = {
       faceFront: () => { faceFront(); calloutsDirty = true; },
       faceBack: () => { faceBack(); calloutsDirty = true; },
       playingAuto: () => playingAuto,
       viewScale,
       bodyHeight: () => bodyHeight,
+      lastReframe: () => lastReframeName,
+      reframeLog: () => reframeLog.slice(),
+      stopAfter: '',
+      trace: [],
+      ndcOf(name) {
+        const rec = testRecord(name);
+        if (!rec || !camera) return null;
+        const { width, height } = viewportSize();
+        const screen = projectToScreen(rec.position, width, height);
+        if (!screen) return null;
+        return {
+          x: screen.x / width,
+          y: screen.y / height,
+          px: screen.x,
+          py: screen.y,
+          w: width,
+          h: height,
+        };
+      },
+      facingDot(name) {
+        const rec = testRecord(name);
+        if (!rec || !camera || !three) return null;
+        const { THREE } = three;
+        const world = new THREE.Vector3().fromArray(rec.position);
+        const toCam = camera.position.clone().sub(world);
+        if (toCam.lengthSq() < 1e-8) return 0;
+        return viewNormal(rec.normal).dot(toCam.normalize());
+      },
       dist() {
         if (!camera || !controls) return null;
         return camera.position.distanceTo(controls.target);
