@@ -690,6 +690,7 @@ const Meridian3D = (() => {
     await animateCameraTo(rec.position, rec.normal, gen);
     if (autoAbort || (gen && gen !== playGeneration)) return;
     await sleep(300);
+    calloutsDirty = true;
   }
 
   function lookAtWorld(position, normal) {
@@ -1434,8 +1435,10 @@ const Meridian3D = (() => {
         camera.updateProjectionMatrix();
       }
       renderer.render(scene, camera);
-      if (moving) hideCallouts();
-      else if (calloutsDirty) {
+      if (moving) {
+        hideCallouts();
+        calloutsDirty = true;
+      } else if (calloutsDirty) {
         updateCallouts();
         calloutsDirty = false;
       }
