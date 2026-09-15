@@ -160,6 +160,8 @@ const Meridian3D = (() => {
     });
     return [...byName.values()];
   }
+
+  function clusterMedian(cluster) {
     return cluster.reduce((sum, it) => sum + it.px, 0) / cluster.length;
   }
 
