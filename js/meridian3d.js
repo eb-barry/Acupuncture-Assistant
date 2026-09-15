@@ -29,7 +29,8 @@ const Meridian3D = (() => {
   const MARKER_DIAMETER_MM = 7;
   const SKIN_LIFT_MM = 0.4;
   const SAMPLE_STEP_MM = 1.5;
-  const CONFORM_STEP_MM = 6;
+  const CONFORM_STEP_MM = 18;
+  const LONG_CHORD_MM = 70;
   const MAX_CONFORM_PULL_MM = 14;
   const FLOAT_LIFT_MM = 1.0;
 
@@ -402,9 +403,12 @@ const Meridian3D = (() => {
   function faceFront() {
     if (!camera || !controls) return;
     const { THREE } = three;
-    const fov = THREE.MathUtils.degToRad(camera.fov);
-    const dist = (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
+    const dist = framingDistance();
     controls.target.set(0, bodyHeight * 0.42, 0);
+    camera.zoom = 1;
+    camera.near = Math.max(bodyHeight / 200, 0.01);
+    camera.far = bodyHeight * 40;
+    camera.updateProjectionMatrix();
     camera.position.set(0, bodyHeight * 0.5, dist);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
@@ -419,28 +423,25 @@ const Meridian3D = (() => {
     return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
   }
 
-  function lookAtWorld(position, normal) {
+  function lookAtWorld(position) {
     if (!camera || !controls || !position) return;
-    const { THREE } = three;
-    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
-    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
-    else n.normalize();
-    if (Math.abs(n.y) > 0.92) {
-      n.add(new THREE.Vector3(0, 0, 0.35)).normalize();
-    }
     const dist = framingDistance();
-    const point = new THREE.Vector3().fromArray(position);
-    const center = new THREE.Vector3(0, bodyHeight * 0.42, 0);
-    const aim = center.clone().lerp(point, 0.28);
-    let dir = point.clone().sub(center);
-    if (dir.lengthSq() < 1e-8) dir.copy(n);
-    dir.y *= 0.4;
-    dir.normalize();
-    if (dir.dot(n) < 0.15) dir.lerp(n, 0.55).normalize();
-    camera.position.copy(aim).addScaledVector(dir, dist);
+    const targetY = bodyHeight * 0.42;
+    const px = Number(position[0]) || 0;
+    const pz = Number(position[2]) || 0;
+    let az = Math.atan2(px, pz);
+    if (!Number.isFinite(az)) az = 0;
+    az = Math.max(-0.95, Math.min(0.95, az * 0.55));
+    camera.zoom = 1;
+    camera.near = Math.max(bodyHeight / 200, 0.01);
+    camera.far = bodyHeight * 40;
+    camera.updateProjectionMatrix();
+    camera.position.set(Math.sin(az) * dist, bodyHeight * 0.52, Math.cos(az) * dist);
     camera.up.set(0, 1, 0);
-    controls.target.copy(aim);
-    camera.lookAt(aim);
+    controls.target.set(0, targetY, 0);
+    camera.lookAt(controls.target);
+    controls.minDistance = bodyHeight * 0.08;
+    controls.maxDistance = bodyHeight * 12;
     controls.update();
     noteCameraMoving(320);
   }
@@ -570,10 +571,27 @@ const Meridian3D = (() => {
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
       };
     }).filter((n) => n.position);
-    const coarse = densifyPolyline(prepared, mm * CONFORM_STEP_MM);
-    const hugged = three
-      ? coarse.map((sample) => conformSample(three.THREE, sample.position, sample.normal))
-      : coarse;
+    const hugged = [];
+    prepared.forEach((node, i) => {
+      if (i === 0) {
+        hugged.push(node);
+        return;
+      }
+      const prev = prepared[i - 1];
+      const dist = Math.hypot(
+        node.position[0] - prev.position[0],
+        node.position[1] - prev.position[1],
+        node.position[2] - prev.position[2],
+      );
+      const needsHug = three && dist > mm * LONG_CHORD_MM;
+      const step = mm * (needsHug ? CONFORM_STEP_MM : SAMPLE_STEP_MM);
+      const segs = Math.max(1, Math.ceil(dist / Math.max(step, 1e-5)));
+      for (let s = 1; s <= segs; s++) {
+        let sample = lerpNode(prev, node, s / segs);
+        if (needsHug) sample = conformSample(three.THREE, sample.position, sample.normal);
+        hugged.push(sample);
+      }
+    });
     return densifyPolyline(hugged, mm * SAMPLE_STEP_MM);
   }
 
@@ -596,7 +614,7 @@ const Meridian3D = (() => {
     conformRay.near = 0;
     conformRay.far = search + mm * MAX_CONFORM_PULL_MM;
     conformRay.set(origin, n.clone().negate());
-    const hit = conformRay.intersectObjects(bodyMeshes, true)[0];
+    const hit = conformRay.intersectObjects(bodyMeshes, false)[0];
     if (!hit) return { position: floated, normal: nArr };
 
     let hn = n.clone();
@@ -1112,7 +1130,7 @@ const Meridian3D = (() => {
       obj.castShadow = false;
       obj.receiveShadow = false;
       if (obj.geometry && !obj.geometry.getAttribute('normal')) obj.geometry.computeVertexNormals();
-      bodyMeshes.push(obj);
+      if (!isNailMesh(obj)) bodyMeshes.push(obj);
     });
     modelRoot.add(root);
     loadedGender = wanted;
