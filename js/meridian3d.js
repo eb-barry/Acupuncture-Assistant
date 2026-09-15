@@ -1356,6 +1356,7 @@ const Meridian3D = (() => {
       if (obj.userData.halo) obj.userData.halo.visible = !!isOn;
     });
     highlighted = rec;
+    calloutsDirty = true;
   }
 
   function onPointer(event) {
