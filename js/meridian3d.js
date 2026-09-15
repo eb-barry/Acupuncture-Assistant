@@ -204,7 +204,7 @@ const Meridian3D = (() => {
     return out.length ? out : items;
   }
 
-  function focusTorsoItems(items, height) {
+  function focusTorsoItems(items) {
     if (!items.length || items.length <= 28) return items;
     const ys = items.map((it) => it.py).sort((a, b) => a - b);
     const y0 = ys[0];
@@ -997,8 +997,8 @@ const Meridian3D = (() => {
       });
     });
 
-    buckets.right = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width), height);
-    buckets.left = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width), height);
+    buckets.right = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width));
+    buckets.left = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width));
 
     const laid = [];
     ['right', 'left'].forEach((park) => {
