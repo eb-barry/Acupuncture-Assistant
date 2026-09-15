@@ -176,10 +176,12 @@ const Meridian3D = (() => {
     return rec.code === focus.code && rec.meridianId === focus.meridianId && rec.side === focus.side;
   }
 
-  function ensureFocusItem(items, visible, park) {
-    if (items.some((it) => isFocusRec(it.rec))) return items;
+  function ensureFocusItem(items, visible, park, sides) {
     const focusItem = visible.find((it) => isFocusRec(it.rec));
     if (!focusItem) return items;
+    const want = (sides && sides.get(focusItem.rec.meridianId)) || 'right';
+    if (park !== want) return items;
+    if (items.some((it) => isFocusRec(it.rec))) return items;
     return items.concat([{ ...focusItem, park }]);
   }
 
@@ -1220,11 +1222,13 @@ const Meridian3D = (() => {
       focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width)),
       visible,
       'right',
+      sides,
     );
     buckets.left = ensureFocusItem(
       focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width)),
       visible,
       'left',
+      sides,
     );
 
     const laid = [];
