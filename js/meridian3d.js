@@ -521,11 +521,7 @@ const Meridian3D = (() => {
     const dir = camera.position.clone().sub(target).normalize();
     if (dir.lengthSq() < 1e-6) dir.set(0, 0.15, 1).normalize();
     camera.position.copy(target).addScaledVector(dir, dist);
-    camera.near = Math.max(bodyHeight / 200, 0.01);
-    camera.far = bodyHeight * 40;
-    camera.updateProjectionMatrix();
-    controls.minDistance = bodyHeight * 0.08;
-    controls.maxDistance = bodyHeight * 12;
+    applyCameraLimits();
     controls.update();
     calloutsDirty = true;
   }
@@ -534,11 +530,9 @@ const Meridian3D = (() => {
     if (!camera || !controls) return;
     const damping = controls.enableDamping;
     controls.enableDamping = false;
+    applyCameraLimits();
     controls.target.set(0, bodyHeight * 0.42, 0);
     camera.zoom = 1;
-    camera.near = Math.max(bodyHeight / 200, 0.01);
-    camera.far = bodyHeight * 40;
-    camera.updateProjectionMatrix();
     camera.position.set(x, y, z);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
@@ -564,6 +558,16 @@ const Meridian3D = (() => {
 
   function poseDistance() {
     return bodyHeight * 0.38 / Math.max(viewScale(), 0.5);
+  }
+
+  function applyCameraLimits() {
+    if (!camera || !controls || !bodyHeight) return;
+    camera.near = Math.max(bodyHeight / 200, 0.01);
+    camera.far = Math.max(bodyHeight * 40, camera.near * 20);
+    camera.updateProjectionMatrix();
+    const want = poseDistance();
+    controls.minDistance = Math.min(bodyHeight * 0.08, want * 0.45);
+    controls.maxDistance = Math.max(bodyHeight * 12, want * 8);
   }
 
   function viewNormal(normal) {
@@ -604,6 +608,9 @@ const Meridian3D = (() => {
     const wantDir = pose.pos.clone().sub(pose.target).normalize();
     if (curDir.angleTo(wantDir) > THREE.MathUtils.degToRad(35)) return true;
     const world = new THREE.Vector3().fromArray(rec.position);
+    const dist = camera.position.distanceTo(world);
+    const want = poseDistance();
+    if (dist > want * 1.55 || dist < want * 0.45) return true;
     const toCam = camera.position.clone().sub(world);
     if (toCam.lengthSq() < 1e-8) return true;
     toCam.normalize();
@@ -633,6 +640,7 @@ const Meridian3D = (() => {
   function animateCameraTo(position, normal, gen) {
     return new Promise((resolve) => {
       if (!camera || !controls || !three || !position) { resolve(); return; }
+      applyCameraLimits();
       const pose = cameraPoseForPoint(position, normal);
       const startPos = camera.position.clone();
       const startTarget = controls.target.clone();
@@ -683,19 +691,15 @@ const Meridian3D = (() => {
 
   function lookAtWorld(position, normal) {
     if (!camera || !controls || !position || !three) return;
+    applyCameraLimits();
     const pose = cameraPoseForPoint(position, normal);
     const damping = controls.enableDamping;
     controls.enableDamping = false;
     camera.zoom = 1;
-    camera.near = Math.max(bodyHeight / 200, 0.01);
-    camera.far = bodyHeight * 40;
-    camera.updateProjectionMatrix();
     camera.position.copy(pose.pos);
     camera.up.set(0, 1, 0);
     controls.target.copy(pose.target);
     camera.lookAt(pose.target);
-    controls.minDistance = bodyHeight * 0.08;
-    controls.maxDistance = bodyHeight * 12;
     controls.update();
     controls.enableDamping = damping;
     noteCameraMoving(320);
@@ -890,16 +894,17 @@ const Meridian3D = (() => {
     const midX = (prev.position[0] + node.position[0]) * 0.5;
     const towardGV = midX >= 0 ? -1 : 1;
     const weaken = (seqA >= 28 || seqB >= 28) ? 0.35 : 1;
-    const offset = Math.min(dist * 0.28, Math.abs(midX) * 0.4, mm * 10) * weaken;
+    const offset = Math.min(dist * 0.28, Math.abs(midX) * 0.45, mm * 10) * weaken;
     if (!(offset > mm * 1.2)) return [];
+    const spineGap = mm * 3;
     return [0.28, 0.72].map((t) => {
       const sample = lerpNode(prev, node, t);
-      sample.position = [
-        sample.position[0] + towardGV * offset,
-        sample.position[1],
-        sample.position[2],
-      ];
+      let x = sample.position[0] + towardGV * offset;
+      if (towardGV > 0) x = Math.min(x, -spineGap);
+      else x = Math.max(x, spineGap);
+      sample.position = [x, sample.position[1], sample.position[2]];
       sample.type = 'control';
+      sample.dogleg = true;
       return sample;
     });
   }
@@ -951,7 +956,10 @@ const Meridian3D = (() => {
     });
     located.forEach((node) => {
       const pull = node.type === 'acupoint' ? 12 : RIBBON_HUG_MM;
-      const hugged = snapToSkin(node.position, node.normal, pull);
+      const snapN = node.dogleg
+        ? [0, 0, (node.normal && node.normal[2] < 0) ? -1 : 1]
+        : node.normal;
+      const hugged = snapToSkin(node.position, snapN, pull);
       node.position = hugged.position;
       node.normal = hugged.normal;
     });
@@ -1457,6 +1465,7 @@ const Meridian3D = (() => {
     const doc = await loadMap(wanted);
     if (loadedGender === wanted && modelRoot.children.length) {
       placeAnnotations();
+      applyCameraLimits();
       if (!playingAuto) {
         faceFront();
         applyScale();
@@ -1478,6 +1487,7 @@ const Meridian3D = (() => {
     root.position.y += -unframed.min.y;
     root.updateMatrixWorld(true);
     bodyHeight = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y || 1;
+    applyCameraLimits();
     bodyMeshes = [];
     applySurfaceFinish(root, THREE);
     root.traverse((obj) => {
@@ -1521,6 +1531,18 @@ const Meridian3D = (() => {
       autoCursor = null;
       highlightPoint(null);
       setTitle('3D 經絡模型');
+    }
+  }
+
+  async function holdForTest(rec) {
+    while (
+      window.__m3dTest
+      && window.__m3dTest.stopAfter
+      && rec
+      && window.__m3dTest.stopAfter === rec.name
+      && !autoAbort
+    ) {
+      await sleep(50);
     }
   }
 
@@ -1590,6 +1612,8 @@ const Meridian3D = (() => {
         autoCursor = { mIndex, pIndex: i, phase: 'point' };
         highlightPoint(rec);
         await framePointIfNeeded(rec, false, gen);
+        if (autoAbort || gen !== playGeneration) return;
+        await holdForTest(rec);
         if (autoAbort || gen !== playGeneration) return;
         await speak(rec.name, opts.gender);
         if (autoAbort || gen !== playGeneration) return;
