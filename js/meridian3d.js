@@ -553,9 +553,9 @@ const Meridian3D = (() => {
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
-    if (Math.abs(n.y) > 0.92) {
-      n.add(new THREE.Vector3(0, 0, n.z < 0 ? -0.35 : 0.35)).normalize();
-    }
+    n.y = 0;
+    if (n.lengthSq() < 0.05) n.set(0, 0, (normal && normal[2] < 0) ? -1 : 1);
+    else n.normalize();
     return n;
   }
 
@@ -614,7 +614,13 @@ const Meridian3D = (() => {
     const dist = framingDistance();
     const target = new THREE.Vector3(0, bodyHeight * 0.42, 0);
     const pos = new THREE.Vector3(0, bodyHeight * 0.5, 0).addScaledVector(n, dist);
-    return panPoseToKeepPoint({ pos, target }, position);
+    const pose = panPoseToKeepPoint({ pos, target }, position);
+    const dir = pose.pos.clone().sub(pose.target);
+    if (dir.lengthSq() > 1e-8) {
+      dir.normalize();
+      pose.pos.copy(pose.target).addScaledVector(dir, dist);
+    }
+    return pose;
   }
 
   function viewportSize() {
