@@ -1120,9 +1120,12 @@ const Meridian3D = (() => {
     controls.dampingFactor = 0.08;
     controls.touches.ONE = THREE.TOUCH.ROTATE;
     controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
-    controls.addEventListener('change', () => { noteCameraMoving(220); });
+    controls.addEventListener('change', () => {
+      if (orbiting) hideCallouts();
+      else calloutsDirty = true;
+    });
     controls.addEventListener('start', () => { orbiting = true; hideCallouts(); });
-    controls.addEventListener('end', () => { orbiting = false; noteCameraMoving(260); });
+    controls.addEventListener('end', () => { orbiting = false; noteCameraMoving(280); });
 
     const loop = () => {
       raf = requestAnimationFrame(loop);
