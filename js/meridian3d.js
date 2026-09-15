@@ -1,6 +1,6 @@
 /**
  * meridian3d.js — 3D 經絡檢視（讀取經脈繪圖室出版地圖）
- * 延遲載入 Three.js；Play 才載 GLB。自動模式固定 2.5 倍、鎖定解剖學右側，並依穴位朝向翻面。
+ * 延遲載入 Three.js；Play 才載 GLB。自動模式固定 2.5 倍全身構圖、鎖定解剖學右側，並依穴位朝向翻面。
  */
 const Meridian3D = (() => {
 
@@ -118,27 +118,9 @@ const Meridian3D = (() => {
     return playingAuto ? AUTO_SCALE : (Number(opts.scale) || 1);
   }
 
-  function labelSideByMeridian(selected, width, itemsByMeridian) {
+  function labelSideByMeridian(selected) {
     const sides = new Map();
-    const flexible = [];
-    selected.forEach((m) => {
-      if (m.id === 'CV' || m.id === 'GV') sides.set(m.id, 'left');
-      else flexible.push(m);
-    });
-    if (flexible.length >= 2) {
-      flexible.forEach((m, i) => sides.set(m.id, i % 2 === 0 ? 'right' : 'left'));
-      return sides;
-    }
-    if (flexible.length === 1) {
-      const m = flexible[0];
-      const pts = (itemsByMeridian && itemsByMeridian.get(m.id)) || [];
-      if (pts.length) {
-        const avg = pts.reduce((sum, it) => sum + it.px, 0) / pts.length;
-        sides.set(m.id, avg < width * 0.5 ? 'left' : 'right');
-      } else {
-        sides.set(m.id, 'right');
-      }
-    }
+    selected.forEach((m) => sides.set(m.id, 'right'));
     return sides;
   }
 
@@ -531,7 +513,7 @@ const Meridian3D = (() => {
     const damping = controls.enableDamping;
     controls.enableDamping = false;
     applyCameraLimits();
-    controls.target.set(0, bodyHeight * 0.42, 0);
+    controls.target.set(0, frameLookAtY(), 0);
     camera.zoom = 1;
     camera.position.set(x, y, z);
     camera.up.set(0, 1, 0);
@@ -542,11 +524,11 @@ const Meridian3D = (() => {
   }
 
   function faceFront() {
-    jumpCamera(0, bodyHeight * 0.5, framingDistance());
+    jumpCamera(0, frameCameraY(), framingDistance());
   }
 
   function faceBack() {
-    jumpCamera(0, bodyHeight * 0.5, -framingDistance());
+    jumpCamera(0, frameCameraY(), -framingDistance());
   }
 
   function framingDistance() {
@@ -556,8 +538,14 @@ const Meridian3D = (() => {
     return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(viewScale(), 0.5);
   }
 
-  function poseDistance() {
-    return bodyHeight * 0.38 / Math.max(viewScale(), 0.5);
+  function frameLookAtY() {
+    const s = Math.min(Math.max(viewScale(), 0.5), 5);
+    const t = Math.min(1, Math.max(0, (s - 1) / 1.5));
+    return bodyHeight * (0.42 + 0.16 * t);
+  }
+
+  function frameCameraY() {
+    return frameLookAtY() + bodyHeight * 0.08;
   }
 
   function applyCameraLimits() {
@@ -565,7 +553,7 @@ const Meridian3D = (() => {
     camera.near = Math.max(bodyHeight / 200, 0.01);
     camera.far = Math.max(bodyHeight * 40, camera.near * 20);
     camera.updateProjectionMatrix();
-    const want = poseDistance();
+    const want = framingDistance();
     controls.minDistance = Math.min(bodyHeight * 0.08, want * 0.45);
     controls.maxDistance = Math.max(bodyHeight * 12, want * 8);
   }
@@ -575,18 +563,76 @@ const Meridian3D = (() => {
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
-    if (Math.abs(n.y) > 0.92) {
-      n.add(new THREE.Vector3(0, 0, n.z < 0 ? -0.35 : 0.35)).normalize();
-    }
+    n.y = 0;
+    if (n.lengthSq() < 0.05) n.set(0, 0, (normal && normal[2] < 0) ? -1 : 1);
+    else n.normalize();
+    if (n.z > 0.35) n.set(0, 0, 1);
+    else if (n.z < -0.35) n.set(0, 0, -1);
     return n;
+  }
+
+  function panPoseToKeepPoint(pose, position) {
+    if (!camera || !three || !position) return pose;
+    const { THREE } = three;
+    const { width, height } = viewportSize();
+    const point = new THREE.Vector3().fromArray(position);
+    const dist = framingDistance();
+    const cam = camera.clone();
+    cam.position.copy(pose.pos);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(pose.target);
+    cam.updateMatrixWorld(true);
+    const ndc = point.clone().project(cam);
+    if (!Number.isFinite(ndc.x) || ndc.z > 1 || ndc.z < -1) {
+      const dir = pose.pos.clone().sub(pose.target);
+      if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1);
+      else dir.normalize();
+      pose.target.lerp(point, 0.35);
+      pose.pos.copy(pose.target).addScaledVector(dir, dist);
+      pose.pos.y = frameCameraY();
+      return pose;
+    }
+    const sx = (ndc.x * 0.5 + 0.5) * width;
+    const sy = (-ndc.y * 0.5 + 0.5) * height;
+    const mx = width * EDGE_MARGIN;
+    const my = height * EDGE_MARGIN;
+    let dsx = 0;
+    let dsy = 0;
+    if (sx < mx) dsx = mx - sx;
+    else if (sx > width - mx) dsx = (width - mx) - sx;
+    if (sy < my) dsy = my - sy;
+    else if (sy > height - my) dsy = (height - my) - sy;
+    if (!dsx && !dsy) return pose;
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const halfH = dist * Math.tan(fov / 2);
+    const halfW = halfH * (width / Math.max(height, 1));
+    const zAxis = pose.pos.clone().sub(pose.target);
+    if (zAxis.lengthSq() < 1e-8) zAxis.set(0, 0, 1);
+    else zAxis.normalize();
+    const right = new THREE.Vector3(0, 1, 0).cross(zAxis);
+    if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
+    else right.normalize();
+    const up = zAxis.clone().cross(right).normalize();
+    const pan = right.multiplyScalar(-dsx / width * 2 * halfW)
+      .add(up.multiplyScalar(dsy / height * 2 * halfH));
+    pose.target.add(pan);
+    pose.pos.add(pan);
+    return pose;
   }
 
   function cameraPoseForPoint(position, normal) {
     const { THREE } = three;
     const n = viewNormal(normal);
-    const target = new THREE.Vector3().fromArray(position);
-    const pos = target.clone().addScaledVector(n, poseDistance());
-    return { pos, target };
+    const dist = framingDistance();
+    const target = new THREE.Vector3(0, frameLookAtY(), 0);
+    const pos = new THREE.Vector3(0, frameCameraY(), 0).addScaledVector(n, dist);
+    const pose = panPoseToKeepPoint({ pos, target }, position);
+    const dir = pose.pos.clone().sub(pose.target);
+    if (dir.lengthSq() > 1e-8) {
+      dir.normalize();
+      pose.pos.copy(pose.target).addScaledVector(dir, dist);
+    }
+    return pose;
   }
 
   function viewportSize() {
@@ -608,9 +654,9 @@ const Meridian3D = (() => {
     const wantDir = pose.pos.clone().sub(pose.target).normalize();
     if (curDir.angleTo(wantDir) > THREE.MathUtils.degToRad(35)) return true;
     const world = new THREE.Vector3().fromArray(rec.position);
-    const dist = camera.position.distanceTo(world);
-    const want = poseDistance();
-    if (dist > want * 1.55 || dist < want * 0.45) return true;
+    const orbit = camera.position.distanceTo(controls.target);
+    const want = framingDistance();
+    if (orbit > want * 1.25 || orbit < want * 0.75) return true;
     const toCam = camera.position.clone().sub(world);
     if (toCam.lengthSq() < 1e-8) return true;
     toCam.normalize();
@@ -1196,14 +1242,7 @@ const Meridian3D = (() => {
       });
     });
 
-    const byMer = new Map();
-    visible.forEach((it) => {
-      const id = it.rec.meridianId;
-      const arr = byMer.get(id) || [];
-      arr.push(it);
-      byMer.set(id, arr);
-    });
-    const sides = labelSideByMeridian(selected, width, byMer);
+    const sides = labelSideByMeridian(selected);
     const pad = 8;
     const buckets = { left: [], right: [] };
     visible.forEach((it) => {
