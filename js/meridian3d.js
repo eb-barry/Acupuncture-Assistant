@@ -32,6 +32,7 @@ const Meridian3D = (() => {
   const HANDLE_MIN_ARC_MM = 70;
   const HANDLE_SPACING_MM = 40.9;
   const MAX_PAIR_HANDLES = 5;
+  const ROUTE_BREAK_MM = 200;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -126,17 +127,47 @@ const Meridian3D = (() => {
 
   function pickEdgeItems(items, park, width) {
     if (!items.length) return items;
-    const mid = width * 0.5;
+    const inner = park === 'right' ? width * 0.36 : width * 0.64;
     if (park === 'right') {
-      const onSide = items.filter((it) => it.px >= mid);
+      const onSide = items.filter((it) => it.px >= inner);
       if (onSide.length) return onSide;
       const maxX = Math.max(...items.map((it) => it.px));
       return items.filter((it) => it.px >= maxX - Math.max(28, width * 0.08));
     }
-    const onSide = items.filter((it) => it.px <= mid);
+    const onSide = items.filter((it) => it.px <= inner);
     if (onSide.length) return onSide;
     const minX = Math.min(...items.map((it) => it.px));
     return items.filter((it) => it.px <= minX + Math.max(28, width * 0.08));
+  }
+
+  function splitCalloutColumns(items, park, width) {
+    if (!items.length) return [];
+    if (items.length < 4) return [{ items, indent: 0 }];
+    const sorted = [...items].sort((a, b) => a.px - b.px);
+    let bestAt = -1;
+    let bestGap = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const gap = sorted[i].px - sorted[i - 1].px;
+      if (gap > bestGap) {
+        bestGap = gap;
+        bestAt = i;
+      }
+    }
+    const minGap = Math.max(16, width * 0.045);
+    if (bestAt < 0 || bestGap < minGap) return [{ items, indent: 0 }];
+    const left = sorted.slice(0, bestAt);
+    const right = sorted.slice(bestAt);
+    if (left.length < 2 || right.length < 2) return [{ items, indent: 0 }];
+    if (park === 'right') {
+      return [
+        { items: right, indent: 0 },
+        { items: left, indent: 1 },
+      ];
+    }
+    return [
+      { items: left, indent: 0 },
+      { items: right, indent: 1 },
+    ];
   }
 
   function worldPerMm() {
@@ -543,6 +574,30 @@ const Meridian3D = (() => {
     return { position: pos, normal: [nrm[0] / len, nrm[1] / len, nrm[2] / len] };
   }
 
+  function splitRouteNodes(nodes) {
+    const mm = worldPerMm();
+    const maxJump = mm * ROUTE_BREAK_MM;
+    const chunks = [];
+    let cur = [];
+    (nodes || []).forEach((node) => {
+      if (!cur.length) {
+        cur.push(node);
+        return;
+      }
+      const a = toWorld(cur[cur.length - 1].position);
+      const b = toWorld(node.position);
+      const dist = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      if (dist > maxJump) {
+        if (cur.length >= 2) chunks.push(cur);
+        cur = [node];
+        return;
+      }
+      cur.push(node);
+    });
+    if (cur.length >= 2) chunks.push(cur);
+    return chunks;
+  }
+
   function densifyPolyline(nodes, step) {
     const out = [];
     nodes.forEach((node, i) => {
@@ -596,7 +651,7 @@ const Meridian3D = (() => {
       for (let k = 1; k <= count; k++) {
         const t = k / (count + 1);
         const sample = lerpNode(prev, node, t);
-        const bulge = Math.sin(Math.PI * t) * mm * 8;
+        const bulge = Math.sin(Math.PI * t) * mm * 16;
         sample.position = [
           sample.position[0] + sample.normal[0] * bulge,
           sample.position[1] + sample.normal[1] * bulge,
@@ -750,14 +805,14 @@ const Meridian3D = (() => {
     const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
-    if (n.dot(toCam) < 0.12) return false;
+    if (n.dot(toCam) < 0) return false;
     const screen = projectToScreen(rec.position, width, height);
     if (!screen) return false;
     if (screen.x < -20 || screen.x > width + 20 || screen.y < -20 || screen.y > height + 20) {
       return false;
     }
     const dir = world.clone().sub(cam).normalize();
-    const slack = Math.max(worldPerMm() * 4, dist * 0.012);
+    const slack = Math.max(worldPerMm() * 22, dist * 0.04);
     const ray = new THREE.Raycaster(cam, dir, 0, Math.max(dist - slack, 0));
     const hits = ray.intersectObjects(bodyMeshes, true);
     if (hits.length && hits[0].distance < dist - slack) return false;
@@ -837,30 +892,34 @@ const Meridian3D = (() => {
     buckets.right = pickEdgeItems(buckets.right, 'right', width);
     buckets.left = pickEdgeItems(buckets.left, 'left', width);
 
-    packSlots(buckets.right, height, Math.max(16, (buckets.right[0]?.textH || 16) + 3), pad + 6);
-    packSlots(buckets.left, height, Math.max(16, (buckets.left[0]?.textH || 16) + 3), pad + 6);
-
     const laid = [];
     ['right', 'left'].forEach((park) => {
-      buckets[park].forEach((item) => {
-        const slotY = item.slotY;
-        if (park === 'right') {
-          let textX = width - pad - item.textW;
-          if (textX < item.px + 10) textX = item.px + 10;
-          if (textX + item.textW > width - 2) textX = width - item.textW - 2;
-          const joinX = textX;
-          const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
-          const elbowX = Math.max(item.px + 6, joinX - horiz);
-          laid.push({ ...item, textX, elbowX, slotY, park });
-        } else {
-          let textX = pad;
-          if (textX + item.textW + 10 > item.px) textX = item.px - item.textW - 10;
-          if (textX < 2) textX = 2;
-          const joinX = textX + item.textW;
-          const horiz = Math.min(28, Math.max(8, Math.abs(item.px - joinX) * 0.28));
-          const elbowX = Math.min(item.px - 6, joinX + horiz);
-          laid.push({ ...item, textX, elbowX, slotY, park });
-        }
+      const columns = splitCalloutColumns(buckets[park], park, width);
+      columns.forEach((col) => {
+        const slotH = Math.max(16, (col.items[0]?.textH || 16) + 3);
+        packSlots(col.items, height, slotH, pad + 6);
+        col.items.forEach((item) => {
+          const slotY = item.slotY;
+          if (park === 'right') {
+            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
+            let textX = width - pad - item.textW - inset;
+            if (textX < item.px + 10) textX = item.px + 10;
+            if (textX + item.textW > width - 2) textX = width - item.textW - 2;
+            const joinX = textX;
+            const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
+            const elbowX = Math.max(item.px + 6, joinX - horiz);
+            laid.push({ ...item, textX, elbowX, slotY, park });
+          } else {
+            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
+            let textX = pad + inset;
+            if (textX + item.textW + 10 > item.px) textX = item.px - item.textW - 10;
+            if (textX < 2) textX = 2;
+            const joinX = textX + item.textW;
+            const horiz = Math.min(28, Math.max(8, Math.abs(item.px - joinX) * 0.28));
+            const elbowX = Math.min(item.px - 6, joinX + horiz);
+            laid.push({ ...item, textX, elbowX, slotY, park });
+          }
+        });
       });
     });
 
@@ -935,8 +994,9 @@ const Meridian3D = (() => {
     (doc.meridians || []).forEach((route) => {
       if (!selectedIds.has(route.meridianId) || !sideAllowed(route.side)) return;
       const color = route.color || lineColorFor(route.meridianId);
-      const samples = densifyNodes(route.nodes || []);
-      addRibbon(THREE, samples, color);
+      splitRouteNodes(route.nodes || []).forEach((chunk) => {
+        addRibbon(THREE, densifyNodes(chunk), color);
+      });
     });
 
     (doc.acupoints || []).forEach((p) => {
