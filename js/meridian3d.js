@@ -204,6 +204,18 @@ const Meridian3D = (() => {
     return out.length ? out : items;
   }
 
+  function focusTorsoItems(items, height) {
+    if (!items.length || items.length <= 28) return items;
+    const lo = height * 0.11;
+    const hi = height * 0.8;
+    const core = items.filter((it) => {
+      const name = it.rec && it.rec.name;
+      if (name === '會陽' || (name && name.endsWith('髎'))) return true;
+      return it.py >= lo && it.py <= hi;
+    });
+    return core.length >= 8 ? core : items;
+  }
+
   function splitCalloutColumns(items, park, width) {
     if (!items.length) return [];
     const yTol = Math.max(12, (items[0]?.textH || 16) * 0.9);
@@ -985,8 +997,8 @@ const Meridian3D = (() => {
       });
     });
 
-    buckets.right = pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width);
-    buckets.left = pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width);
+    buckets.right = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width), height);
+    buckets.left = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width), height);
 
     const laid = [];
     ['right', 'left'].forEach((park) => {
