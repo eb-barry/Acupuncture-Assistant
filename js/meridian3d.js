@@ -1658,17 +1658,20 @@ const Meridian3D = (() => {
       if (!id) return;
       if (e.target.checked) opts.meridians.add(id);
       else opts.meridians.delete(id);
+      autoCursor = null;
       if (loadedGender) placeAnnotations();
     });
 
     $('m3d-select-all').onclick = () => {
       MERIDIANS.forEach((m) => opts.meridians.add(m.id));
       list.querySelectorAll('input').forEach((el) => { el.checked = true; });
+      autoCursor = null;
       if (loadedGender) placeAnnotations();
     };
     $('m3d-select-none').onclick = () => {
       opts.meridians.clear();
       list.querySelectorAll('input').forEach((el) => { el.checked = false; });
+      autoCursor = null;
       if (loadedGender) placeAnnotations();
     };
 
