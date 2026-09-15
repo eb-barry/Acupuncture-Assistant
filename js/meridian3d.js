@@ -145,25 +145,57 @@ const Meridian3D = (() => {
 
   function pickEdgeItems(items, park, width) {
     if (!items.length) return items;
-    const clusters = clusterByX(items, width);
-    if (clusters.length <= 1) return items;
     const xs = items.map((it) => it.px);
-    const mid = (Math.min(...xs) + Math.max(...xs)) * 0.5;
-    const slack = Math.max(14, width * 0.03);
-    const kept = [];
-    clusters.forEach((cluster, i) => {
-      const med = cluster.reduce((sum, it) => sum + it.px, 0) / cluster.length;
-      const nearPark = park === 'right' ? i >= clusters.length - 2 : i <= 1;
-      const onParkHalf = park === 'right' ? med >= mid - slack : med <= mid + slack;
-      if (nearPark || onParkHalf) kept.push(...cluster);
-    });
-    return kept.length ? kept : items;
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const mid = (minX + maxX) * 0.5;
+    const span = maxX - minX;
+    const clusters = clusterByX(items, width);
+    if (clusters.length >= 2) {
+      const slack = Math.max(10, width * 0.02);
+      const kept = [];
+      clusters.forEach((cluster, i) => {
+        const med = cluster.reduce((sum, it) => sum + it.px, 0) / cluster.length;
+        const nearPark = park === 'right' ? i >= clusters.length - 2 : i <= 1;
+        const onParkHalf = park === 'right' ? med >= mid - slack : med <= mid + slack;
+        if (nearPark || onParkHalf) kept.push(...cluster);
+      });
+      if (kept.length) return kept;
+    }
+    if (span > Math.max(24, width * 0.07)) {
+      const half = park === 'right'
+        ? items.filter((it) => it.px >= mid - 6)
+        : items.filter((it) => it.px <= mid + 6);
+      if (half.length) return half;
+    }
+    return items;
   }
 
   function splitCalloutColumns(items, park, width) {
     if (!items.length) return [];
+    const yTol = Math.max(12, (items[0]?.textH || 16) * 0.9);
+    const ranked = [...items].sort((a, b) => a.py - b.py);
+    ranked.forEach((it) => { it.indent = 0; });
+    for (let i = 0; i < ranked.length; i++) {
+      for (let j = i + 1; j < ranked.length; j++) {
+        if (ranked[j].py - ranked[i].py > yTol) break;
+        const outer = park === 'right'
+          ? (ranked[i].px >= ranked[j].px ? ranked[i] : ranked[j])
+          : (ranked[i].px <= ranked[j].px ? ranked[i] : ranked[j]);
+        const inner = outer === ranked[i] ? ranked[j] : ranked[i];
+        inner.indent = 1;
+      }
+    }
+    const outerItems = ranked.filter((it) => !it.indent);
+    const innerItems = ranked.filter((it) => it.indent);
+    if (innerItems.length) {
+      return [
+        { items: outerItems, indent: 0 },
+        { items: innerItems, indent: 1 },
+      ];
+    }
     const clusters = clusterByX(items, width);
-    if (clusters.length < 2) return [{ items, indent: 0 }];
+    if (clusters.length < 2) return [{ items: ranked, indent: 0 }];
     if (park === 'right') {
       return [
         { items: clusters[clusters.length - 1], indent: 0 },
@@ -817,20 +849,21 @@ const Meridian3D = (() => {
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     const facing = n.dot(toCam);
-    if (facing < -0.22) return false;
+    if (facing < 0) return false;
     const screen = projectToScreen(rec.position, width, height);
     if (!screen) return false;
-    if (screen.x < -20 || screen.x > width + 20 || screen.y < -20 || screen.y > height + 20) {
+    if (screen.x < -8 || screen.x > width + 8 || screen.y < -8 || screen.y > height + 8) {
       return false;
     }
+    if (facing >= 0.12) return true;
     const dir = world.clone().sub(cam).normalize();
     const slack = Math.max(worldPerMm() * 40, dist * 0.06);
-    const ray = new THREE.Raycaster(cam, dir, 0, dist + slack);
+    const ray = new THREE.Raycaster(cam, dir, 0, Math.max(dist - slack, 0));
     const hits = ray.intersectObjects(bodyMeshes, true);
-    if (!hits.length) return facing > -0.22;
+    if (!hits.length) return true;
     const hit = hits[0];
     if (hit.distance >= dist - slack) return true;
-    if (hit.point.distanceTo(world) <= worldPerMm() * 45) return true;
+    if (hit.point.distanceTo(world) <= worldPerMm() * 50) return true;
     return false;
   }
 
