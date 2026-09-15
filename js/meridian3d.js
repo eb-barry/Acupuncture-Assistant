@@ -143,7 +143,23 @@ const Meridian3D = (() => {
     return clusters;
   }
 
-  function clusterMedian(cluster) {
+  function dedupeParkItems(items, park) {
+    const byName = new Map();
+    items.forEach((it) => {
+      const key = it.rec && it.rec.name;
+      if (!key) return;
+      const prev = byName.get(key);
+      if (!prev) {
+        byName.set(key, it);
+        return;
+      }
+      const keep = park === 'right'
+        ? (it.px >= prev.px ? it : prev)
+        : (it.px <= prev.px ? it : prev);
+      byName.set(key, keep);
+    });
+    return [...byName.values()];
+  }
     return cluster.reduce((sum, it) => sum + it.px, 0) / cluster.length;
   }
 
@@ -156,10 +172,9 @@ const Meridian3D = (() => {
     if (!items.length) return items;
     const clusters = clusterByX(items, width);
     const screenMid = width * 0.5;
-    const slack = width * 0.06;
     let parkClusters = clusters.filter((cluster) => {
       const med = clusterMedian(cluster);
-      return park === 'right' ? med >= screenMid - slack : med <= screenMid + slack;
+      return park === 'right' ? med >= screenMid : med <= screenMid;
     });
     if (parkClusters.length < 2) {
       parkClusters = park === 'right' ? clusters.slice(-3) : clusters.slice(0, 3);
@@ -482,34 +497,29 @@ const Meridian3D = (() => {
     calloutsDirty = true;
   }
 
-  function faceFront() {
+  function jumpCamera(x, y, z) {
     if (!camera || !controls) return;
-    const dist = framingDistance();
+    const damping = controls.enableDamping;
+    controls.enableDamping = false;
     controls.target.set(0, bodyHeight * 0.42, 0);
     camera.zoom = 1;
     camera.near = Math.max(bodyHeight / 200, 0.01);
     camera.far = bodyHeight * 40;
     camera.updateProjectionMatrix();
-    camera.position.set(0, bodyHeight * 0.5, dist);
+    camera.position.set(x, y, z);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
     controls.update();
+    controls.enableDamping = damping;
     noteCameraMoving(280);
   }
 
+  function faceFront() {
+    jumpCamera(0, bodyHeight * 0.5, framingDistance());
+  }
+
   function faceBack() {
-    if (!camera || !controls) return;
-    const dist = framingDistance();
-    controls.target.set(0, bodyHeight * 0.42, 0);
-    camera.zoom = 1;
-    camera.near = Math.max(bodyHeight / 200, 0.01);
-    camera.far = bodyHeight * 40;
-    camera.updateProjectionMatrix();
-    camera.position.set(0, bodyHeight * 0.5, -dist);
-    camera.up.set(0, 1, 0);
-    camera.lookAt(controls.target);
-    controls.update();
-    noteCameraMoving(280);
+    jumpCamera(0, bodyHeight * 0.5, -framingDistance());
   }
 
   function framingDistance() {
@@ -906,15 +916,18 @@ const Meridian3D = (() => {
 
   function packSlots(items, height, slotH, pad) {
     items.sort((a, b) => a.py - b.py);
-    const avail = Math.max(slotH, height - pad * 2);
-    const used = items.length * slotH > avail ? avail / items.length : slotH;
+    const minSlot = Math.max(14, slotH * 0.72);
+    const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
+    if (items.length > maxN) {
+      items.splice(maxN);
+    }
     let next = pad;
     const bot = height - pad;
     items.forEach((item) => {
       let y = Math.max(next, item.py);
       if (y > bot) y = bot;
       item.slotY = y;
-      next = y + used;
+      next = y + slotH;
     });
   }
 
@@ -970,8 +983,8 @@ const Meridian3D = (() => {
       });
     });
 
-    buckets.right = pickEdgeItems(buckets.right, 'right', width);
-    buckets.left = pickEdgeItems(buckets.left, 'left', width);
+    buckets.right = pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width);
+    buckets.left = pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width);
 
     const laid = [];
     ['right', 'left'].forEach((park) => {
@@ -1520,9 +1533,18 @@ const Meridian3D = (() => {
     window.__m3dTest = {
       faceFront: () => { faceFront(); calloutsDirty = true; },
       faceBack: () => { faceBack(); calloutsDirty = true; },
+      cam() {
+        if (!camera || !controls) return null;
+        return {
+          pos: camera.position.toArray().map((n) => Math.round(n * 1000) / 1000),
+          target: controls.target.toArray().map((n) => Math.round(n * 1000) / 1000),
+        };
+      },
       yaw(deg) {
         if (!camera || !controls || !three) return;
         const { THREE } = three;
+        const damping = controls.enableDamping;
+        controls.enableDamping = false;
         const q = new THREE.Quaternion().setFromAxisAngle(
           new THREE.Vector3(0, 1, 0),
           THREE.MathUtils.degToRad(deg),
@@ -1530,6 +1552,7 @@ const Meridian3D = (() => {
         camera.position.sub(controls.target).applyQuaternion(q).add(controls.target);
         camera.lookAt(controls.target);
         controls.update();
+        controls.enableDamping = damping;
         noteCameraMoving(280);
         calloutsDirty = true;
       },
