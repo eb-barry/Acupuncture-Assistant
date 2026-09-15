@@ -402,7 +402,6 @@ const Meridian3D = (() => {
 
   function faceFront() {
     if (!camera || !controls) return;
-    const { THREE } = three;
     const dist = framingDistance();
     controls.target.set(0, bodyHeight * 0.42, 0);
     camera.zoom = 1;
