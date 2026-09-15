@@ -28,7 +28,9 @@ const Meridian3D = (() => {
   const RIBBON_WIDTH_MM = 3.5;
   const MARKER_DIAMETER_MM = 7;
   const SKIN_LIFT_MM = 0.4;
-  const SAMPLE_STEP_MM = 2;
+  const SAMPLE_STEP_MM = 1.5;
+  const MAX_CONFORM_PULL_MM = 14;
+  const FLOAT_LIFT_MM = 1.0;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -108,16 +110,32 @@ const Meridian3D = (() => {
 
   function labelSideByMeridian(selected) {
     const sides = new Map();
+    const flexible = [];
     selected.forEach((m) => {
-      sides.set(m.id, (m.id === 'CV' || m.id === 'GV') ? 'left' : 'right');
+      if (m.id === 'CV' || m.id === 'GV') sides.set(m.id, 'left');
+      else flexible.push(m);
     });
+    if (flexible.length >= 2) {
+      flexible.forEach((m, i) => sides.set(m.id, i % 2 === 0 ? 'right' : 'left'));
+    } else {
+      flexible.forEach((m) => sides.set(m.id, 'right'));
+    }
     return sides;
   }
 
-  function calloutPointAllowed(rec) {
-    if (!rec) return false;
-    if (rec.meridianId === 'CV' || rec.meridianId === 'GV' || rec.side === 'midline') return true;
-    return rec.side === 'right';
+  function pickEdgeItems(items, park, width) {
+    if (!items.length) return items;
+    const mid = width * 0.5;
+    if (park === 'right') {
+      const onSide = items.filter((it) => it.px >= mid);
+      if (onSide.length) return onSide;
+      const maxX = Math.max(...items.map((it) => it.px));
+      return items.filter((it) => it.px >= maxX - Math.max(28, width * 0.08));
+    }
+    const onSide = items.filter((it) => it.px <= mid);
+    if (onSide.length) return onSide;
+    const minX = Math.min(...items.map((it) => it.px));
+    return items.filter((it) => it.px <= minX + Math.max(28, width * 0.08));
   }
 
   function worldPerMm() {
@@ -391,6 +409,13 @@ const Meridian3D = (() => {
     noteCameraMoving(280);
   }
 
+  function framingDistance() {
+    if (!camera || !three) return bodyHeight * 2;
+    const { THREE } = three;
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
+  }
+
   function lookAtWorld(position, normal) {
     if (!camera || !controls || !position) return;
     const { THREE } = three;
@@ -400,13 +425,19 @@ const Meridian3D = (() => {
     if (Math.abs(n.y) > 0.92) {
       n.add(new THREE.Vector3(0, 0, 0.35)).normalize();
     }
-    const dist = bodyHeight * 0.38 / Math.max(opts.scale, 0.5);
-    const target = new THREE.Vector3().fromArray(position);
-    const pos = target.clone().addScaledVector(n, dist);
-    controls.target.copy(target);
-    camera.position.copy(pos);
+    const dist = framingDistance();
+    const point = new THREE.Vector3().fromArray(position);
+    const center = new THREE.Vector3(0, bodyHeight * 0.42, 0);
+    const aim = center.clone().lerp(point, 0.28);
+    let dir = point.clone().sub(center);
+    if (dir.lengthSq() < 1e-8) dir.copy(n);
+    dir.y *= 0.4;
+    dir.normalize();
+    if (dir.dot(n) < 0.15) dir.lerp(n, 0.55).normalize();
+    camera.position.copy(aim).addScaledVector(dir, dist);
     camera.up.set(0, 1, 0);
-    camera.lookAt(target);
+    controls.target.copy(aim);
+    camera.lookAt(aim);
     controls.update();
     noteCameraMoving(320);
   }
@@ -534,7 +565,43 @@ const Meridian3D = (() => {
         });
       }
     });
-    return out;
+    if (!three) return out;
+    return out.map((sample) => conformSample(three.THREE, sample.position, sample.normal));
+  }
+
+  function conformSample(THREE, position, normal) {
+    const mm = worldPerMm();
+    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    const nArr = [n.x, n.y, n.z];
+    const floated = [
+      position[0] + n.x * mm * FLOAT_LIFT_MM,
+      position[1] + n.y * mm * FLOAT_LIFT_MM,
+      position[2] + n.z * mm * FLOAT_LIFT_MM,
+    ];
+    if (!bodyMeshes.length) return { position: floated, normal: nArr };
+
+    const search = Math.max(mm * 80, mm * MAX_CONFORM_PULL_MM * 4);
+    const origin = new THREE.Vector3().fromArray(position).addScaledVector(n, search);
+    const ray = new THREE.Raycaster(origin, n.clone().negate(), 0, search + mm * MAX_CONFORM_PULL_MM);
+    const hits = ray.intersectObjects(bodyMeshes, true);
+    const chord = new THREE.Vector3().fromArray(position);
+    const maxPull = mm * MAX_CONFORM_PULL_MM;
+    for (let i = 0; i < hits.length; i++) {
+      const hit = hits[i];
+      let hn = n.clone();
+      if (hit.face && hit.object) {
+        hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+      }
+      if (hn.dot(n) < 0.05) continue;
+      if (hit.point.distanceTo(chord) > maxPull) continue;
+      return {
+        position: [hit.point.x, hit.point.y, hit.point.z],
+        normal: [hn.x, hn.y, hn.z],
+      };
+    }
+    return { position: floated, normal: nArr };
   }
 
   function addRibbon(THREE, samples, color) {
@@ -629,6 +696,26 @@ const Meridian3D = (() => {
     marker.userData.kind = 'marker';
     marker.userData.baseColor = color;
     marker.renderOrder = 3;
+
+    const halo = new THREE.Mesh(
+      new THREE.CircleGeometry(radius * 2.2, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xfacc15,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3,
+      }),
+    );
+    halo.visible = false;
+    halo.renderOrder = 2;
+    halo.raycast = () => {};
+    marker.add(halo);
+    marker.userData.halo = halo;
+
     annotRoot.add(marker);
     pickables.push(marker);
     return marker;
@@ -673,7 +760,7 @@ const Meridian3D = (() => {
 
   function measureCallout(name) {
     const css = getComputedStyle(document.documentElement);
-    const fs = parseFloat(css.getPropertyValue('--fs-sm')) || 14;
+    const fs = parseFloat(css.getPropertyValue('--fs-md')) || 16;
     return { w: Math.max(fs, name.length * fs), h: fs * 1.35, fs };
   }
 
@@ -726,7 +813,6 @@ const Meridian3D = (() => {
     pickables.forEach((obj) => {
       if (obj.userData.kind !== 'marker' || !obj.userData.point) return;
       const rec = obj.userData.point;
-      if (!calloutPointAllowed(rec)) return;
       if (!isPointVisible(rec, width, height)) return;
       const screen = projectToScreen(rec.position, width, height);
       if (!screen) return;
@@ -741,6 +827,9 @@ const Meridian3D = (() => {
         textH: size.h,
       });
     });
+
+    buckets.right = pickEdgeItems(buckets.right, 'right', width);
+    buckets.left = pickEdgeItems(buckets.left, 'left', width);
 
     packSlots(buckets.right, height, Math.max(16, (buckets.right[0]?.textH || 16) + 3), pad + 6);
     packSlots(buckets.left, height, Math.max(16, (buckets.left[0]?.textH || 16) + 3), pad + 6);
@@ -859,6 +948,7 @@ const Meridian3D = (() => {
       const pt = obj.userData.point;
       const isOn = rec && pt && pt.code === rec.code && pt.meridianId === rec.meridianId && pt.side === rec.side;
       mat.color.set(isOn ? '#facc15' : obj.userData.baseColor);
+      if (obj.userData.halo) obj.userData.halo.visible = !!isOn;
     });
     highlighted = rec;
   }
@@ -1117,7 +1207,6 @@ const Meridian3D = (() => {
         lookAtWorld(rec.position, rec.normal);
         await speak(rec.name, opts.gender);
         if (autoAbort || gen !== playGeneration) return;
-        highlightPoint(null);
         await sleep(2000);
         if (autoAbort || gen !== playGeneration) return;
       }
