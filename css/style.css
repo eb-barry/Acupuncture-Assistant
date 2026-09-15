@@ -804,7 +804,7 @@ body::before {
   stroke-linecap: round; stroke-linejoin: round;
 }
 .m3d-callouts .callout-name {
-  font-family: var(--font-serif); font-size: var(--fs-sm); font-weight: 600;
+  font-family: var(--font-serif); font-size: var(--fs-md); font-weight: 600;
   fill: #111111; stroke: rgba(255,255,255,0.92); stroke-width: 2.4px;
   paint-order: stroke; dominant-baseline: middle;
 }
@@ -856,6 +856,15 @@ body::before {
 }
 .m3d-switch { width: 100%; }
 .m3d-switch button { flex: 1; }
+.m3d-switch.font-size-picker button {
+  width: auto;
+  height: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: var(--fs-md);
+  font-family: var(--font-sans);
+}
 #m3d-scale {
   width: 100%; accent-color: var(--clr-teal); height: 28px;
 }
@@ -867,7 +876,7 @@ body::before {
 .m3d-meridian-list label {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; background: var(--clr-bg); border-radius: var(--radius-sm);
-  font-size: var(--fs-sm); color: var(--clr-ink);
+  font-size: var(--fs-md); color: var(--clr-ink);
 }
 .m3d-meridian-list input { width: 18px; height: 18px; accent-color: var(--clr-teal); }
 .m3d-credit {

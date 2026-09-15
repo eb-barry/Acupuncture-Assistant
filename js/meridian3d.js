@@ -28,7 +28,11 @@ const Meridian3D = (() => {
   const RIBBON_WIDTH_MM = 3.5;
   const MARKER_DIAMETER_MM = 7;
   const SKIN_LIFT_MM = 0.4;
-  const SAMPLE_STEP_MM = 2;
+  const SAMPLE_STEP_MM = 1.5;
+  const CONFORM_STEP_MM = 18;
+  const LONG_CHORD_MM = 70;
+  const MAX_CONFORM_PULL_MM = 14;
+  const FLOAT_LIFT_MM = 1.0;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -67,6 +71,7 @@ const Meridian3D = (() => {
   let playGeneration = 0;
   let calloutsDirty = true;
   let orbiting = false;
+  let conformRay = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -108,16 +113,32 @@ const Meridian3D = (() => {
 
   function labelSideByMeridian(selected) {
     const sides = new Map();
+    const flexible = [];
     selected.forEach((m) => {
-      sides.set(m.id, (m.id === 'CV' || m.id === 'GV') ? 'left' : 'right');
+      if (m.id === 'CV' || m.id === 'GV') sides.set(m.id, 'left');
+      else flexible.push(m);
     });
+    if (flexible.length >= 2) {
+      flexible.forEach((m, i) => sides.set(m.id, i % 2 === 0 ? 'right' : 'left'));
+    } else {
+      flexible.forEach((m) => sides.set(m.id, 'right'));
+    }
     return sides;
   }
 
-  function calloutPointAllowed(rec) {
-    if (!rec) return false;
-    if (rec.meridianId === 'CV' || rec.meridianId === 'GV' || rec.side === 'midline') return true;
-    return rec.side === 'right';
+  function pickEdgeItems(items, park, width) {
+    if (!items.length) return items;
+    const mid = width * 0.5;
+    if (park === 'right') {
+      const onSide = items.filter((it) => it.px >= mid);
+      if (onSide.length) return onSide;
+      const maxX = Math.max(...items.map((it) => it.px));
+      return items.filter((it) => it.px >= maxX - Math.max(28, width * 0.08));
+    }
+    const onSide = items.filter((it) => it.px <= mid);
+    if (onSide.length) return onSide;
+    const minX = Math.min(...items.map((it) => it.px));
+    return items.filter((it) => it.px <= minX + Math.max(28, width * 0.08));
   }
 
   function worldPerMm() {
@@ -355,6 +376,7 @@ const Meridian3D = (() => {
     bodyMeshes = [];
     pickables = [];
     loadedGender = null;
+    conformRay = null;
     clearCallouts();
     if (skinMaterial) { skinMaterial.dispose(); skinMaterial = null; }
     if (nailMaterial) { nailMaterial.dispose(); nailMaterial = null; }
@@ -380,10 +402,12 @@ const Meridian3D = (() => {
 
   function faceFront() {
     if (!camera || !controls) return;
-    const { THREE } = three;
-    const fov = THREE.MathUtils.degToRad(camera.fov);
-    const dist = (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
+    const dist = framingDistance();
     controls.target.set(0, bodyHeight * 0.42, 0);
+    camera.zoom = 1;
+    camera.near = Math.max(bodyHeight / 200, 0.01);
+    camera.far = bodyHeight * 40;
+    camera.updateProjectionMatrix();
     camera.position.set(0, bodyHeight * 0.5, dist);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
@@ -391,22 +415,32 @@ const Meridian3D = (() => {
     noteCameraMoving(280);
   }
 
-  function lookAtWorld(position, normal) {
-    if (!camera || !controls || !position) return;
+  function framingDistance() {
+    if (!camera || !three) return bodyHeight * 2;
     const { THREE } = three;
-    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
-    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
-    else n.normalize();
-    if (Math.abs(n.y) > 0.92) {
-      n.add(new THREE.Vector3(0, 0, 0.35)).normalize();
-    }
-    const dist = bodyHeight * 0.38 / Math.max(opts.scale, 0.5);
-    const target = new THREE.Vector3().fromArray(position);
-    const pos = target.clone().addScaledVector(n, dist);
-    controls.target.copy(target);
-    camera.position.copy(pos);
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
+  }
+
+  function lookAtWorld(position) {
+    if (!camera || !controls || !position) return;
+    const dist = framingDistance();
+    const targetY = bodyHeight * 0.42;
+    const px = Number(position[0]) || 0;
+    const pz = Number(position[2]) || 0;
+    let az = Math.atan2(px, pz);
+    if (!Number.isFinite(az)) az = 0;
+    az = Math.max(-0.95, Math.min(0.95, az * 0.55));
+    camera.zoom = 1;
+    camera.near = Math.max(bodyHeight / 200, 0.01);
+    camera.far = bodyHeight * 40;
+    camera.updateProjectionMatrix();
+    camera.position.set(Math.sin(az) * dist, bodyHeight * 0.52, Math.cos(az) * dist);
     camera.up.set(0, 1, 0);
-    camera.lookAt(target);
+    controls.target.set(0, targetY, 0);
+    camera.lookAt(controls.target);
+    controls.minDistance = bodyHeight * 0.08;
+    controls.maxDistance = bodyHeight * 12;
     controls.update();
     noteCameraMoving(320);
   }
@@ -492,10 +526,42 @@ const Meridian3D = (() => {
     ];
   }
 
+  function lerpNode(a, b, t) {
+    const pos = [
+      a.position[0] + (b.position[0] - a.position[0]) * t,
+      a.position[1] + (b.position[1] - a.position[1]) * t,
+      a.position[2] + (b.position[2] - a.position[2]) * t,
+    ];
+    const nrm = [
+      a.normal[0] + (b.normal[0] - a.normal[0]) * t,
+      a.normal[1] + (b.normal[1] - a.normal[1]) * t,
+      a.normal[2] + (b.normal[2] - a.normal[2]) * t,
+    ];
+    const len = Math.hypot(...nrm) || 1;
+    return { position: pos, normal: [nrm[0] / len, nrm[1] / len, nrm[2] / len] };
+  }
+
+  function densifyPolyline(nodes, step) {
+    const out = [];
+    nodes.forEach((node, i) => {
+      if (i === 0) {
+        out.push(node);
+        return;
+      }
+      const prev = nodes[i - 1];
+      const dist = Math.hypot(
+        node.position[0] - prev.position[0],
+        node.position[1] - prev.position[1],
+        node.position[2] - prev.position[2],
+      );
+      const segs = Math.max(1, Math.ceil(dist / Math.max(step, 1e-5)));
+      for (let s = 1; s <= segs; s++) out.push(lerpNode(prev, node, s / segs));
+    });
+    return out;
+  }
+
   function densifyNodes(nodes) {
     const mm = worldPerMm();
-    const step = mm * SAMPLE_STEP_MM;
-    const out = [];
     const prepared = nodes.map((node) => {
       const n = node.normal || [0, 0, 1];
       const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
@@ -504,37 +570,65 @@ const Meridian3D = (() => {
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
       };
     }).filter((n) => n.position);
+    const hugged = [];
     prepared.forEach((node, i) => {
       if (i === 0) {
-        out.push(node);
+        hugged.push(node);
         return;
       }
       const prev = prepared[i - 1];
-      const dx = node.position[0] - prev.position[0];
-      const dy = node.position[1] - prev.position[1];
-      const dz = node.position[2] - prev.position[2];
-      const dist = Math.hypot(dx, dy, dz);
+      const dist = Math.hypot(
+        node.position[0] - prev.position[0],
+        node.position[1] - prev.position[1],
+        node.position[2] - prev.position[2],
+      );
+      const needsHug = three && dist > mm * LONG_CHORD_MM;
+      const step = mm * (needsHug ? CONFORM_STEP_MM : SAMPLE_STEP_MM);
       const segs = Math.max(1, Math.ceil(dist / Math.max(step, 1e-5)));
       for (let s = 1; s <= segs; s++) {
-        const t = s / segs;
-        const pos = [
-          prev.position[0] + dx * t,
-          prev.position[1] + dy * t,
-          prev.position[2] + dz * t,
-        ];
-        const nrm = [
-          prev.normal[0] + (node.normal[0] - prev.normal[0]) * t,
-          prev.normal[1] + (node.normal[1] - prev.normal[1]) * t,
-          prev.normal[2] + (node.normal[2] - prev.normal[2]) * t,
-        ];
-        const len = Math.hypot(...nrm) || 1;
-        out.push({
-          position: pos,
-          normal: [nrm[0] / len, nrm[1] / len, nrm[2] / len],
-        });
+        let sample = lerpNode(prev, node, s / segs);
+        if (needsHug) sample = conformSample(three.THREE, sample.position, sample.normal);
+        hugged.push(sample);
       }
     });
-    return out;
+    return densifyPolyline(hugged, mm * SAMPLE_STEP_MM);
+  }
+
+  function conformSample(THREE, position, normal) {
+    const mm = worldPerMm();
+    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    const nArr = [n.x, n.y, n.z];
+    const floated = [
+      position[0] + n.x * mm * FLOAT_LIFT_MM,
+      position[1] + n.y * mm * FLOAT_LIFT_MM,
+      position[2] + n.z * mm * FLOAT_LIFT_MM,
+    ];
+    if (!bodyMeshes.length) return { position: floated, normal: nArr };
+
+    const search = mm * 24;
+    const origin = new THREE.Vector3().fromArray(position).addScaledVector(n, search);
+    if (!conformRay) conformRay = new THREE.Raycaster();
+    conformRay.near = 0;
+    conformRay.far = search + mm * MAX_CONFORM_PULL_MM;
+    conformRay.set(origin, n.clone().negate());
+    const hit = conformRay.intersectObjects(bodyMeshes, false)[0];
+    if (!hit) return { position: floated, normal: nArr };
+
+    let hn = n.clone();
+    if (hit.face && hit.object) {
+      hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+    }
+    const maxPull = mm * MAX_CONFORM_PULL_MM;
+    const chord = new THREE.Vector3().fromArray(position);
+    if (hn.dot(n) < 0.05 || hit.point.distanceTo(chord) > maxPull) {
+      return { position: floated, normal: nArr };
+    }
+    return {
+      position: [hit.point.x, hit.point.y, hit.point.z],
+      normal: [hn.x, hn.y, hn.z],
+    };
   }
 
   function addRibbon(THREE, samples, color) {
@@ -629,6 +723,26 @@ const Meridian3D = (() => {
     marker.userData.kind = 'marker';
     marker.userData.baseColor = color;
     marker.renderOrder = 3;
+
+    const halo = new THREE.Mesh(
+      new THREE.CircleGeometry(radius * 2.2, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xfacc15,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3,
+      }),
+    );
+    halo.visible = false;
+    halo.renderOrder = 2;
+    halo.raycast = () => {};
+    marker.add(halo);
+    marker.userData.halo = halo;
+
     annotRoot.add(marker);
     pickables.push(marker);
     return marker;
@@ -673,7 +787,7 @@ const Meridian3D = (() => {
 
   function measureCallout(name) {
     const css = getComputedStyle(document.documentElement);
-    const fs = parseFloat(css.getPropertyValue('--fs-sm')) || 14;
+    const fs = parseFloat(css.getPropertyValue('--fs-md')) || 16;
     return { w: Math.max(fs, name.length * fs), h: fs * 1.35, fs };
   }
 
@@ -726,7 +840,6 @@ const Meridian3D = (() => {
     pickables.forEach((obj) => {
       if (obj.userData.kind !== 'marker' || !obj.userData.point) return;
       const rec = obj.userData.point;
-      if (!calloutPointAllowed(rec)) return;
       if (!isPointVisible(rec, width, height)) return;
       const screen = projectToScreen(rec.position, width, height);
       if (!screen) return;
@@ -741,6 +854,9 @@ const Meridian3D = (() => {
         textH: size.h,
       });
     });
+
+    buckets.right = pickEdgeItems(buckets.right, 'right', width);
+    buckets.left = pickEdgeItems(buckets.left, 'left', width);
 
     packSlots(buckets.right, height, Math.max(16, (buckets.right[0]?.textH || 16) + 3), pad + 6);
     packSlots(buckets.left, height, Math.max(16, (buckets.left[0]?.textH || 16) + 3), pad + 6);
@@ -859,6 +975,7 @@ const Meridian3D = (() => {
       const pt = obj.userData.point;
       const isOn = rec && pt && pt.code === rec.code && pt.meridianId === rec.meridianId && pt.side === rec.side;
       mat.color.set(isOn ? '#facc15' : obj.userData.baseColor);
+      if (obj.userData.halo) obj.userData.halo.visible = !!isOn;
     });
     highlighted = rec;
   }
@@ -1012,7 +1129,7 @@ const Meridian3D = (() => {
       obj.castShadow = false;
       obj.receiveShadow = false;
       if (obj.geometry && !obj.geometry.getAttribute('normal')) obj.geometry.computeVertexNormals();
-      bodyMeshes.push(obj);
+      if (!isNailMesh(obj)) bodyMeshes.push(obj);
     });
     modelRoot.add(root);
     loadedGender = wanted;
@@ -1117,7 +1234,6 @@ const Meridian3D = (() => {
         lookAtWorld(rec.position, rec.normal);
         await speak(rec.name, opts.gender);
         if (autoAbort || gen !== playGeneration) return;
-        highlightPoint(null);
         await sleep(2000);
         if (autoAbort || gen !== playGeneration) return;
       }
