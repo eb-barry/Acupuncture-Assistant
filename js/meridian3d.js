@@ -170,8 +170,22 @@ const Meridian3D = (() => {
     return cluster.length * (Math.max(...ys) - Math.min(...ys) + 12);
   }
 
+  function isFocusRec(rec) {
+    const focus = highlighted || currentPoint;
+    if (!rec || !focus) return false;
+    return rec.code === focus.code && rec.meridianId === focus.meridianId && rec.side === focus.side;
+  }
+
+  function ensureFocusItem(items, visible, park) {
+    if (items.some((it) => isFocusRec(it.rec))) return items;
+    const focusItem = visible.find((it) => isFocusRec(it.rec));
+    if (!focusItem) return items;
+    return items.concat([{ ...focusItem, park }]);
+  }
+
   function pickEdgeItems(items, park, width) {
     if (!items.length) return items;
+    if (items.length <= 14) return items;
     const clusters = clusterByX(items, width);
     const screenMid = width * 0.5;
     let parkClusters = clusters.filter((cluster) => {
@@ -192,12 +206,13 @@ const Meridian3D = (() => {
       const med = clusterMedian(cluster);
       const moreMedial = park === 'right' ? med <= innerBound + 6 : med >= innerBound - 6;
       if (moreMedial && cluster.length >= 3) kept.add(cluster);
+      if (cluster.some((it) => isFocusRec(it.rec))) kept.add(cluster);
     });
     const out = [];
     kept.forEach((cluster) => out.push(...cluster));
     items.forEach((it) => {
       const name = it.rec && it.rec.name;
-      if (name === '會陽' || (name && name.endsWith('髎'))) {
+      if (isFocusRec(it.rec) || name === '會陽' || (name && name.endsWith('髎'))) {
         if (!out.includes(it)) out.push(it);
       }
     });
@@ -212,7 +227,7 @@ const Meridian3D = (() => {
     const lo = y0 + span * 0.1;
     const hi = y0 + span * 0.72;
     const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || (name && name.endsWith('髎'));
-    const core = items.filter((it) => keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
+    const core = items.filter((it) => isFocusRec(it.rec) || keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
     return core.length >= 8 ? core : items;
   }
 
@@ -1082,6 +1097,12 @@ const Meridian3D = (() => {
 
   function isPointVisible(rec, width, height) {
     if (!rec || !rec.position || !camera) return false;
+    const screen = projectToScreen(rec.position, width, height);
+    if (!screen) return false;
+    if (screen.x < -8 || screen.x > width + 8 || screen.y < -8 || screen.y > height + 8) {
+      return false;
+    }
+    if (isFocusRec(rec)) return true;
     const { THREE } = three;
     const world = new THREE.Vector3().fromArray(rec.position);
     const cam = camera.position;
@@ -1094,11 +1115,6 @@ const Meridian3D = (() => {
     else n.normalize();
     const facing = n.dot(toCam);
     if (facing < 0) return false;
-    const screen = projectToScreen(rec.position, width, height);
-    if (!screen) return false;
-    if (screen.x < -8 || screen.x > width + 8 || screen.y < -8 || screen.y > height + 8) {
-      return false;
-    }
     if (facing >= 0.12) return true;
     const dir = world.clone().sub(cam).normalize();
     const slack = Math.max(worldPerMm() * 40, dist * 0.06);
@@ -1122,7 +1138,17 @@ const Meridian3D = (() => {
     const minSlot = Math.max(14, slotH * 0.72);
     const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
     if (items.length > maxN) {
-      items.splice(maxN);
+      const focusIdx = items.findIndex((it) => isFocusRec(it.rec));
+      if (focusIdx >= 0) {
+        let start = Math.min(Math.max(0, focusIdx - Math.floor((maxN - 1) / 2)), items.length - maxN);
+        const kept = items.slice(start, start + maxN);
+        if (!kept.some((it) => isFocusRec(it.rec))) kept[kept.length - 1] = items[focusIdx];
+        items.length = 0;
+        items.push(...kept);
+        items.sort((a, b) => a.py - b.py);
+      } else {
+        items.splice(maxN);
+      }
     }
     let next = pad;
     const bot = height - pad;
@@ -1190,8 +1216,16 @@ const Meridian3D = (() => {
       buckets[park].push({ ...it, park });
     });
 
-    buckets.right = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width));
-    buckets.left = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width));
+    buckets.right = ensureFocusItem(
+      focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width)),
+      visible,
+      'right',
+    );
+    buckets.left = ensureFocusItem(
+      focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width)),
+      visible,
+      'left',
+    );
 
     const laid = [];
     ['right', 'left'].forEach((park) => {
@@ -1782,6 +1816,11 @@ const Meridian3D = (() => {
       reframeLog: () => reframeLog.slice(),
       stopAfter: '',
       trace: [],
+      callouts() {
+        const svg = $('m3d-callouts');
+        if (!svg || svg.hasAttribute('hidden')) return [];
+        return [...svg.querySelectorAll('text')].map((el) => el.textContent);
+      },
       ndcOf(name) {
         const rec = testRecord(name);
         if (!rec || !camera) return null;
