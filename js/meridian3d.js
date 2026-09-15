@@ -29,7 +29,7 @@ const Meridian3D = (() => {
   const MARKER_DIAMETER_MM = 7;
   const SKIN_LIFT_MM = 0.4;
   const SAMPLE_STEP_MM = 1.5;
-  const HANDLE_MIN_ARC_MM = 25.5;
+  const HANDLE_MIN_ARC_MM = 70;
   const HANDLE_SPACING_MM = 40.9;
   const MAX_PAIR_HANDLES = 5;
 
@@ -612,7 +612,7 @@ const Meridian3D = (() => {
           sample.position[2] + sample.normal[2] * bulge,
         ];
         sample.type = 'control';
-        located.push(projectKeep(sample));
+        located.push(sample);
       }
       located.push(node);
     });
