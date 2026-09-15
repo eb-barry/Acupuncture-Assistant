@@ -566,6 +566,8 @@ const Meridian3D = (() => {
     n.y = 0;
     if (n.lengthSq() < 0.05) n.set(0, 0, (normal && normal[2] < 0) ? -1 : 1);
     else n.normalize();
+    if (n.z > 0.35) n.set(0, 0, 1);
+    else if (n.z < -0.35) n.set(0, 0, -1);
     return n;
   }
 
