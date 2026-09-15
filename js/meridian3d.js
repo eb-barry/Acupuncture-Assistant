@@ -29,6 +29,7 @@ const Meridian3D = (() => {
   const MARKER_DIAMETER_MM = 7;
   const SKIN_LIFT_MM = 0.4;
   const SAMPLE_STEP_MM = 1.5;
+  const CONFORM_STEP_MM = 6;
   const MAX_CONFORM_PULL_MM = 14;
   const FLOAT_LIFT_MM = 1.0;
 
@@ -69,6 +70,7 @@ const Meridian3D = (() => {
   let playGeneration = 0;
   let calloutsDirty = true;
   let orbiting = false;
+  let conformRay = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -373,6 +375,7 @@ const Meridian3D = (() => {
     bodyMeshes = [];
     pickables = [];
     loadedGender = null;
+    conformRay = null;
     clearCallouts();
     if (skinMaterial) { skinMaterial.dispose(); skinMaterial = null; }
     if (nailMaterial) { nailMaterial.dispose(); nailMaterial = null; }
@@ -523,10 +526,42 @@ const Meridian3D = (() => {
     ];
   }
 
+  function lerpNode(a, b, t) {
+    const pos = [
+      a.position[0] + (b.position[0] - a.position[0]) * t,
+      a.position[1] + (b.position[1] - a.position[1]) * t,
+      a.position[2] + (b.position[2] - a.position[2]) * t,
+    ];
+    const nrm = [
+      a.normal[0] + (b.normal[0] - a.normal[0]) * t,
+      a.normal[1] + (b.normal[1] - a.normal[1]) * t,
+      a.normal[2] + (b.normal[2] - a.normal[2]) * t,
+    ];
+    const len = Math.hypot(...nrm) || 1;
+    return { position: pos, normal: [nrm[0] / len, nrm[1] / len, nrm[2] / len] };
+  }
+
+  function densifyPolyline(nodes, step) {
+    const out = [];
+    nodes.forEach((node, i) => {
+      if (i === 0) {
+        out.push(node);
+        return;
+      }
+      const prev = nodes[i - 1];
+      const dist = Math.hypot(
+        node.position[0] - prev.position[0],
+        node.position[1] - prev.position[1],
+        node.position[2] - prev.position[2],
+      );
+      const segs = Math.max(1, Math.ceil(dist / Math.max(step, 1e-5)));
+      for (let s = 1; s <= segs; s++) out.push(lerpNode(prev, node, s / segs));
+    });
+    return out;
+  }
+
   function densifyNodes(nodes) {
     const mm = worldPerMm();
-    const step = mm * SAMPLE_STEP_MM;
-    const out = [];
     const prepared = nodes.map((node) => {
       const n = node.normal || [0, 0, 1];
       const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
@@ -535,38 +570,11 @@ const Meridian3D = (() => {
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
       };
     }).filter((n) => n.position);
-    prepared.forEach((node, i) => {
-      if (i === 0) {
-        out.push(node);
-        return;
-      }
-      const prev = prepared[i - 1];
-      const dx = node.position[0] - prev.position[0];
-      const dy = node.position[1] - prev.position[1];
-      const dz = node.position[2] - prev.position[2];
-      const dist = Math.hypot(dx, dy, dz);
-      const segs = Math.max(1, Math.ceil(dist / Math.max(step, 1e-5)));
-      for (let s = 1; s <= segs; s++) {
-        const t = s / segs;
-        const pos = [
-          prev.position[0] + dx * t,
-          prev.position[1] + dy * t,
-          prev.position[2] + dz * t,
-        ];
-        const nrm = [
-          prev.normal[0] + (node.normal[0] - prev.normal[0]) * t,
-          prev.normal[1] + (node.normal[1] - prev.normal[1]) * t,
-          prev.normal[2] + (node.normal[2] - prev.normal[2]) * t,
-        ];
-        const len = Math.hypot(...nrm) || 1;
-        out.push({
-          position: pos,
-          normal: [nrm[0] / len, nrm[1] / len, nrm[2] / len],
-        });
-      }
-    });
-    if (!three) return out;
-    return out.map((sample) => conformSample(three.THREE, sample.position, sample.normal));
+    const coarse = densifyPolyline(prepared, mm * CONFORM_STEP_MM);
+    const hugged = three
+      ? coarse.map((sample) => conformSample(three.THREE, sample.position, sample.normal))
+      : coarse;
+    return densifyPolyline(hugged, mm * SAMPLE_STEP_MM);
   }
 
   function conformSample(THREE, position, normal) {
@@ -582,26 +590,28 @@ const Meridian3D = (() => {
     ];
     if (!bodyMeshes.length) return { position: floated, normal: nArr };
 
-    const search = Math.max(mm * 80, mm * MAX_CONFORM_PULL_MM * 4);
+    const search = mm * 24;
     const origin = new THREE.Vector3().fromArray(position).addScaledVector(n, search);
-    const ray = new THREE.Raycaster(origin, n.clone().negate(), 0, search + mm * MAX_CONFORM_PULL_MM);
-    const hits = ray.intersectObjects(bodyMeshes, true);
-    const chord = new THREE.Vector3().fromArray(position);
-    const maxPull = mm * MAX_CONFORM_PULL_MM;
-    for (let i = 0; i < hits.length; i++) {
-      const hit = hits[i];
-      let hn = n.clone();
-      if (hit.face && hit.object) {
-        hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
-      }
-      if (hn.dot(n) < 0.05) continue;
-      if (hit.point.distanceTo(chord) > maxPull) continue;
-      return {
-        position: [hit.point.x, hit.point.y, hit.point.z],
-        normal: [hn.x, hn.y, hn.z],
-      };
+    if (!conformRay) conformRay = new THREE.Raycaster();
+    conformRay.near = 0;
+    conformRay.far = search + mm * MAX_CONFORM_PULL_MM;
+    conformRay.set(origin, n.clone().negate());
+    const hit = conformRay.intersectObjects(bodyMeshes, true)[0];
+    if (!hit) return { position: floated, normal: nArr };
+
+    let hn = n.clone();
+    if (hit.face && hit.object) {
+      hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
     }
-    return { position: floated, normal: nArr };
+    const maxPull = mm * MAX_CONFORM_PULL_MM;
+    const chord = new THREE.Vector3().fromArray(position);
+    if (hn.dot(n) < 0.05 || hit.point.distanceTo(chord) > maxPull) {
+      return { position: floated, normal: nArr };
+    }
+    return {
+      position: [hit.point.x, hit.point.y, hit.point.z],
+      normal: [hn.x, hn.y, hn.z],
+    };
   }
 
   function addRibbon(THREE, samples, color) {
