@@ -1533,6 +1533,7 @@ const Meridian3D = (() => {
     autoAbort = false;
     lastReframeName = '';
     reframeLog = [];
+    if (window.__m3dTest) window.__m3dTest.trace = [];
     if (!resume) autoLockedSide = 'right';
     if (controls) controls.enabled = false;
     setPlayIcon('stop');
@@ -1592,6 +1593,10 @@ const Meridian3D = (() => {
         currentPoint = rec;
         autoCursor = { mIndex, pIndex: i, phase: 'point' };
         highlightPoint(rec);
+        if (window.__m3dTest) {
+          if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
+          window.__m3dTest.trace.push(rec.name);
+        }
         await framePointIfNeeded(rec, false, gen);
         if (autoAbort || gen !== playGeneration) return;
         await holdForTest(rec);
@@ -1772,6 +1777,8 @@ const Meridian3D = (() => {
       bodyHeight: () => bodyHeight,
       lastReframe: () => lastReframeName,
       reframeLog: () => reframeLog.slice(),
+      stopAfter: '',
+      trace: [],
       ndcOf(name) {
         const rec = testRecord(name);
         if (!rec || !camera) return null;
