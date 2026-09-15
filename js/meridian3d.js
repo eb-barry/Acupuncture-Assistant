@@ -567,15 +567,6 @@ const Meridian3D = (() => {
     return Math.min(MAX_PAIR_HANDLES, Math.max(1, Math.round(dist / (mm * HANDLE_SPACING_MM))));
   }
 
-  function projectKeep(sample) {
-    const snapped = snapToSkin(sample.position, sample.normal, 18);
-    return {
-      type: sample.type || 'control',
-      position: snapped.position,
-      normal: snapped.normal,
-    };
-  }
-
   function densifyNodes(nodes) {
     const mm = worldPerMm();
     const prepared = nodes.map((node) => {
