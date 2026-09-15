@@ -206,13 +206,13 @@ const Meridian3D = (() => {
 
   function focusTorsoItems(items, height) {
     if (!items.length || items.length <= 28) return items;
-    const lo = height * 0.11;
-    const hi = height * 0.8;
-    const core = items.filter((it) => {
-      const name = it.rec && it.rec.name;
-      if (name === '會陽' || (name && name.endsWith('髎'))) return true;
-      return it.py >= lo && it.py <= hi;
-    });
+    const ys = items.map((it) => it.py).sort((a, b) => a - b);
+    const y0 = ys[0];
+    const span = Math.max(1, ys[ys.length - 1] - y0);
+    const lo = y0 + span * 0.1;
+    const hi = y0 + span * 0.72;
+    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || (name && name.endsWith('髎'));
+    const core = items.filter((it) => keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
     return core.length >= 8 ? core : items;
   }
 
