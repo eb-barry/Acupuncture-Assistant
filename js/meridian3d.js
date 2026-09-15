@@ -29,10 +29,9 @@ const Meridian3D = (() => {
   const MARKER_DIAMETER_MM = 7;
   const SKIN_LIFT_MM = 0.4;
   const SAMPLE_STEP_MM = 1.5;
-  const CONFORM_STEP_MM = 18;
-  const LONG_CHORD_MM = 70;
-  const MAX_CONFORM_PULL_MM = 14;
-  const FLOAT_LIFT_MM = 1.0;
+  const HANDLE_MIN_ARC_MM = 25.5;
+  const HANDLE_SPACING_MM = 40.9;
+  const MAX_PAIR_HANDLES = 5;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -71,7 +70,6 @@ const Meridian3D = (() => {
   let playGeneration = 0;
   let calloutsDirty = true;
   let orbiting = false;
-  let conformRay = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -376,7 +374,6 @@ const Meridian3D = (() => {
     bodyMeshes = [];
     pickables = [];
     loadedGender = null;
-    conformRay = null;
     clearCallouts();
     if (skinMaterial) { skinMaterial.dispose(); skinMaterial = null; }
     if (nailMaterial) { nailMaterial.dispose(); nailMaterial = null; }
@@ -422,23 +419,27 @@ const Meridian3D = (() => {
     return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
   }
 
-  function lookAtWorld(position) {
+  function lookAtWorld(position, normal) {
     if (!camera || !controls || !position) return;
-    const dist = framingDistance();
-    const targetY = bodyHeight * 0.42;
-    const px = Number(position[0]) || 0;
-    const pz = Number(position[2]) || 0;
-    let az = Math.atan2(px, pz);
-    if (!Number.isFinite(az)) az = 0;
-    az = Math.max(-0.95, Math.min(0.95, az * 0.55));
+    const { THREE } = three;
+    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    if (Math.abs(n.y) > 0.92) {
+      n.add(new THREE.Vector3(0, 0, 0.35)).normalize();
+    }
+    const front = new THREE.Vector3(0, 0.08, 1).normalize();
+    if (n.dot(front) < 0.15) n.lerp(front, 0.7).normalize();
+    const dist = bodyHeight * 0.38 / Math.max(opts.scale, 0.5);
+    const target = new THREE.Vector3().fromArray(position);
     camera.zoom = 1;
     camera.near = Math.max(bodyHeight / 200, 0.01);
     camera.far = bodyHeight * 40;
     camera.updateProjectionMatrix();
-    camera.position.set(Math.sin(az) * dist, bodyHeight * 0.52, Math.cos(az) * dist);
+    camera.position.copy(target).addScaledVector(n, dist);
     camera.up.set(0, 1, 0);
-    controls.target.set(0, targetY, 0);
-    camera.lookAt(controls.target);
+    controls.target.copy(target);
+    camera.lookAt(target);
     controls.minDistance = bodyHeight * 0.08;
     controls.maxDistance = bodyHeight * 12;
     controls.update();
@@ -560,20 +561,37 @@ const Meridian3D = (() => {
     return out;
   }
 
+  function segmentHandleCount(dist, mm) {
+    if (!(dist > mm * HANDLE_MIN_ARC_MM)) return 0;
+    return Math.min(MAX_PAIR_HANDLES, Math.max(1, Math.round(dist / (mm * HANDLE_SPACING_MM))));
+  }
+
+  function projectKeep(sample) {
+    const snapped = snapToSkin(sample.position, sample.normal);
+    return {
+      type: sample.type || 'control',
+      position: snapped.position,
+      normal: snapped.normal,
+    };
+  }
+
   function densifyNodes(nodes) {
     const mm = worldPerMm();
     const prepared = nodes.map((node) => {
       const n = node.normal || [0, 0, 1];
       const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
-      return {
+      const mapped = {
+        type: node.type === 'control' ? 'control' : 'acupoint',
         position: toWorld(node.position),
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
       };
+      return projectKeep(mapped);
     }).filter((n) => n.position);
-    const hugged = [];
+
+    const located = [];
     prepared.forEach((node, i) => {
       if (i === 0) {
-        hugged.push(node);
+        located.push(node);
         return;
       }
       const prev = prepared[i - 1];
@@ -582,53 +600,23 @@ const Meridian3D = (() => {
         node.position[1] - prev.position[1],
         node.position[2] - prev.position[2],
       );
-      const needsHug = three && dist > mm * LONG_CHORD_MM;
-      const step = mm * (needsHug ? CONFORM_STEP_MM : SAMPLE_STEP_MM);
-      const segs = Math.max(1, Math.ceil(dist / Math.max(step, 1e-5)));
-      for (let s = 1; s <= segs; s++) {
-        let sample = lerpNode(prev, node, s / segs);
-        if (needsHug) sample = conformSample(three.THREE, sample.position, sample.normal);
-        hugged.push(sample);
+      const jsonHasLocator = prev.type === 'control' || node.type === 'control';
+      const count = jsonHasLocator ? 0 : segmentHandleCount(dist, mm);
+      for (let k = 1; k <= count; k++) {
+        const t = k / (count + 1);
+        const sample = lerpNode(prev, node, t);
+        const bulge = Math.sin(Math.PI * t) * mm * 8;
+        sample.position = [
+          sample.position[0] + sample.normal[0] * bulge,
+          sample.position[1] + sample.normal[1] * bulge,
+          sample.position[2] + sample.normal[2] * bulge,
+        ];
+        sample.type = 'control';
+        located.push(projectKeep(sample));
       }
+      located.push(node);
     });
-    return densifyPolyline(hugged, mm * SAMPLE_STEP_MM);
-  }
-
-  function conformSample(THREE, position, normal) {
-    const mm = worldPerMm();
-    const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
-    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
-    else n.normalize();
-    const nArr = [n.x, n.y, n.z];
-    const floated = [
-      position[0] + n.x * mm * FLOAT_LIFT_MM,
-      position[1] + n.y * mm * FLOAT_LIFT_MM,
-      position[2] + n.z * mm * FLOAT_LIFT_MM,
-    ];
-    if (!bodyMeshes.length) return { position: floated, normal: nArr };
-
-    const search = mm * 24;
-    const origin = new THREE.Vector3().fromArray(position).addScaledVector(n, search);
-    if (!conformRay) conformRay = new THREE.Raycaster();
-    conformRay.near = 0;
-    conformRay.far = search + mm * MAX_CONFORM_PULL_MM;
-    conformRay.set(origin, n.clone().negate());
-    const hit = conformRay.intersectObjects(bodyMeshes, false)[0];
-    if (!hit) return { position: floated, normal: nArr };
-
-    let hn = n.clone();
-    if (hit.face && hit.object) {
-      hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
-    }
-    const maxPull = mm * MAX_CONFORM_PULL_MM;
-    const chord = new THREE.Vector3().fromArray(position);
-    if (hn.dot(n) < 0.05 || hit.point.distanceTo(chord) > maxPull) {
-      return { position: floated, normal: nArr };
-    }
-    return {
-      position: [hit.point.x, hit.point.y, hit.point.z],
-      normal: [hn.x, hn.y, hn.z],
-    };
+    return densifyPolyline(located, mm * SAMPLE_STEP_MM);
   }
 
   function addRibbon(THREE, samples, color) {
