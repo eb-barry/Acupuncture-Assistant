@@ -513,7 +513,7 @@ const Meridian3D = (() => {
     const damping = controls.enableDamping;
     controls.enableDamping = false;
     applyCameraLimits();
-    controls.target.set(0, bodyHeight * 0.42, 0);
+    controls.target.set(0, frameLookAtY(), 0);
     camera.zoom = 1;
     camera.position.set(x, y, z);
     camera.up.set(0, 1, 0);
@@ -524,11 +524,11 @@ const Meridian3D = (() => {
   }
 
   function faceFront() {
-    jumpCamera(0, bodyHeight * 0.5, framingDistance());
+    jumpCamera(0, frameCameraY(), framingDistance());
   }
 
   function faceBack() {
-    jumpCamera(0, bodyHeight * 0.5, -framingDistance());
+    jumpCamera(0, frameCameraY(), -framingDistance());
   }
 
   function framingDistance() {
@@ -536,6 +536,16 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const fov = THREE.MathUtils.degToRad(camera.fov);
     return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(viewScale(), 0.5);
+  }
+
+  function frameLookAtY() {
+    const s = Math.min(Math.max(viewScale(), 0.5), 5);
+    const t = Math.min(1, Math.max(0, (s - 1) / 1.5));
+    return bodyHeight * (0.42 + 0.16 * t);
+  }
+
+  function frameCameraY() {
+    return frameLookAtY() + bodyHeight * 0.08;
   }
 
   function applyCameraLimits() {
@@ -577,7 +587,7 @@ const Meridian3D = (() => {
       else dir.normalize();
       pose.target.lerp(point, 0.35);
       pose.pos.copy(pose.target).addScaledVector(dir, dist);
-      pose.pos.y = bodyHeight * 0.5;
+      pose.pos.y = frameCameraY();
       return pose;
     }
     const sx = (ndc.x * 0.5 + 0.5) * width;
@@ -612,8 +622,8 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const n = viewNormal(normal);
     const dist = framingDistance();
-    const target = new THREE.Vector3(0, bodyHeight * 0.42, 0);
-    const pos = new THREE.Vector3(0, bodyHeight * 0.5, 0).addScaledVector(n, dist);
+    const target = new THREE.Vector3(0, frameLookAtY(), 0);
+    const pos = new THREE.Vector3(0, frameCameraY(), 0).addScaledVector(n, dist);
     const pose = panPoseToKeepPoint({ pos, target }, position);
     const dir = pose.pos.clone().sub(pose.target);
     if (dir.lengthSq() > 1e-8) {
