@@ -497,18 +497,19 @@ const Meridian3D = (() => {
     ];
   }
 
-  function snapToSkin(worldPos, normal) {
+  function snapToSkin(worldPos, normal, maxPullMm = 10) {
     if (!three || !bodyMeshes.length) return { position: worldPos, normal: normal || [0, 0, 1] };
     const { THREE } = three;
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     const mm = worldPerMm();
-    const origin = new THREE.Vector3().fromArray(worldPos).addScaledVector(n, mm * 12);
+    const pull = Number(maxPullMm) > 0 ? maxPullMm : 10;
+    const origin = new THREE.Vector3().fromArray(worldPos).addScaledVector(n, mm * (pull + 2));
     const hit = raycastSkin(THREE, origin, n.clone().negate());
     if (!hit) return { position: worldPos, normal: [n.x, n.y, n.z] };
     const mapped = new THREE.Vector3().fromArray(worldPos);
-    if (hit.point.distanceTo(mapped) > mm * 10) {
+    if (hit.point.distanceTo(mapped) > mm * pull) {
       return { position: worldPos, normal: [n.x, n.y, n.z] };
     }
     const hn = hit.face && hit.object
@@ -567,7 +568,7 @@ const Meridian3D = (() => {
   }
 
   function projectKeep(sample) {
-    const snapped = snapToSkin(sample.position, sample.normal);
+    const snapped = snapToSkin(sample.position, sample.normal, 18);
     return {
       type: sample.type || 'control',
       position: snapped.position,
@@ -580,12 +581,11 @@ const Meridian3D = (() => {
     const prepared = nodes.map((node) => {
       const n = node.normal || [0, 0, 1];
       const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
-      const mapped = {
+      return {
         type: node.type === 'control' ? 'control' : 'acupoint',
         position: toWorld(node.position),
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
       };
-      return projectKeep(mapped);
     }).filter((n) => n.position);
 
     const located = [];
