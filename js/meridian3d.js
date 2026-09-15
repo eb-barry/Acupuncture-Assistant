@@ -29,9 +29,12 @@ const Meridian3D = (() => {
   const MARKER_DIAMETER_MM = 7;
   const SKIN_LIFT_MM = 0.4;
   const SAMPLE_STEP_MM = 1.5;
-  const HANDLE_MIN_ARC_MM = 70;
+  const HANDLE_MIN_ARC_MM = 32;
   const HANDLE_SPACING_MM = 40.9;
+  const HANDLE_BULGE_MM = 22;
+  const RIBBON_HUG_MM = 36;
   const MAX_PAIR_HANDLES = 5;
+  const ROUTE_BREAK_MM = 200;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -124,19 +127,130 @@ const Meridian3D = (() => {
     return sides;
   }
 
+  function clusterByX(items, width) {
+    const sorted = [...items].sort((a, b) => a.px - b.px);
+    const minGap = Math.max(8, width * 0.022);
+    const clusters = [];
+    let cur = [];
+    sorted.forEach((it) => {
+      if (cur.length && it.px - cur[cur.length - 1].px > minGap) {
+        clusters.push(cur);
+        cur = [];
+      }
+      cur.push(it);
+    });
+    if (cur.length) clusters.push(cur);
+    return clusters;
+  }
+
+  function dedupeParkItems(items, park) {
+    const byName = new Map();
+    items.forEach((it) => {
+      const key = it.rec && it.rec.name;
+      if (!key) return;
+      const prev = byName.get(key);
+      if (!prev) {
+        byName.set(key, it);
+        return;
+      }
+      const keep = park === 'right'
+        ? (it.px >= prev.px ? it : prev)
+        : (it.px <= prev.px ? it : prev);
+      byName.set(key, keep);
+    });
+    return [...byName.values()];
+  }
+
+  function clusterMedian(cluster) {
+    return cluster.reduce((sum, it) => sum + it.px, 0) / cluster.length;
+  }
+
+  function clusterScore(cluster) {
+    const ys = cluster.map((it) => it.py);
+    return cluster.length * (Math.max(...ys) - Math.min(...ys) + 12);
+  }
+
   function pickEdgeItems(items, park, width) {
     if (!items.length) return items;
-    const mid = width * 0.5;
-    if (park === 'right') {
-      const onSide = items.filter((it) => it.px >= mid);
-      if (onSide.length) return onSide;
-      const maxX = Math.max(...items.map((it) => it.px));
-      return items.filter((it) => it.px >= maxX - Math.max(28, width * 0.08));
+    const clusters = clusterByX(items, width);
+    const screenMid = width * 0.5;
+    let parkClusters = clusters.filter((cluster) => {
+      const med = clusterMedian(cluster);
+      return park === 'right' ? med >= screenMid : med <= screenMid;
+    });
+    if (parkClusters.length < 2) {
+      parkClusters = park === 'right' ? clusters.slice(-3) : clusters.slice(0, 3);
     }
-    const onSide = items.filter((it) => it.px <= mid);
-    if (onSide.length) return onSide;
-    const minX = Math.min(...items.map((it) => it.px));
-    return items.filter((it) => it.px <= minX + Math.max(28, width * 0.08));
+    if (!parkClusters.length) return items;
+    const ranked = [...parkClusters].sort((a, b) => clusterScore(b) - clusterScore(a));
+    const main = ranked.slice(0, 2);
+    const kept = new Set(main);
+    const mainMeds = main.map(clusterMedian);
+    const innerBound = park === 'right' ? Math.min(...mainMeds) : Math.max(...mainMeds);
+    parkClusters.forEach((cluster) => {
+      if (kept.has(cluster)) return;
+      const med = clusterMedian(cluster);
+      const moreMedial = park === 'right' ? med <= innerBound + 6 : med >= innerBound - 6;
+      if (moreMedial && cluster.length >= 3) kept.add(cluster);
+    });
+    const out = [];
+    kept.forEach((cluster) => out.push(...cluster));
+    items.forEach((it) => {
+      const name = it.rec && it.rec.name;
+      if (name === '會陽' || (name && name.endsWith('髎'))) {
+        if (!out.includes(it)) out.push(it);
+      }
+    });
+    return out.length ? out : items;
+  }
+
+  function focusTorsoItems(items) {
+    if (!items.length || items.length <= 28) return items;
+    const ys = items.map((it) => it.py).sort((a, b) => a - b);
+    const y0 = ys[0];
+    const span = Math.max(1, ys[ys.length - 1] - y0);
+    const lo = y0 + span * 0.1;
+    const hi = y0 + span * 0.72;
+    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || (name && name.endsWith('髎'));
+    const core = items.filter((it) => keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
+    return core.length >= 8 ? core : items;
+  }
+
+  function splitCalloutColumns(items, park, width) {
+    if (!items.length) return [];
+    const yTol = Math.max(12, (items[0]?.textH || 16) * 0.9);
+    const ranked = [...items].sort((a, b) => a.py - b.py);
+    ranked.forEach((it) => { it.indent = 0; });
+    for (let i = 0; i < ranked.length; i++) {
+      for (let j = i + 1; j < ranked.length; j++) {
+        if (ranked[j].py - ranked[i].py > yTol) break;
+        const outer = park === 'right'
+          ? (ranked[i].px >= ranked[j].px ? ranked[i] : ranked[j])
+          : (ranked[i].px <= ranked[j].px ? ranked[i] : ranked[j]);
+        const inner = outer === ranked[i] ? ranked[j] : ranked[i];
+        inner.indent = 1;
+      }
+    }
+    const outerItems = ranked.filter((it) => !it.indent);
+    const innerItems = ranked.filter((it) => it.indent);
+    if (innerItems.length) {
+      return [
+        { items: outerItems, indent: 0 },
+        { items: innerItems, indent: 1 },
+      ];
+    }
+    const clusters = clusterByX(items, width);
+    if (clusters.length < 2) return [{ items: ranked, indent: 0 }];
+    if (park === 'right') {
+      return [
+        { items: clusters[clusters.length - 1], indent: 0 },
+        { items: clusters.slice(0, -1).flat(), indent: 1 },
+      ];
+    }
+    return [
+      { items: clusters[0], indent: 0 },
+      { items: clusters.slice(1).flat(), indent: 1 },
+    ];
   }
 
   function worldPerMm() {
@@ -397,19 +511,29 @@ const Meridian3D = (() => {
     calloutsDirty = true;
   }
 
-  function faceFront() {
+  function jumpCamera(x, y, z) {
     if (!camera || !controls) return;
-    const dist = framingDistance();
+    const damping = controls.enableDamping;
+    controls.enableDamping = false;
     controls.target.set(0, bodyHeight * 0.42, 0);
     camera.zoom = 1;
     camera.near = Math.max(bodyHeight / 200, 0.01);
     camera.far = bodyHeight * 40;
     camera.updateProjectionMatrix();
-    camera.position.set(0, bodyHeight * 0.5, dist);
+    camera.position.set(x, y, z);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
     controls.update();
+    controls.enableDamping = damping;
     noteCameraMoving(280);
+  }
+
+  function faceFront() {
+    jumpCamera(0, bodyHeight * 0.5, framingDistance());
+  }
+
+  function faceBack() {
+    jumpCamera(0, bodyHeight * 0.5, -framingDistance());
   }
 
   function framingDistance() {
@@ -543,6 +667,30 @@ const Meridian3D = (() => {
     return { position: pos, normal: [nrm[0] / len, nrm[1] / len, nrm[2] / len] };
   }
 
+  function splitRouteNodes(nodes) {
+    const mm = worldPerMm();
+    const maxJump = mm * ROUTE_BREAK_MM;
+    const chunks = [];
+    let cur = [];
+    (nodes || []).forEach((node) => {
+      if (!cur.length) {
+        cur.push(node);
+        return;
+      }
+      const a = toWorld(cur[cur.length - 1].position);
+      const b = toWorld(node.position);
+      const dist = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      if (dist > maxJump) {
+        if (cur.length >= 2) chunks.push(cur);
+        cur = [node];
+        return;
+      }
+      cur.push(node);
+    });
+    if (cur.length >= 2) chunks.push(cur);
+    return chunks;
+  }
+
   function densifyPolyline(nodes, step) {
     const out = [];
     nodes.forEach((node, i) => {
@@ -591,12 +739,11 @@ const Meridian3D = (() => {
         node.position[1] - prev.position[1],
         node.position[2] - prev.position[2],
       );
-      const jsonHasLocator = prev.type === 'control' || node.type === 'control';
-      const count = jsonHasLocator ? 0 : segmentHandleCount(dist, mm);
+      const count = segmentHandleCount(dist, mm);
       for (let k = 1; k <= count; k++) {
         const t = k / (count + 1);
         const sample = lerpNode(prev, node, t);
-        const bulge = Math.sin(Math.PI * t) * mm * 8;
+        const bulge = Math.sin(Math.PI * t) * mm * HANDLE_BULGE_MM;
         sample.position = [
           sample.position[0] + sample.normal[0] * bulge,
           sample.position[1] + sample.normal[1] * bulge,
@@ -606,6 +753,12 @@ const Meridian3D = (() => {
         located.push(sample);
       }
       located.push(node);
+    });
+    located.forEach((node) => {
+      const pull = node.type === 'acupoint' ? 12 : RIBBON_HUG_MM;
+      const hugged = snapToSkin(node.position, node.normal, pull);
+      node.position = hugged.position;
+      node.normal = hugged.normal;
     });
     return densifyPolyline(located, mm * SAMPLE_STEP_MM);
   }
@@ -750,18 +903,23 @@ const Meridian3D = (() => {
     const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
-    if (n.dot(toCam) < 0.12) return false;
+    const facing = n.dot(toCam);
+    if (facing < 0) return false;
     const screen = projectToScreen(rec.position, width, height);
     if (!screen) return false;
-    if (screen.x < -20 || screen.x > width + 20 || screen.y < -20 || screen.y > height + 20) {
+    if (screen.x < -8 || screen.x > width + 8 || screen.y < -8 || screen.y > height + 8) {
       return false;
     }
+    if (facing >= 0.12) return true;
     const dir = world.clone().sub(cam).normalize();
-    const slack = Math.max(worldPerMm() * 4, dist * 0.012);
+    const slack = Math.max(worldPerMm() * 40, dist * 0.06);
     const ray = new THREE.Raycaster(cam, dir, 0, Math.max(dist - slack, 0));
     const hits = ray.intersectObjects(bodyMeshes, true);
-    if (hits.length && hits[0].distance < dist - slack) return false;
-    return true;
+    if (!hits.length) return true;
+    const hit = hits[0];
+    if (hit.distance >= dist - slack) return true;
+    if (hit.point.distanceTo(world) <= worldPerMm() * 50) return true;
+    return false;
   }
 
   function measureCallout(name) {
@@ -772,6 +930,11 @@ const Meridian3D = (() => {
 
   function packSlots(items, height, slotH, pad) {
     items.sort((a, b) => a.py - b.py);
+    const minSlot = Math.max(14, slotH * 0.72);
+    const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
+    if (items.length > maxN) {
+      items.splice(maxN);
+    }
     let next = pad;
     const bot = height - pad;
     items.forEach((item) => {
@@ -834,33 +997,37 @@ const Meridian3D = (() => {
       });
     });
 
-    buckets.right = pickEdgeItems(buckets.right, 'right', width);
-    buckets.left = pickEdgeItems(buckets.left, 'left', width);
-
-    packSlots(buckets.right, height, Math.max(16, (buckets.right[0]?.textH || 16) + 3), pad + 6);
-    packSlots(buckets.left, height, Math.max(16, (buckets.left[0]?.textH || 16) + 3), pad + 6);
+    buckets.right = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width));
+    buckets.left = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width));
 
     const laid = [];
     ['right', 'left'].forEach((park) => {
-      buckets[park].forEach((item) => {
-        const slotY = item.slotY;
-        if (park === 'right') {
-          let textX = width - pad - item.textW;
-          if (textX < item.px + 10) textX = item.px + 10;
-          if (textX + item.textW > width - 2) textX = width - item.textW - 2;
-          const joinX = textX;
-          const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
-          const elbowX = Math.max(item.px + 6, joinX - horiz);
-          laid.push({ ...item, textX, elbowX, slotY, park });
-        } else {
-          let textX = pad;
-          if (textX + item.textW + 10 > item.px) textX = item.px - item.textW - 10;
-          if (textX < 2) textX = 2;
-          const joinX = textX + item.textW;
-          const horiz = Math.min(28, Math.max(8, Math.abs(item.px - joinX) * 0.28));
-          const elbowX = Math.min(item.px - 6, joinX + horiz);
-          laid.push({ ...item, textX, elbowX, slotY, park });
-        }
+      const columns = splitCalloutColumns(buckets[park], park, width);
+      columns.forEach((col) => {
+        const slotH = Math.max(16, (col.items[0]?.textH || 16) + 3);
+        packSlots(col.items, height, slotH, pad + 6);
+        col.items.forEach((item) => {
+          const slotY = item.slotY;
+          if (park === 'right') {
+            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
+            let textX = width - pad - item.textW - inset;
+            if (textX < item.px + 10) textX = item.px + 10;
+            if (textX + item.textW > width - 2) textX = width - item.textW - 2;
+            const joinX = textX;
+            const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
+            const elbowX = Math.max(item.px + 6, joinX - horiz);
+            laid.push({ ...item, textX, elbowX, slotY, park });
+          } else {
+            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
+            let textX = pad + inset;
+            if (textX + item.textW + 10 > item.px) textX = item.px - item.textW - 10;
+            if (textX < 2) textX = 2;
+            const joinX = textX + item.textW;
+            const horiz = Math.min(28, Math.max(8, Math.abs(item.px - joinX) * 0.28));
+            const elbowX = Math.min(item.px - 6, joinX + horiz);
+            laid.push({ ...item, textX, elbowX, slotY, park });
+          }
+        });
       });
     });
 
@@ -935,8 +1102,9 @@ const Meridian3D = (() => {
     (doc.meridians || []).forEach((route) => {
       if (!selectedIds.has(route.meridianId) || !sideAllowed(route.side)) return;
       const color = route.color || lineColorFor(route.meridianId);
-      const samples = densifyNodes(route.nodes || []);
-      addRibbon(THREE, samples, color);
+      splitRouteNodes(route.nodes || []).forEach((chunk) => {
+        addRibbon(THREE, densifyNodes(chunk), color);
+      });
     });
 
     (doc.acupoints || []).forEach((p) => {
@@ -1012,9 +1180,12 @@ const Meridian3D = (() => {
     controls.dampingFactor = 0.08;
     controls.touches.ONE = THREE.TOUCH.ROTATE;
     controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
-    controls.addEventListener('change', () => { noteCameraMoving(220); });
+    controls.addEventListener('change', () => {
+      if (orbiting) hideCallouts();
+      else calloutsDirty = true;
+    });
     controls.addEventListener('start', () => { orbiting = true; hideCallouts(); });
-    controls.addEventListener('end', () => { orbiting = false; noteCameraMoving(260); });
+    controls.addEventListener('end', () => { orbiting = false; noteCameraMoving(280); });
 
     const loop = () => {
       raf = requestAnimationFrame(loop);
@@ -1370,8 +1541,36 @@ const Meridian3D = (() => {
     $('m3d-hint').hidden = false;
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindUi);
-  else bindUi();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindUi);
+    else bindUi();
 
-  return { enter, leave };
+    window.__m3dTest = {
+      faceFront: () => { faceFront(); calloutsDirty = true; },
+      faceBack: () => { faceBack(); calloutsDirty = true; },
+      cam() {
+        if (!camera || !controls) return null;
+        return {
+          pos: camera.position.toArray().map((n) => Math.round(n * 1000) / 1000),
+          target: controls.target.toArray().map((n) => Math.round(n * 1000) / 1000),
+        };
+      },
+      yaw(deg) {
+        if (!camera || !controls || !three) return;
+        const { THREE } = three;
+        const damping = controls.enableDamping;
+        controls.enableDamping = false;
+        const q = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0),
+          THREE.MathUtils.degToRad(deg),
+        );
+        camera.position.sub(controls.target).applyQuaternion(q).add(controls.target);
+        camera.lookAt(controls.target);
+        controls.update();
+        controls.enableDamping = damping;
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
+    };
+
+    return { enter, leave };
 })();
