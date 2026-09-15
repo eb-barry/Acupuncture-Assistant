@@ -1,6 +1,6 @@
 /**
  * meridian3d.js — 3D 經絡檢視（讀取經脈繪圖室出版地圖）
- * 延遲載入 Three.js；Play 才載 GLB。自動模式鎖定畫面右側（hamburger / +X）。
+ * 延遲載入 Three.js；Play 才載 GLB。自動模式固定 2.5 倍、鎖定解剖學右側，並依穴位朝向翻面。
  */
 const Meridian3D = (() => {
 
@@ -35,6 +35,8 @@ const Meridian3D = (() => {
   const RIBBON_HUG_MM = 36;
   const MAX_PAIR_HANDLES = 5;
   const ROUTE_BREAK_MM = 200;
+  const AUTO_SCALE = 2.5;
+  const EDGE_MARGIN = 0.1;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -112,7 +114,11 @@ const Meridian3D = (() => {
     hideCallouts();
   }
 
-  function labelSideByMeridian(selected) {
+  function viewScale() {
+    return playingAuto ? AUTO_SCALE : (Number(opts.scale) || 1);
+  }
+
+  function labelSideByMeridian(selected, width, itemsByMeridian) {
     const sides = new Map();
     const flexible = [];
     selected.forEach((m) => {
@@ -121,8 +127,17 @@ const Meridian3D = (() => {
     });
     if (flexible.length >= 2) {
       flexible.forEach((m, i) => sides.set(m.id, i % 2 === 0 ? 'right' : 'left'));
-    } else {
-      flexible.forEach((m) => sides.set(m.id, 'right'));
+      return sides;
+    }
+    if (flexible.length === 1) {
+      const m = flexible[0];
+      const pts = (itemsByMeridian && itemsByMeridian.get(m.id)) || [];
+      if (pts.length) {
+        const avg = pts.reduce((sum, it) => sum + it.px, 0) / pts.length;
+        sides.set(m.id, avg < width * 0.5 ? 'left' : 'right');
+      } else {
+        sides.set(m.id, 'right');
+      }
     }
     return sides;
   }
@@ -383,13 +398,17 @@ const Meridian3D = (() => {
       };
       utt.onend = finish;
       utt.onerror = finish;
-      const timer = setTimeout(finish, Math.min(12000, Math.max(2200, String(text).length * 420)));
+      const cap = (window.__m3dTest && window.__m3dTest.fastAuto)
+        ? 80
+        : Math.min(12000, Math.max(2200, String(text).length * 420));
+      const timer = setTimeout(finish, cap);
       try { synth.speak(utt); }
       catch { finish(); }
     });
   }
 
   function sleep(ms) {
+    if (window.__m3dTest && window.__m3dTest.fastAuto) ms = Math.min(ms, 80);
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
@@ -497,16 +516,12 @@ const Meridian3D = (() => {
     if (!camera || !controls || !bodyHeight || playingAuto) return;
     const { THREE } = three;
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const dist = (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
+    const dist = (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(viewScale(), 0.5);
     const target = controls.target.clone();
     const dir = camera.position.clone().sub(target).normalize();
     if (dir.lengthSq() < 1e-6) dir.set(0, 0.15, 1).normalize();
     camera.position.copy(target).addScaledVector(dir, dist);
-    camera.near = Math.max(bodyHeight / 200, 0.01);
-    camera.far = bodyHeight * 40;
-    camera.updateProjectionMatrix();
-    controls.minDistance = bodyHeight * 0.08;
-    controls.maxDistance = bodyHeight * 12;
+    applyCameraLimits();
     controls.update();
     calloutsDirty = true;
   }
@@ -515,11 +530,9 @@ const Meridian3D = (() => {
     if (!camera || !controls) return;
     const damping = controls.enableDamping;
     controls.enableDamping = false;
+    applyCameraLimits();
     controls.target.set(0, bodyHeight * 0.42, 0);
     camera.zoom = 1;
-    camera.near = Math.max(bodyHeight / 200, 0.01);
-    camera.far = bodyHeight * 40;
-    camera.updateProjectionMatrix();
     camera.position.set(x, y, z);
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
@@ -540,33 +553,155 @@ const Meridian3D = (() => {
     if (!camera || !three) return bodyHeight * 2;
     const { THREE } = three;
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(opts.scale, 0.5);
+    return (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(viewScale(), 0.5);
   }
 
-  function lookAtWorld(position, normal) {
-    if (!camera || !controls || !position) return;
+  function poseDistance() {
+    return bodyHeight * 0.38 / Math.max(viewScale(), 0.5);
+  }
+
+  function applyCameraLimits() {
+    if (!camera || !controls || !bodyHeight) return;
+    camera.near = Math.max(bodyHeight / 200, 0.01);
+    camera.far = Math.max(bodyHeight * 40, camera.near * 20);
+    camera.updateProjectionMatrix();
+    const want = poseDistance();
+    controls.minDistance = Math.min(bodyHeight * 0.08, want * 0.45);
+    controls.maxDistance = Math.max(bodyHeight * 12, want * 8);
+  }
+
+  function viewNormal(normal) {
     const { THREE } = three;
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     if (Math.abs(n.y) > 0.92) {
-      n.add(new THREE.Vector3(0, 0, 0.35)).normalize();
+      n.add(new THREE.Vector3(0, 0, n.z < 0 ? -0.35 : 0.35)).normalize();
     }
-    const front = new THREE.Vector3(0, 0.08, 1).normalize();
-    if (n.dot(front) < 0.15) n.lerp(front, 0.7).normalize();
-    const dist = bodyHeight * 0.38 / Math.max(opts.scale, 0.5);
+    return n;
+  }
+
+  function cameraPoseForPoint(position, normal) {
+    const { THREE } = three;
+    const n = viewNormal(normal);
     const target = new THREE.Vector3().fromArray(position);
+    const pos = target.clone().addScaledVector(n, poseDistance());
+    return { pos, target };
+  }
+
+  function viewportSize() {
+    if (!renderer) return { width: 1, height: 1 };
+    const rect = renderer.domElement.getBoundingClientRect();
+    return { width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
+  }
+
+  function needsReframe(rec) {
+    if (!rec || !camera || !controls || !three) return true;
+    const { THREE } = three;
+    const { width, height } = viewportSize();
+    const screen = projectToScreen(rec.position, width, height);
+    if (!screen) return true;
+    const m = Math.min(width, height) * EDGE_MARGIN;
+    if (screen.x < m || screen.x > width - m || screen.y < m || screen.y > height - m) return true;
+    const pose = cameraPoseForPoint(rec.position, rec.normal);
+    const curDir = camera.position.clone().sub(controls.target).normalize();
+    const wantDir = pose.pos.clone().sub(pose.target).normalize();
+    if (curDir.angleTo(wantDir) > THREE.MathUtils.degToRad(35)) return true;
+    const world = new THREE.Vector3().fromArray(rec.position);
+    const dist = camera.position.distanceTo(world);
+    const want = poseDistance();
+    if (dist > want * 1.55 || dist < want * 0.45) return true;
+    const toCam = camera.position.clone().sub(world);
+    if (toCam.lengthSq() < 1e-8) return true;
+    toCam.normalize();
+    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    if (n.dot(toCam) < 0.2) return true;
+    return false;
+  }
+
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
+  }
+
+  function moveDuration(fromPos, toPos, fromTarget, toTarget) {
+    const a = fromPos.clone().sub(fromTarget);
+    const b = toPos.clone().sub(toTarget);
+    if (a.lengthSq() < 1e-8 || b.lengthSq() < 1e-8) return 500;
+    a.normalize();
+    b.normalize();
+    const ang = a.angleTo(b);
+    const dist = fromPos.distanceTo(toPos) + fromTarget.distanceTo(toTarget);
+    const ms = 400 + (ang / Math.PI) * 700 + (dist / Math.max(bodyHeight, 0.5)) * 350;
+    return Math.max(400, Math.min(1200, ms));
+  }
+
+  function animateCameraTo(position, normal, gen) {
+    return new Promise((resolve) => {
+      if (!camera || !controls || !three || !position) { resolve(); return; }
+      applyCameraLimits();
+      const pose = cameraPoseForPoint(position, normal);
+      const startPos = camera.position.clone();
+      const startTarget = controls.target.clone();
+      let dur = moveDuration(startPos, pose.pos, startTarget, pose.target);
+      if (window.__m3dTest && window.__m3dTest.fastAuto) dur = 50;
+      const damping = controls.enableDamping;
+      controls.enableDamping = false;
+      const t0 = performance.now();
+      noteCameraMoving(dur + 80);
+      const step = () => {
+        if (autoAbort || (gen && gen !== playGeneration)) {
+          controls.enableDamping = damping;
+          resolve();
+          return;
+        }
+        const t = Math.min(1, (performance.now() - t0) / dur);
+        const e = easeInOutCubic(t);
+        camera.position.lerpVectors(startPos, pose.pos, e);
+        controls.target.lerpVectors(startTarget, pose.target, e);
+        camera.zoom = 1;
+        camera.up.set(0, 1, 0);
+        camera.lookAt(controls.target);
+        camera.near = Math.max(bodyHeight / 200, 0.01);
+        camera.far = bodyHeight * 40;
+        camera.updateProjectionMatrix();
+        controls.update();
+        if (t < 1) {
+          noteCameraMoving(80);
+          requestAnimationFrame(step);
+        } else {
+          controls.enableDamping = damping;
+          noteCameraMoving(280);
+          calloutsDirty = true;
+          resolve();
+        }
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  async function framePointIfNeeded(rec, force, gen) {
+    if (!rec) return;
+    if (!force && !needsReframe(rec)) return;
+    await animateCameraTo(rec.position, rec.normal, gen);
+    if (autoAbort || (gen && gen !== playGeneration)) return;
+    await sleep(300);
+  }
+
+  function lookAtWorld(position, normal) {
+    if (!camera || !controls || !position || !three) return;
+    applyCameraLimits();
+    const pose = cameraPoseForPoint(position, normal);
+    const damping = controls.enableDamping;
+    controls.enableDamping = false;
     camera.zoom = 1;
-    camera.near = Math.max(bodyHeight / 200, 0.01);
-    camera.far = bodyHeight * 40;
-    camera.updateProjectionMatrix();
-    camera.position.copy(target).addScaledVector(n, dist);
+    camera.position.copy(pose.pos);
     camera.up.set(0, 1, 0);
-    controls.target.copy(target);
-    camera.lookAt(target);
-    controls.minDistance = bodyHeight * 0.08;
-    controls.maxDistance = bodyHeight * 12;
+    controls.target.copy(pose.target);
+    camera.lookAt(pose.target);
     controls.update();
+    controls.enableDamping = damping;
     noteCameraMoving(320);
   }
 
@@ -715,7 +850,66 @@ const Meridian3D = (() => {
     return Math.min(MAX_PAIR_HANDLES, Math.max(1, Math.round(dist / (mm * HANDLE_SPACING_MM))));
   }
 
-  function densifyNodes(nodes) {
+  function acupointByPointId(pointId) {
+    if (!pointId) return null;
+    const doc = currentMap();
+    if (!doc) return null;
+    return (doc.acupoints || []).find((p) => p.id === pointId) || null;
+  }
+
+  function nearestAcupointMeta(worldPos, meridianId) {
+    const doc = currentMap();
+    if (!doc) return null;
+    const maxD = worldPerMm() * 25;
+    let best = null;
+    let bd = Infinity;
+    (doc.acupoints || []).forEach((p) => {
+      if (meridianId && p.meridianId !== meridianId) return;
+      const w = toWorld(p.position);
+      const d = Math.hypot(w[0] - worldPos[0], w[1] - worldPos[1], w[2] - worldPos[2]);
+      if (d < bd) {
+        bd = d;
+        best = p;
+      }
+    });
+    if (!best || bd > maxD) return null;
+    return best;
+  }
+
+  function innerBackDoglegs(prev, node, mm, meridianId) {
+    if (meridianId !== 'BL') return [];
+    if (prev.type !== 'acupoint' || node.type !== 'acupoint') return [];
+    const a = acupointByPointId(prev.pointId) || nearestAcupointMeta(prev.position, 'BL');
+    const b = acupointByPointId(node.pointId) || nearestAcupointMeta(node.position, 'BL');
+    if (!a || !b) return [];
+    const seqA = a.sequence || 0;
+    const seqB = b.sequence || 0;
+    if (seqA < 11 || seqA > 30 || seqB < 11 || seqB > 30) return [];
+    const dist = Math.hypot(
+      node.position[0] - prev.position[0],
+      node.position[1] - prev.position[1],
+      node.position[2] - prev.position[2],
+    );
+    if (dist > mm * ROUTE_BREAK_MM) return [];
+    const midX = (prev.position[0] + node.position[0]) * 0.5;
+    const towardGV = midX >= 0 ? -1 : 1;
+    const weaken = (seqA >= 28 || seqB >= 28) ? 0.35 : 1;
+    const offset = Math.min(dist * 0.28, Math.abs(midX) * 0.45, mm * 10) * weaken;
+    if (!(offset > mm * 1.2)) return [];
+    const spineGap = mm * 3;
+    return [0.28, 0.72].map((t) => {
+      const sample = lerpNode(prev, node, t);
+      let x = sample.position[0] + towardGV * offset;
+      if (towardGV > 0) x = Math.min(x, -spineGap);
+      else x = Math.max(x, spineGap);
+      sample.position = [x, sample.position[1], sample.position[2]];
+      sample.type = 'control';
+      sample.dogleg = true;
+      return sample;
+    });
+  }
+
+  function densifyNodes(nodes, meridianId) {
     const mm = worldPerMm();
     const prepared = nodes.map((node) => {
       const n = node.normal || [0, 0, 1];
@@ -724,6 +918,7 @@ const Meridian3D = (() => {
         type: node.type === 'control' ? 'control' : 'acupoint',
         position: toWorld(node.position),
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
+        pointId: node.pointId || null,
       };
     }).filter((n) => n.position);
 
@@ -739,24 +934,32 @@ const Meridian3D = (() => {
         node.position[1] - prev.position[1],
         node.position[2] - prev.position[2],
       );
-      const count = segmentHandleCount(dist, mm);
-      for (let k = 1; k <= count; k++) {
-        const t = k / (count + 1);
-        const sample = lerpNode(prev, node, t);
-        const bulge = Math.sin(Math.PI * t) * mm * HANDLE_BULGE_MM;
-        sample.position = [
-          sample.position[0] + sample.normal[0] * bulge,
-          sample.position[1] + sample.normal[1] * bulge,
-          sample.position[2] + sample.normal[2] * bulge,
-        ];
-        sample.type = 'control';
-        located.push(sample);
+      const doglegs = innerBackDoglegs(prev, node, mm, meridianId);
+      if (doglegs.length) {
+        doglegs.forEach((sample) => located.push(sample));
+      } else {
+        const count = segmentHandleCount(dist, mm);
+        for (let k = 1; k <= count; k++) {
+          const t = k / (count + 1);
+          const sample = lerpNode(prev, node, t);
+          const bulge = Math.sin(Math.PI * t) * mm * HANDLE_BULGE_MM;
+          sample.position = [
+            sample.position[0] + sample.normal[0] * bulge,
+            sample.position[1] + sample.normal[1] * bulge,
+            sample.position[2] + sample.normal[2] * bulge,
+          ];
+          sample.type = 'control';
+          located.push(sample);
+        }
       }
       located.push(node);
     });
     located.forEach((node) => {
       const pull = node.type === 'acupoint' ? 12 : RIBBON_HUG_MM;
-      const hugged = snapToSkin(node.position, node.normal, pull);
+      const snapN = node.dogleg
+        ? [0, 0, (node.normal && node.normal[2] < 0) ? -1 : 1]
+        : node.normal;
+      const hugged = snapToSkin(node.position, snapN, pull);
       node.position = hugged.position;
       node.normal = hugged.normal;
     });
@@ -976,9 +1179,7 @@ const Meridian3D = (() => {
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
 
-    const sides = labelSideByMeridian(selected);
-    const pad = 8;
-    const buckets = { left: [], right: [] };
+    const visible = [];
     pickables.forEach((obj) => {
       if (obj.userData.kind !== 'marker' || !obj.userData.point) return;
       const rec = obj.userData.point;
@@ -986,15 +1187,28 @@ const Meridian3D = (() => {
       const screen = projectToScreen(rec.position, width, height);
       if (!screen) return;
       const size = measureCallout(rec.name || '');
-      const park = sides.get(rec.meridianId) || 'right';
-      buckets[park].push({
+      visible.push({
         rec,
         px: screen.x,
         py: screen.y,
-        park,
         textW: size.w,
         textH: size.h,
       });
+    });
+
+    const byMer = new Map();
+    visible.forEach((it) => {
+      const id = it.rec.meridianId;
+      const arr = byMer.get(id) || [];
+      arr.push(it);
+      byMer.set(id, arr);
+    });
+    const sides = labelSideByMeridian(selected, width, byMer);
+    const pad = 8;
+    const buckets = { left: [], right: [] };
+    visible.forEach((it) => {
+      const park = sides.get(it.rec.meridianId) || 'right';
+      buckets[park].push({ ...it, park });
     });
 
     buckets.right = focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width));
@@ -1103,7 +1317,7 @@ const Meridian3D = (() => {
       if (!selectedIds.has(route.meridianId) || !sideAllowed(route.side)) return;
       const color = route.color || lineColorFor(route.meridianId);
       splitRouteNodes(route.nodes || []).forEach((chunk) => {
-        addRibbon(THREE, densifyNodes(chunk), color);
+        addRibbon(THREE, densifyNodes(chunk, route.meridianId), color);
       });
     });
 
@@ -1251,6 +1465,7 @@ const Meridian3D = (() => {
     const doc = await loadMap(wanted);
     if (loadedGender === wanted && modelRoot.children.length) {
       placeAnnotations();
+      applyCameraLimits();
       if (!playingAuto) {
         faceFront();
         applyScale();
@@ -1272,6 +1487,7 @@ const Meridian3D = (() => {
     root.position.y += -unframed.min.y;
     root.updateMatrixWorld(true);
     bodyHeight = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y || 1;
+    applyCameraLimits();
     bodyMeshes = [];
     applySurfaceFinish(root, THREE);
     root.traverse((obj) => {
@@ -1284,8 +1500,10 @@ const Meridian3D = (() => {
     modelRoot.add(root);
     loadedGender = wanted;
     placeAnnotations();
-    faceFront();
-    applyScale();
+    if (!playingAuto) {
+      faceFront();
+      applyScale();
+    }
   }
 
   async function playManual() {
@@ -1316,6 +1534,18 @@ const Meridian3D = (() => {
     }
   }
 
+  async function holdForTest(rec) {
+    while (
+      window.__m3dTest
+      && window.__m3dTest.stopAfter
+      && rec
+      && window.__m3dTest.stopAfter === rec.name
+      && !autoAbort
+    ) {
+      await sleep(50);
+    }
+  }
+
   async function playAuto(resume) {
     const list = selectedMeridians();
     if (!list.length) return;
@@ -1342,7 +1572,6 @@ const Meridian3D = (() => {
       return;
     }
     placeAnnotations();
-    if (!resume) faceFront();
     setLoading(false);
 
     let mIndex = resume && autoCursor ? autoCursor.mIndex : 0;
@@ -1356,9 +1585,10 @@ const Meridian3D = (() => {
       if (!pts.length) continue;
       setTitle(mer.name);
       autoCursor = { mIndex, pIndex: -1, phase: 'name' };
-      if (pts[0] && pts[0].position) {
+      if (pts[0]) {
         highlightPoint(pts[0]);
-        lookAtWorld(pts[0].position, pts[0].normal);
+        await framePointIfNeeded(pts[0], true, gen);
+        if (autoAbort || gen !== playGeneration) return;
       }
 
       if (!resume || phase === 'name' || phase === 'count') {
@@ -1381,7 +1611,10 @@ const Meridian3D = (() => {
         currentPoint = rec;
         autoCursor = { mIndex, pIndex: i, phase: 'point' };
         highlightPoint(rec);
-        lookAtWorld(rec.position, rec.normal);
+        await framePointIfNeeded(rec, false, gen);
+        if (autoAbort || gen !== playGeneration) return;
+        await holdForTest(rec);
+        if (autoAbort || gen !== playGeneration) return;
         await speak(rec.name, opts.gender);
         if (autoAbort || gen !== playGeneration) return;
         await sleep(2000);
@@ -1547,6 +1780,22 @@ const Meridian3D = (() => {
     window.__m3dTest = {
       faceFront: () => { faceFront(); calloutsDirty = true; },
       faceBack: () => { faceBack(); calloutsDirty = true; },
+      playingAuto: () => playingAuto,
+      viewScale,
+      bodyHeight: () => bodyHeight,
+      dist() {
+        if (!camera || !controls) return null;
+        return camera.position.distanceTo(controls.target);
+      },
+      current() {
+        if (!currentPoint) return null;
+        return {
+          name: currentPoint.name,
+          sequence: currentPoint.sequence,
+          side: currentPoint.side,
+          meridianId: currentPoint.meridianId,
+        };
+      },
       cam() {
         if (!camera || !controls) return null;
         return {
