@@ -80,6 +80,7 @@ const Meridian3D = (() => {
   let orbiting = false;
   let lastReframeName = '';
   let reframeLog = [];
+  let capturedPointerId = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -358,14 +359,38 @@ const Meridian3D = (() => {
   function unlockSpeech() {
     const synth = window.speechSynthesis;
     if (!synth) return;
+    try { synth.cancel(); } catch {}
     try {
       synth.resume();
       const priming = new SpeechSynthesisUtterance(' ');
       priming.volume = 0;
       priming.rate = 10;
       synth.speak(priming);
-      synth.cancel();
     } catch {}
+  }
+
+  function cancelSpeech() {
+    if (!window.speechSynthesis) return;
+    try { window.speechSynthesis.cancel(); } catch {}
+  }
+
+  function restoreControls() {
+    orbiting = false;
+    if (controls) {
+      controls.enabled = true;
+      controls.enableDamping = true;
+    }
+    const el = renderer && renderer.domElement;
+    if (!el || capturedPointerId == null || typeof el.releasePointerCapture !== 'function') {
+      capturedPointerId = null;
+      return;
+    }
+    try {
+      if (typeof el.hasPointerCapture !== 'function' || el.hasPointerCapture(capturedPointerId)) {
+        el.releasePointerCapture(capturedPointerId);
+      }
+    } catch {}
+    capturedPointerId = null;
   }
 
   function waitForVoices() {
@@ -1518,6 +1543,8 @@ const Meridian3D = (() => {
     controls.addEventListener('start', () => { orbiting = true; hideCallouts(); });
     controls.addEventListener('end', () => { orbiting = false; noteCameraMoving(280); });
 
+    let cssW = 0;
+    let cssH = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const moving = orbiting || performance.now() < movingUntil;
@@ -1527,7 +1554,9 @@ const Meridian3D = (() => {
       const rect = mount.getBoundingClientRect();
       const w = Math.max(1, Math.floor(rect.width));
       const h = Math.max(1, Math.floor(rect.height));
-      if (renderer.domElement.width !== w || renderer.domElement.height !== h) {
+      if (cssW !== w || cssH !== h) {
+        cssW = w;
+        cssH = h;
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
@@ -1545,9 +1574,11 @@ const Meridian3D = (() => {
 
     let ptrDown = null;
     renderer.domElement.addEventListener('pointerdown', (ev) => {
+      capturedPointerId = ev.pointerId;
       ptrDown = { x: ev.clientX, y: ev.clientY };
     });
     renderer.domElement.addEventListener('pointerup', (ev) => {
+      capturedPointerId = null;
       if (playingAuto) return;
       if (ptrDown) {
         const dx = ev.clientX - ptrDown.x;
@@ -1556,6 +1587,11 @@ const Meridian3D = (() => {
         if (dx * dx + dy * dy > 64) return;
       }
       onPointer(ev);
+    });
+    renderer.domElement.addEventListener('pointercancel', () => {
+      capturedPointerId = null;
+      ptrDown = null;
+      orbiting = false;
     });
     window.addEventListener('resize', () => {
       if (!renderer) return;
@@ -1643,8 +1679,8 @@ const Meridian3D = (() => {
   function stopAuto({ keepCursor = false } = {}) {
     playingAuto = false;
     autoAbort = true;
-    if (controls) controls.enabled = true;
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    restoreControls();
+    cancelSpeech();
     setPlayIcon('play');
     if (!keepCursor) {
       autoCursor = null;
@@ -1679,86 +1715,90 @@ const Meridian3D = (() => {
     setPlayIcon('stop');
     $('m3d-hint').hidden = true;
 
-    setLoading(true);
     try {
-      await Promise.all([loadBody(opts.gender), waitForVoices()]);
-    } catch (err) {
-      console.warn(err);
-      UI.toast('模型或地圖載入失敗，請檢查網路後再試');
-      stopAuto();
-      setLoading(false);
-      return;
-    }
-    if (autoAbort || gen !== playGeneration) {
-      setLoading(false);
-      return;
-    }
-    placeAnnotations();
-    setLoading(false);
-
-    let mIndex = resume && autoCursor ? autoCursor.mIndex : 0;
-    let pIndex = resume && autoCursor ? autoCursor.pIndex : -1;
-    let phase = resume && autoCursor ? autoCursor.phase : 'name';
-
-    for (; mIndex < list.length; mIndex++) {
-      if (autoAbort || gen !== playGeneration) return;
-      const mer = list[mIndex];
-      const pts = tourPoints(mer.id);
-      if (!pts.length) continue;
-      setTitle(mer.name);
-      autoCursor = { mIndex, pIndex: -1, phase: 'name' };
-      if (pts[0]) {
-        highlightPoint(pts[0]);
-        await framePointIfNeeded(pts[0], true, gen);
-        if (autoAbort || gen !== playGeneration) return;
+      setLoading(true);
+      try {
+        await Promise.all([loadBody(opts.gender), waitForVoices()]);
+      } catch (err) {
+        console.warn(err);
+        UI.toast('模型或地圖載入失敗，請檢查網路後再試');
+        stopAuto();
+        setLoading(false);
+        return;
       }
+      if (autoAbort || gen !== playGeneration) {
+        setLoading(false);
+        return;
+      }
+      placeAnnotations();
+      setLoading(false);
 
-      if (!resume || phase === 'name' || phase === 'count') {
-        if (phase !== 'count') {
-          await speak(mer.name, opts.gender);
+      let mIndex = resume && autoCursor ? autoCursor.mIndex : 0;
+      let pIndex = resume && autoCursor ? autoCursor.pIndex : -1;
+      let phase = resume && autoCursor ? autoCursor.phase : 'name';
+
+      for (; mIndex < list.length; mIndex++) {
+        if (autoAbort || gen !== playGeneration) return;
+        const mer = list[mIndex];
+        const pts = tourPoints(mer.id);
+        if (!pts.length) continue;
+        setTitle(mer.name);
+        autoCursor = { mIndex, pIndex: -1, phase: 'name' };
+        if (pts[0]) {
+          highlightPoint(pts[0]);
+          await framePointIfNeeded(pts[0], true, gen);
           if (autoAbort || gen !== playGeneration) return;
         }
-        await speak(`共${chineseNum(pts.length)}穴`, opts.gender);
-        if (autoAbort || gen !== playGeneration) return;
-        await sleep(2000);
-        if (autoAbort || gen !== playGeneration) return;
-        phase = 'point';
-        pIndex = -1;
-      }
 
-      const startP = pIndex < 0 ? 0 : pIndex;
-      for (let i = startP; i < pts.length; i++) {
-        if (autoAbort || gen !== playGeneration) return;
-        const rec = pts[i];
-        currentPoint = rec;
-        autoCursor = { mIndex, pIndex: i, phase: 'point' };
-        highlightPoint(rec);
-        if (window.__m3dTest) {
-          if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
-          window.__m3dTest.trace.push(rec.name);
+        if (!resume || phase === 'name' || phase === 'count') {
+          if (phase !== 'count') {
+            await speak(mer.name, opts.gender);
+            if (autoAbort || gen !== playGeneration) return;
+          }
+          await speak(`共${chineseNum(pts.length)}穴`, opts.gender);
+          if (autoAbort || gen !== playGeneration) return;
+          await sleep(2000);
+          if (autoAbort || gen !== playGeneration) return;
+          phase = 'point';
+          pIndex = -1;
         }
-        await framePointIfNeeded(rec, false, gen);
-        if (autoAbort || gen !== playGeneration) return;
-        await holdForTest(rec);
-        if (autoAbort || gen !== playGeneration) return;
-        await speak(rec.name, opts.gender);
-        if (autoAbort || gen !== playGeneration) return;
-        await sleep(2000);
-        if (autoAbort || gen !== playGeneration) return;
-      }
-      phase = 'name';
-      pIndex = -1;
-      resume = false;
-    }
 
-    if (gen !== playGeneration) return;
-    playingAuto = false;
-    autoCursor = null;
-    if (controls) controls.enabled = true;
-    highlightPoint(null);
-    faceFront();
-    setPlayIcon('play');
-    setTitle('3D 經絡模型');
+        const startP = pIndex < 0 ? 0 : pIndex;
+        for (let i = startP; i < pts.length; i++) {
+          if (autoAbort || gen !== playGeneration) return;
+          const rec = pts[i];
+          currentPoint = rec;
+          autoCursor = { mIndex, pIndex: i, phase: 'point' };
+          highlightPoint(rec);
+          if (window.__m3dTest) {
+            if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
+            window.__m3dTest.trace.push(rec.name);
+          }
+          await framePointIfNeeded(rec, false, gen);
+          if (autoAbort || gen !== playGeneration) return;
+          await holdForTest(rec);
+          if (autoAbort || gen !== playGeneration) return;
+          await speak(rec.name, opts.gender);
+          if (autoAbort || gen !== playGeneration) return;
+          await sleep(2000);
+          if (autoAbort || gen !== playGeneration) return;
+        }
+        phase = 'name';
+        pIndex = -1;
+        resume = false;
+      }
+
+      if (gen !== playGeneration) return;
+      stopAuto();
+      faceFront();
+    } catch (err) {
+      console.warn(err);
+    } finally {
+      if (gen === playGeneration && playingAuto) {
+        stopAuto();
+        try { faceFront(); } catch {}
+      }
+    }
   }
 
   function validatePlay() {
@@ -1780,7 +1820,7 @@ const Meridian3D = (() => {
     unlockSpeech();
     setModal(false);
     if (opts.mode === 'auto') {
-      await playAuto(!!autoCursor);
+      playAuto(!!autoCursor).catch((err) => console.warn(err));
     } else {
       await playManual();
     }
@@ -1970,6 +2010,17 @@ const Meridian3D = (() => {
         return {
           pos: camera.position.toArray().map((n) => Math.round(n * 1000) / 1000),
           target: controls.target.toArray().map((n) => Math.round(n * 1000) / 1000),
+        };
+      },
+      draw() {
+        if (!renderer) return null;
+        const el = renderer.domElement;
+        return {
+          cssW: el.clientWidth,
+          cssH: el.clientHeight,
+          bufW: el.width,
+          bufH: el.height,
+          pr: renderer.getPixelRatio(),
         };
       },
       yaw(deg) {
