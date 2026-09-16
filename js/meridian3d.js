@@ -38,6 +38,8 @@ const Meridian3D = (() => {
   const AUTO_SCALE = 5;
   const EDGE_MARGIN = 0.1;
   const FACE_DOT_MIN = 0.35;
+  const INNER_ARM_FACE_DOT_MIN = 0.85;
+  const INNER_ARM_DIST_SCALE = 0.50;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -578,8 +580,33 @@ const Meridian3D = (() => {
     controls.maxDistance = Math.max(bodyHeight * 12, want * 8);
   }
 
-  function viewNormal(normal) {
+  function isInnerForearmLu(rec) {
+    return !!(rec && rec.meridianId === 'LU' && (Number(rec.sequence) || 0) >= 8);
+  }
+
+  function innerArmSourceNormal(rec) {
+    const doc = currentMap();
+    const pts = (doc && doc.acupoints) || [];
+    const palmar = pts.find((p) => (
+      p.meridianId === 'LU'
+      && p.side === rec.side
+      && Number(p.sequence) === 10
+    ));
+    return (palmar && palmar.normal) || rec.normal;
+  }
+
+  function viewNormal(normal, rec) {
     const { THREE } = three;
+    if (isInnerForearmLu(rec)) {
+      const medial = rec.side === 'left' ? 1 : -1;
+      const n = new THREE.Vector3().fromArray(innerArmSourceNormal(rec) || [medial, 0, 1]);
+      if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
+      else n.normalize();
+      n.x = medial * Math.max(Math.abs(n.x), 0.78);
+      n.y = Math.min(Math.max(n.y, 0.12), 0.32);
+      n.z = Math.max(n.z, 0.40);
+      return n.normalize();
+    }
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
@@ -591,10 +618,10 @@ const Meridian3D = (() => {
     return n;
   }
 
-  function cameraPoseForPoint(position, normal) {
+  function cameraPoseForPoint(position, normal, rec) {
     const { THREE } = three;
-    const n = viewNormal(normal);
-    const dist = framingDistance();
+    const n = viewNormal(normal, rec);
+    const dist = isInnerForearmLu(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
     const target = new THREE.Vector3().fromArray(position);
     const pos = target.clone().addScaledVector(n, dist);
     return { pos, target };
@@ -619,7 +646,9 @@ const Meridian3D = (() => {
     const toCam = camera.position.clone().sub(world);
     if (toCam.lengthSq() < 1e-8) return true;
     toCam.normalize();
-    return viewNormal(rec.normal).dot(toCam) < FACE_DOT_MIN;
+    const n = viewNormal(rec.normal, rec);
+    const minDot = isInnerForearmLu(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
+    return n.dot(toCam) < minDot;
   }
 
   function easeInOutCubic(t) {
@@ -638,11 +667,11 @@ const Meridian3D = (() => {
     return Math.max(400, Math.min(1200, ms));
   }
 
-  function animateCameraTo(position, normal, gen) {
+  function animateCameraTo(position, normal, gen, rec) {
     return new Promise((resolve) => {
       if (!camera || !controls || !three || !position) { resolve(); return; }
       applyCameraLimits();
-      const pose = cameraPoseForPoint(position, normal);
+      const pose = cameraPoseForPoint(position, normal, rec);
       const startPos = camera.position.clone();
       const startTarget = controls.target.clone();
       let dur = moveDuration(startPos, pose.pos, startTarget, pose.target);
@@ -687,7 +716,7 @@ const Meridian3D = (() => {
     if (!force && !needsReframe(rec)) return;
     lastReframeName = rec.name;
     reframeLog.push(rec.name);
-    await animateCameraTo(rec.position, rec.normal, gen);
+    await animateCameraTo(rec.position, rec.normal, gen, rec);
     if (autoAbort || (gen && gen !== playGeneration)) return;
     await sleep(300);
     calloutsDirty = true;
@@ -1852,7 +1881,7 @@ const Meridian3D = (() => {
         const world = new THREE.Vector3().fromArray(rec.position);
         const toCam = camera.position.clone().sub(world);
         if (toCam.lengthSq() < 1e-8) return 0;
-        return viewNormal(rec.normal).dot(toCam.normalize());
+        return viewNormal(rec.normal, rec).dot(toCam.normalize());
       },
       dist() {
         if (!camera || !controls) return null;
