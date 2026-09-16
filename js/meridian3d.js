@@ -1228,7 +1228,7 @@ const Meridian3D = (() => {
 
   function measureCallout(name) {
     const css = getComputedStyle(document.documentElement);
-    const fs = parseFloat(css.getPropertyValue('--fs-md')) || 16;
+    const fs = (parseFloat(css.getPropertyValue('--fs-md')) || 16) * 2;
     return { w: Math.max(fs, name.length * fs), h: fs * 1.35, fs };
   }
 
@@ -1364,16 +1364,18 @@ const Meridian3D = (() => {
       setCalloutsVisible(false);
       return;
     }
+    laid.sort((a, b) => Number(playingAuto && isFocusRec(a.rec)) - Number(playingAuto && isFocusRec(b.rec)));
     laid.forEach((item) => {
+      const focus = !!(playingAuto && isFocusRec(item.rec));
       const joinX = item.park === 'left' ? item.textX + item.textW : item.textX;
       const aligned = Math.abs(item.slotY - item.py) < 2;
       const d = aligned
         ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
         : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${item.elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
-      svg.appendChild(svgEl('path', { class: 'leader-halo', d }));
-      svg.appendChild(svgEl('path', { class: 'leader', d }));
+      svg.appendChild(svgEl('path', { class: focus ? 'leader-halo is-focus' : 'leader-halo', d }));
+      svg.appendChild(svgEl('path', { class: focus ? 'leader is-focus' : 'leader', d }));
       const text = svgEl('text', {
-        class: 'callout-name',
+        class: focus ? 'callout-name is-focus' : 'callout-name',
         x: item.textX.toFixed(1),
         y: item.slotY.toFixed(1),
         'text-anchor': 'start',

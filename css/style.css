@@ -803,10 +803,19 @@ body::before {
   fill: none; stroke: #111111; stroke-width: 1.2;
   stroke-linecap: round; stroke-linejoin: round;
 }
+.m3d-callouts .leader.is-focus {
+  stroke: #e11d2a; stroke-width: 3.6;
+}
+.m3d-callouts .leader-halo.is-focus {
+  stroke-width: 6.4;
+}
 .m3d-callouts .callout-name {
-  font-family: var(--font-serif); font-size: var(--fs-md); font-weight: 600;
-  fill: #111111; stroke: rgba(255,255,255,0.92); stroke-width: 2.4px;
+  font-family: var(--font-serif); font-size: calc(var(--fs-md) * 2); font-weight: 600;
+  fill: #111111; stroke: rgba(255,255,255,0.92); stroke-width: 4px;
   paint-order: stroke; dominant-baseline: middle;
+}
+.m3d-callouts .callout-name.is-focus {
+  fill: #e11d2a; font-weight: 800; stroke-width: 5px;
 }
 
 .m3d-hint {
