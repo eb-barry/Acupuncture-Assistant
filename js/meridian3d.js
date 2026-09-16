@@ -584,11 +584,28 @@ const Meridian3D = (() => {
     return !!(rec && rec.meridianId === 'LU' && (Number(rec.sequence) || 0) >= 8);
   }
 
+  function innerArmSourceNormal(rec) {
+    const doc = currentMap();
+    const pts = (doc && doc.acupoints) || [];
+    const palmar = pts.find((p) => (
+      p.meridianId === 'LU'
+      && p.side === rec.side
+      && Number(p.sequence) === 10
+    ));
+    return (palmar && palmar.normal) || rec.normal;
+  }
+
   function viewNormal(normal, rec) {
     const { THREE } = three;
     if (isInnerForearmLu(rec)) {
       const medial = rec.side === 'left' ? 1 : -1;
-      return new THREE.Vector3(medial * 0.80, 0.16, 0.57).normalize();
+      const n = new THREE.Vector3().fromArray(innerArmSourceNormal(rec) || [medial, 0, 1]);
+      if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
+      else n.normalize();
+      n.x = medial * Math.max(Math.abs(n.x), 0.78);
+      n.y = Math.min(Math.max(n.y, 0.12), 0.32);
+      n.z = Math.max(n.z, 0.40);
+      return n.normalize();
     }
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
