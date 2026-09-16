@@ -2,11 +2,13 @@
  * sw.js — Service Worker for 針灸助理
  * Strategy:
  *   App Shell (HTML/CSS/JS) → Cache-First
- *   Data files & assets     → Network-First with cache fallback
+ *   GLB + JSON → Cache-First, refetch only when ASSET_CACHE version changes
+ *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v28';
-const CONTENT_CACHE = 'acupuncture-content-v1';
+const SHELL_CACHE   = 'acupuncture-shell-v29';
+const ASSET_CACHE   = 'acupuncture-assets-v1';
+const CONTENT_CACHE = 'acupuncture-content-v2';
 
 const SHELL_FILES = [
   './',
@@ -29,57 +31,100 @@ const SHELL_FILES = [
   'https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap',
 ];
 
-// Install: pre-cache app shell
-self.addEventListener('install', e => {
+const ASSET_FILES = [
+  './assets/models/male.glb',
+  './assets/models/female.glb',
+  './assets/meridians/male.json',
+  './assets/meridians/female.json',
+  './assets/points-data.json',
+  './assets/acupuncture-data.json',
+  './assets/rhymes-data.json',
+];
+
+const LIVE_CACHES = [SHELL_CACHE, ASSET_CACHE, CONTENT_CACHE];
+
+function toRequest(file) {
+  return new Request(new URL(file, self.registration.scope).href, { cache: 'reload' });
+}
+
+async function precache(cacheName, files) {
+  const cache = await caches.open(cacheName);
+  await Promise.all(files.map(async (file) => {
+    try {
+      const request = toRequest(file);
+      const res = await fetch(request);
+      if (res.ok) await cache.put(request, res);
+    } catch (err) {
+      console.warn('precache failed', file, err);
+    }
+  }));
+}
+
+function isVersionedAsset(url) {
+  return /\.(glb|gltf|json)$/i.test(url.pathname);
+}
+
+self.addEventListener('install', (e) => {
+  e.waitUntil((async () => {
+    await precache(SHELL_CACHE, SHELL_FILES);
+    await precache(ASSET_CACHE, ASSET_FILES);
+    await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.open(SHELL_CACHE)
-      .then(cache => cache.addAll(SHELL_FILES))
-      .then(() => self.skipWaiting())
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((k) => !LIVE_CACHES.includes(k))
+          .map((k) => caches.delete(k)),
+      ),
+    ).then(() => self.clients.claim()),
   );
 });
 
-// Activate: clean old caches
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys
-        .filter(k => k !== SHELL_CACHE && k !== CONTENT_CACHE)
-        .map(k => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
-  );
-});
-
-// Fetch strategy
-self.addEventListener('fetch', e => {
+self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // App shell → cache first
   if (SHELL_FILES.includes(e.request.url) || SHELL_FILES.includes(url.pathname)) {
     e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request))
+      caches.match(e.request).then((cached) => cached || fetch(e.request)),
     );
     return;
   }
 
-  // GitHub raw assets & data → network first, cache on success
+  if (isVersionedAsset(url)) {
+    e.respondWith((async () => {
+      const cached = await caches.match(e.request, { ignoreSearch: true });
+      if (cached) return cached;
+      const res = await fetch(e.request);
+      if (res.ok) {
+        const clone = res.clone();
+        const cache = await caches.open(ASSET_CACHE);
+        await cache.put(e.request, clone);
+      }
+      return res;
+    })());
+    return;
+  }
+
   if (url.hostname === 'raw.githubusercontent.com') {
     e.respondWith(
       fetch(e.request)
-        .then(res => {
+        .then((res) => {
           if (res.ok) {
             const clone = res.clone();
-            caches.open(CONTENT_CACHE).then(c => c.put(e.request, clone));
+            caches.open(CONTENT_CACHE).then((c) => c.put(e.request, clone));
           }
           return res;
         })
-        .catch(() => caches.match(e.request))
+        .catch(() => caches.match(e.request)),
     );
     return;
   }
 
-  // Default: network with cache fallback
   e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+    fetch(e.request).catch(() => caches.match(e.request)),
   );
 });
