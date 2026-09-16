@@ -909,6 +909,68 @@ const Meridian3D = (() => {
     return best;
   }
 
+  function luNodeSequence(node) {
+    const rec = acupointByPointId(node && node.pointId);
+    return rec ? (Number(rec.sequence) || 0) : 0;
+  }
+
+  function collapseLuWrapNodes(prepared, meridianId) {
+    if (meridianId !== 'LU' || !prepared.length) return prepared;
+    const out = [];
+    for (let i = 0; i < prepared.length; i++) {
+      out.push(prepared[i]);
+      if (prepared[i].type !== 'acupoint' || luNodeSequence(prepared[i]) !== 10) continue;
+      let j = i + 1;
+      while (j < prepared.length && luNodeSequence(prepared[j]) !== 11) j += 1;
+      if (j < prepared.length && luNodeSequence(prepared[j]) === 11) i = j - 1;
+    }
+    return out;
+  }
+
+  function luWrapHandles(prev, node, mm, meridianId) {
+    if (meridianId !== 'LU') return [];
+    if (prev.type !== 'acupoint' || node.type !== 'acupoint') return [];
+    const a = acupointByPointId(prev.pointId);
+    const b = acupointByPointId(node.pointId);
+    if (!a || !b) return [];
+    const lo = Math.min(a.sequence || 0, b.sequence || 0);
+    const hi = Math.max(a.sequence || 0, b.sequence || 0);
+    const wrist = lo === 7 && hi === 8;
+    const thumb = lo === 10 && hi === 11;
+    if (!wrist && !thumb) return [];
+    const dist = Math.hypot(
+      node.position[0] - prev.position[0],
+      node.position[1] - prev.position[1],
+      node.position[2] - prev.position[2],
+    );
+    if (dist > mm * ROUTE_BREAK_MM) return [];
+    const count = thumb ? 5 : 3;
+    const bump = mm * (thumb ? 7 : 8);
+    const handles = [];
+    for (let k = 1; k <= count; k++) {
+      const t = k / (count + 1);
+      const sample = lerpNode(prev, node, t);
+      sample.position = [
+        sample.position[0] + sample.normal[0] * bump,
+        sample.position[1] + sample.normal[1] * bump,
+        sample.position[2] + sample.normal[2] * bump,
+      ];
+      sample.type = 'control';
+      sample.luWrap = true;
+      handles.push(sample);
+    }
+    return handles;
+  }
+
+  function hugDenseSamples(samples) {
+    samples.forEach((node) => {
+      const hugged = snapToSkin(node.position, node.normal, 16);
+      node.position = hugged.position;
+      node.normal = hugged.normal;
+    });
+    return samples;
+  }
+
   function innerBackDoglegs(prev, node, mm, meridianId) {
     if (meridianId !== 'BL') return [];
     if (prev.type !== 'acupoint' || node.type !== 'acupoint') return [];
@@ -955,20 +1017,24 @@ const Meridian3D = (() => {
       };
     }).filter((n) => n.position);
 
+    const route = collapseLuWrapNodes(prepared, meridianId);
     const located = [];
-    prepared.forEach((node, i) => {
+    route.forEach((node, i) => {
       if (i === 0) {
         located.push(node);
         return;
       }
-      const prev = prepared[i - 1];
+      const prev = route[i - 1];
       const dist = Math.hypot(
         node.position[0] - prev.position[0],
         node.position[1] - prev.position[1],
         node.position[2] - prev.position[2],
       );
+      const wraps = luWrapHandles(prev, node, mm, meridianId);
       const doglegs = innerBackDoglegs(prev, node, mm, meridianId);
-      if (doglegs.length) {
+      if (wraps.length) {
+        wraps.forEach((sample) => located.push(sample));
+      } else if (doglegs.length) {
         doglegs.forEach((sample) => located.push(sample));
       } else {
         const count = segmentHandleCount(dist, mm);
@@ -988,7 +1054,7 @@ const Meridian3D = (() => {
       located.push(node);
     });
     located.forEach((node) => {
-      const pull = node.type === 'acupoint' ? 12 : RIBBON_HUG_MM;
+      const pull = node.luWrap ? 22 : (node.type === 'acupoint' ? 12 : RIBBON_HUG_MM);
       const snapN = node.dogleg
         ? [0, 0, (node.normal && node.normal[2] < 0) ? -1 : 1]
         : node.normal;
@@ -996,7 +1062,8 @@ const Meridian3D = (() => {
       node.position = hugged.position;
       node.normal = hugged.normal;
     });
-    return densifyPolyline(located, mm * SAMPLE_STEP_MM);
+    const dense = densifyPolyline(located, mm * SAMPLE_STEP_MM);
+    return meridianId === 'LU' ? hugDenseSamples(dense) : dense;
   }
 
   function addRibbon(THREE, samples, color) {
