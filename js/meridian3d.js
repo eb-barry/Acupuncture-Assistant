@@ -39,7 +39,7 @@ const Meridian3D = (() => {
   const EDGE_MARGIN = 0.1;
   const FACE_DOT_MIN = 0.35;
   const INNER_ARM_FACE_DOT_MIN = 0.85;
-  const INNER_ARM_DIST_SCALE = 0.58;
+  const INNER_ARM_DIST_SCALE = 0.50;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -588,7 +588,7 @@ const Meridian3D = (() => {
     const { THREE } = three;
     if (isInnerForearmLu(rec)) {
       const medial = rec.side === 'left' ? 1 : -1;
-      return new THREE.Vector3(medial * 0.62, 0.08, 0.78).normalize();
+      return new THREE.Vector3(medial * 0.80, 0.16, 0.57).normalize();
     }
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
