@@ -1,6 +1,7 @@
 /**
  * meridian3d.js — 3D 經絡檢視（讀取經脈繪圖室出版地圖）
  * 延遲載入 Three.js；Play 才載 GLB。自動模式固定 5 倍、第一穴置中面對使用者；靠近畫面邊緣 10% 才再置中。
+ * 出版地圖若含 meridians[].ribbons 則直接繪製烤乾貼膚折線，不再現場 hug / split。
  */
 const Meridian3D = (() => {
 
@@ -1707,6 +1708,27 @@ const Meridian3D = (() => {
     return samples;
   }
 
+  function routeUsesBakedRibbons(route) {
+    return Array.isArray(route?.ribbons)
+      && route.ribbons.some((ribbon) => (ribbon?.samples || []).length >= 2);
+  }
+
+  function bakedRibbonSamples(route, ribbon, ribbonIdx) {
+    const key = `${loadedGender}|baked|${route.meridianId}|${route.side}|${ribbonIdx}`;
+    const cached = ribbonCache.get(key);
+    if (cached) return cached;
+    const samples = (ribbon?.samples || []).map((sample) => {
+      const n = sample.normal || [0, 0, 1];
+      const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
+      return {
+        position: toWorld(sample.position),
+        normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
+      };
+    }).filter((sample) => sample.position);
+    ribbonCache.set(key, samples);
+    return samples;
+  }
+
   function resetAnnotScene() {
     if (annotRoot && three) {
       disposeObject(annotRoot, { keepShared: true });
@@ -1725,6 +1747,12 @@ const Meridian3D = (() => {
     (doc.meridians || []).forEach((route) => {
       if (route.meridianId !== meridianId || !sideAllowed(route.side)) return;
       const color = route.color || lineColorFor(route.meridianId);
+      if (routeUsesBakedRibbons(route)) {
+        route.ribbons.forEach((ribbon, ribbonIdx) => {
+          addRibbon(THREE, bakedRibbonSamples(route, ribbon, ribbonIdx), color);
+        });
+        return;
+      }
       splitRouteNodes(route.nodes || []).forEach((chunk, chunkIdx) => {
         addRibbon(THREE, ribbonSamples(route, chunk, chunkIdx), color);
       });
@@ -2402,6 +2430,22 @@ const Meridian3D = (() => {
         placed: [...annotPlaced],
         skin: !!skinAccel,
       }),
+      ribbonSource(meridianId) {
+        const doc = currentMap();
+        return (doc?.meridians || [])
+          .filter((route) => !meridianId || route.meridianId === meridianId)
+          .map((route) => ({
+            id: route.id,
+            meridianId: route.meridianId,
+            side: route.side,
+            baked: routeUsesBakedRibbons(route),
+            ribbons: (route.ribbons || []).length,
+            samples: (route.ribbons || []).reduce(
+              (count, ribbon) => count + (ribbon.samples || []).length,
+              0,
+            ),
+          }));
+      },
       selection: () => ({
         gender: opts.gender,
         mode: opts.mode,
