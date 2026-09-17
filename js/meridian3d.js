@@ -820,6 +820,12 @@ const Meridian3D = (() => {
     const cellCount = n * n * n;
     const cells = new Array(cellCount);
     const meshes = [];
+    const cellOf = (x, y, z) => {
+      const ix = Math.min(n - 1, Math.max(0, Math.floor((x - box.min.x) * inv[0])));
+      const iy = Math.min(n - 1, Math.max(0, Math.floor((y - box.min.y) * inv[1])));
+      const iz = Math.min(n - 1, Math.max(0, Math.floor((z - box.min.z) * inv[2])));
+      return (iz * n + iy) * n + ix;
+    };
 
     bodyMeshes.forEach((mesh) => {
       const geom = mesh.geometry;
@@ -868,6 +874,15 @@ const Meridian3D = (() => {
         const x1 = Math.min(n - 1, Math.max(0, Math.floor((maxx - box.min.x) * inv[0])));
         const y1 = Math.min(n - 1, Math.max(0, Math.floor((maxy - box.min.y) * inv[1])));
         const z1 = Math.min(n - 1, Math.max(0, Math.floor((maxz - box.min.z) * inv[2])));
+        const span = (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
+        if (span > 27) {
+          [0, 3, 6].forEach((off) => {
+            const ci = cellOf(verts[o + off], verts[o + off + 1], verts[o + off + 2]);
+            const bucket = cells[ci] || (cells[ci] = []);
+            bucket.push(packed);
+          });
+          continue;
+        }
         for (let iz = z0; iz <= z1; iz++) {
           for (let iy = y0; iy <= y1; iy++) {
             for (let ix = x0; ix <= x1; ix++) {
@@ -2176,12 +2191,19 @@ const Meridian3D = (() => {
       `<label><input type="checkbox" data-mid="${m.id}">${m.name}<span style="margin-left:auto;color:var(--clr-muted)">${m.id}</span></label>`
     )).join('');
 
-    list.addEventListener('change', (e) => {
-      const id = e.target.dataset.mid;
+    const syncMeridianBox = (el) => {
+      const id = el && el.dataset && el.dataset.mid;
       if (!id) return;
-      if (e.target.checked) opts.meridians.add(id);
+      if (el.checked) opts.meridians.add(id);
       else opts.meridians.delete(id);
       markAnnotDirty();
+    };
+    list.addEventListener('change', (e) => {
+      if (e.target && e.target.matches('input[data-mid]')) syncMeridianBox(e.target);
+    });
+    list.addEventListener('click', (e) => {
+      const box = e.target.closest('input[data-mid]') || e.target.closest('label')?.querySelector('input[data-mid]');
+      if (box) syncMeridianBox(box);
     });
 
     $('m3d-select-all').onclick = () => {
@@ -2376,6 +2398,11 @@ const Meridian3D = (() => {
         dirty: annotDirty,
         placed: [...annotPlaced],
         skin: !!skinAccel,
+      }),
+      selection: () => ({
+        gender: opts.gender,
+        mode: opts.mode,
+        meridians: [...opts.meridians],
       }),
       meshStats() {
         let verts = 0;
