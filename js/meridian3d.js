@@ -2066,6 +2066,11 @@ const Meridian3D = (() => {
           pr: renderer.getPixelRatio(),
         };
       },
+      annotCache: () => ({
+        ribbons: ribbonCache.size,
+        points: pointCache.size,
+        dirty: annotDirty,
+      }),
       meshStats() {
         let verts = 0;
         let tris = 0;
