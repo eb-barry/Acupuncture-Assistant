@@ -1812,6 +1812,8 @@ const Meridian3D = (() => {
     }
   }
 
+  let uiBound = false;
+
   function bindTap(id, handler) {
     const el = $(id);
     if (!el) return;
@@ -1824,10 +1826,12 @@ const Meridian3D = (() => {
       handler(ev);
     };
     el.addEventListener('pointerup', run);
-    el.addEventListener('click', run);
+    el.onclick = run;
   }
 
   function bindUi() {
+    if (uiBound) return;
+    uiBound = true;
     const list = $('m3d-meridian-list');
     if (!list) return;
     list.innerHTML = MERIDIANS.map((m) => (
