@@ -764,15 +764,24 @@ body::before {
 
 /* ── 3D 經絡模型 ── */
 #page-meridian-3d { overflow: hidden; }
-#page-meridian-3d .m3d-topbar { gap: 6px; }
+#page-meridian-3d .m3d-topbar {
+  gap: 6px;
+  position: relative;
+  z-index: 200;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
 .m3d-top-actions {
   display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  pointer-events: auto;
 }
 .m3d-icon-btn {
   width: 44px; height: 44px; padding: 0;
   border: none; background: transparent; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  pointer-events: auto;
 }
 .m3d-icon-btn img {
   width: 40px; height: 40px; object-fit: contain; display: block;
@@ -782,11 +791,15 @@ body::before {
 #m3d-menu-btn img { width: 26px; height: 26px; }
 .m3d-icon-btn:active { background: rgba(255,255,255,0.18); }
 .m3d-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-#m3d-title { font-size: var(--fs-md); padding: 0 4px; }
+#m3d-title {
+  font-size: var(--fs-md); padding: 0 4px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .m3d-stage {
   flex: 1; min-height: 0; position: relative;
   background: #dce8ec; overflow: hidden;
+  z-index: 0;
 }
 #m3d-viewport { position: absolute; inset: 0; touch-action: none; }
 #m3d-viewport canvas { display: block; width: 100%; height: 100%; }
@@ -918,6 +931,8 @@ body::before {
   cursor: pointer;
   transition: background var(--dur-fast);
   flex-shrink: 0;
+  touch-action: manipulation;
+  pointer-events: auto;
 }
 .btn-home:hover, .btn-home:active {
   background: rgba(255,255,255,0.2);

@@ -378,7 +378,7 @@ const Meridian3D = (() => {
     orbiting = false;
     if (controls) {
       controls.enabled = true;
-      controls.enableDamping = true;
+      controls.enableDamping = false;
     }
     const el = renderer && renderer.domElement;
     if (!el || capturedPointerId == null || typeof el.releasePointerCapture !== 'function') {
@@ -557,7 +557,6 @@ const Meridian3D = (() => {
 
   function jumpCamera(x, y, z) {
     if (!camera || !controls) return;
-    const damping = controls.enableDamping;
     controls.enableDamping = false;
     applyCameraLimits();
     controls.target.set(0, frameLookAtY(), 0);
@@ -566,7 +565,6 @@ const Meridian3D = (() => {
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
     controls.update();
-    controls.enableDamping = damping;
     noteCameraMoving(280);
   }
 
@@ -701,13 +699,11 @@ const Meridian3D = (() => {
       const startTarget = controls.target.clone();
       let dur = moveDuration(startPos, pose.pos, startTarget, pose.target);
       if (window.__m3dTest && window.__m3dTest.fastAuto) dur = 50;
-      const damping = controls.enableDamping;
       controls.enableDamping = false;
       const t0 = performance.now();
       noteCameraMoving(dur + 80);
       const step = () => {
         if (autoAbort || (gen && gen !== playGeneration)) {
-          controls.enableDamping = damping;
           resolve();
           return;
         }
@@ -726,7 +722,6 @@ const Meridian3D = (() => {
           noteCameraMoving(80);
           requestAnimationFrame(step);
         } else {
-          controls.enableDamping = damping;
           noteCameraMoving(280);
           calloutsDirty = true;
           resolve();
@@ -751,7 +746,6 @@ const Meridian3D = (() => {
     if (!camera || !controls || !position || !three) return;
     applyCameraLimits();
     const pose = cameraPoseForPoint(position, normal);
-    const damping = controls.enableDamping;
     controls.enableDamping = false;
     camera.zoom = 1;
     camera.position.copy(pose.pos);
@@ -759,7 +753,6 @@ const Meridian3D = (() => {
     controls.target.copy(pose.target);
     camera.lookAt(pose.target);
     controls.update();
-    controls.enableDamping = damping;
     noteCameraMoving(320);
   }
 
@@ -1238,17 +1231,7 @@ const Meridian3D = (() => {
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     const facing = n.dot(toCam);
-    if (facing < 0) return false;
-    if (facing >= 0.12) return true;
-    const dir = world.clone().sub(cam).normalize();
-    const slack = Math.max(worldPerMm() * 40, dist * 0.06);
-    const ray = new THREE.Raycaster(cam, dir, 0, Math.max(dist - slack, 0));
-    const hits = ray.intersectObjects(bodyMeshes, true);
-    if (!hits.length) return true;
-    const hit = hits[0];
-    if (hit.distance >= dist - slack) return true;
-    if (hit.point.distanceTo(world) <= worldPerMm() * 50) return true;
-    return false;
+    return facing >= 0.12;
   }
 
   function measureCallout(name) {
@@ -1510,7 +1493,7 @@ const Meridian3D = (() => {
     scene.background = new THREE.Color('#dce8ec');
     camera = new THREE.PerspectiveCamera(40, 1, 0.05, 100);
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    renderer.setPixelRatio(1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -1538,9 +1521,12 @@ const Meridian3D = (() => {
     controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
     controls.addEventListener('change', () => {
       if (orbiting) hideCallouts();
-      else calloutsDirty = true;
     });
-    controls.addEventListener('start', () => { orbiting = true; hideCallouts(); });
+    controls.addEventListener('start', () => {
+      controls.enableDamping = true;
+      orbiting = true;
+      hideCallouts();
+    });
     controls.addEventListener('end', () => { orbiting = false; noteCameraMoving(280); });
 
     let cssW = 0;
@@ -1548,9 +1534,7 @@ const Meridian3D = (() => {
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const moving = orbiting || performance.now() < movingUntil;
-      const cap = moving ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
-      if (Math.abs(renderer.getPixelRatio() - cap) > 0.05) renderer.setPixelRatio(cap);
-      controls.update();
+      try { controls.update(); } catch {}
       const rect = mount.getBoundingClientRect();
       const w = Math.max(1, Math.floor(rect.width));
       const h = Math.max(1, Math.floor(rect.height));
@@ -1561,13 +1545,13 @@ const Meridian3D = (() => {
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
       }
-      renderer.render(scene, camera);
+      try { renderer.render(scene, camera); } catch {}
       if (moving) {
         hideCallouts();
         calloutsDirty = true;
       } else if (calloutsDirty) {
-        updateCallouts();
         calloutsDirty = false;
+        try { updateCallouts(); } catch {}
       }
     };
     loop();
@@ -1681,6 +1665,8 @@ const Meridian3D = (() => {
     autoAbort = true;
     restoreControls();
     cancelSpeech();
+    closeOverlay();
+    setLoading(false);
     setPlayIcon('play');
     if (!keepCursor) {
       autoCursor = null;
@@ -1826,7 +1812,26 @@ const Meridian3D = (() => {
     }
   }
 
+  let uiBound = false;
+
+  function bindTap(id, handler) {
+    const el = $(id);
+    if (!el) return;
+    let last = 0;
+    const run = (ev) => {
+      if (ev && ev.type === 'pointerup' && ev.pointerType === 'mouse' && (ev.button ?? 0) !== 0) return;
+      const now = performance.now();
+      if (now - last < 400) return;
+      last = now;
+      handler(ev);
+    };
+    el.addEventListener('pointerup', run);
+    el.onclick = run;
+  }
+
   function bindUi() {
+    if (uiBound) return;
+    uiBound = true;
     const list = $('m3d-meridian-list');
     if (!list) return;
     list.innerHTML = MERIDIANS.map((m) => (
@@ -1889,10 +1894,10 @@ const Meridian3D = (() => {
       applyScale();
     };
 
-    $('m3d-menu-btn').onclick = () => {
+    bindTap('m3d-menu-btn', () => {
       if (playingAuto) stopAuto({ keepCursor: true });
       setModal($('m3d-modal').hidden);
-    };
+    });
     $('m3d-modal-close').onclick = () => {
       setModal(false);
       if (opts.gender !== loadedGender && loadedGender) playManual();
@@ -1904,7 +1909,11 @@ const Meridian3D = (() => {
       }
     });
 
-    $('m3d-play').onclick = onPlayClick;
+    bindTap('m3d-play', onPlayClick);
+    bindTap('back-meridian-3d', () => {
+      leave();
+      UI.showPage('page-home');
+    });
     $('m3d-point-dismiss').onclick = closeOverlay;
     $('m3d-title').addEventListener('click', () => {
       if (currentPoint && $('m3d-point-overlay').hidden && !playingAuto) openOverlay(currentPoint);
@@ -1933,6 +1942,7 @@ const Meridian3D = (() => {
   }
 
   function leave() {
+    if (!entered) return;
     entered = false;
     playGeneration += 1;
     stopAuto();
@@ -2022,6 +2032,31 @@ const Meridian3D = (() => {
           bufH: el.height,
           pr: renderer.getPixelRatio(),
         };
+      },
+      meshStats() {
+        let verts = 0;
+        let tris = 0;
+        let skinned = 0;
+        (bodyMeshes || []).forEach((obj) => {
+          const g = obj.geometry;
+          const v = g && g.getAttribute('position') ? g.getAttribute('position').count : 0;
+          const t = g && g.index ? g.index.count / 3 : v / 3;
+          verts += v;
+          tris += t;
+          if (obj.isSkinnedMesh) skinned += 1;
+        });
+        return {
+          meshes: (bodyMeshes || []).length,
+          verts,
+          tris: Math.round(tris),
+          skinned,
+          pickables: pickables.length,
+        };
+      },
+      timeCallouts() {
+        const t0 = performance.now();
+        updateCallouts();
+        return Math.round(performance.now() - t0);
       },
       yaw(deg) {
         if (!camera || !controls || !three) return;
