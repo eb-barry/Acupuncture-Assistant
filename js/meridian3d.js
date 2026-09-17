@@ -81,6 +81,12 @@ const Meridian3D = (() => {
   let lastReframeName = '';
   let reframeLog = [];
   let capturedPointerId = null;
+  let annotDirty = true;
+  let ribbonCache = new Map();
+  let pointCache = new Map();
+  let annotPlaced = new Set();
+  let annotWork = 0;
+  let skinAccel = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -299,6 +305,28 @@ const Meridian3D = (() => {
   function currentMap() {
     const key = opts.gender === 'female' ? 'female' : 'male';
     return mapCache[key];
+  }
+
+  function clearAnnotCache() {
+    ribbonCache.clear();
+    pointCache.clear();
+    annotDirty = true;
+    annotPlaced = new Set();
+  }
+
+  function markAnnotDirty() {
+    annotDirty = true;
+    autoCursor = null;
+  }
+
+  function yieldPaint() {
+    return new Promise((resolve) => {
+      if (typeof requestAnimationFrame !== 'function') {
+        setTimeout(resolve, 0);
+        return;
+      }
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
   }
 
   function sideAllowed(side) {
@@ -526,6 +554,7 @@ const Meridian3D = (() => {
   function teardownRenderer() {
     cancelAnimationFrame(raf);
     raf = 0;
+    annotWork += 1;
     if (controls) controls.dispose();
     if (renderer) {
       renderer.dispose();
@@ -536,7 +565,9 @@ const Meridian3D = (() => {
     bodyMeshes = [];
     pickables = [];
     loadedGender = null;
+    skinAccel = null;
     clearCallouts();
+    clearAnnotCache();
     if (skinMaterial) { skinMaterial.dispose(); skinMaterial = null; }
     if (nailMaterial) { nailMaterial.dispose(); nailMaterial = null; }
   }
@@ -756,8 +787,234 @@ const Meridian3D = (() => {
     noteCameraMoving(320);
   }
 
-  function raycastSkin(THREE, origin, dir) {
-    const ray = new THREE.Raycaster(origin, dir.clone().normalize(), 0, bodyHeight * 4);
+  function clearSkinAccel() {
+    skinAccel = null;
+  }
+
+  function buildSkinAccel() {
+    if (!three || !bodyMeshes.length) {
+      skinAccel = null;
+      return;
+    }
+    if (bodyMeshes.some((mesh) => mesh.isSkinnedMesh)) {
+      skinAccel = null;
+      return;
+    }
+    try {
+    const { THREE } = three;
+    const box = new THREE.Box3();
+    bodyMeshes.forEach((mesh) => {
+      mesh.updateWorldMatrix(true, false);
+      box.expandByObject(mesh);
+    });
+    if (box.isEmpty()) {
+      skinAccel = null;
+      return;
+    }
+    const pad = Math.max(bodyHeight * 0.002, 1e-4);
+    box.min.addScalar(-pad);
+    box.max.addScalar(pad);
+    const size = box.getSize(new THREE.Vector3());
+    const n = 32;
+    const inv = [n / Math.max(size.x, 1e-8), n / Math.max(size.y, 1e-8), n / Math.max(size.z, 1e-8)];
+    const cellCount = n * n * n;
+    const cells = new Array(cellCount);
+    const meshes = [];
+    const cellOf = (x, y, z) => {
+      const ix = Math.min(n - 1, Math.max(0, Math.floor((x - box.min.x) * inv[0])));
+      const iy = Math.min(n - 1, Math.max(0, Math.floor((y - box.min.y) * inv[1])));
+      const iz = Math.min(n - 1, Math.max(0, Math.floor((z - box.min.z) * inv[2])));
+      return (iz * n + iy) * n + ix;
+    };
+
+    bodyMeshes.forEach((mesh) => {
+      const geom = mesh.geometry;
+      if (!geom) return;
+      const pos = geom.getAttribute('position');
+      if (!pos) return;
+      const idx = geom.index;
+      const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(pos.count / 3);
+      if (triCount <= 0) return;
+      const verts = new Float32Array(triCount * 9);
+      mesh.updateWorldMatrix(true, false);
+      const e = mesh.matrixWorld.elements;
+      const apply = (x, y, z, o) => {
+        verts[o] = e[0] * x + e[4] * y + e[8] * z + e[12];
+        verts[o + 1] = e[1] * x + e[5] * y + e[9] * z + e[13];
+        verts[o + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
+      };
+      const mi = meshes.length;
+      for (let t = 0; t < triCount; t++) {
+        let i0;
+        let i1;
+        let i2;
+        if (idx) {
+          i0 = idx.getX(t * 3);
+          i1 = idx.getX(t * 3 + 1);
+          i2 = idx.getX(t * 3 + 2);
+        } else {
+          i0 = t * 3;
+          i1 = t * 3 + 1;
+          i2 = t * 3 + 2;
+        }
+        const o = t * 9;
+        apply(pos.getX(i0), pos.getY(i0), pos.getZ(i0), o);
+        apply(pos.getX(i1), pos.getY(i1), pos.getZ(i1), o + 3);
+        apply(pos.getX(i2), pos.getY(i2), pos.getZ(i2), o + 6);
+        const minx = Math.min(verts[o], verts[o + 3], verts[o + 6]);
+        const miny = Math.min(verts[o + 1], verts[o + 4], verts[o + 7]);
+        const minz = Math.min(verts[o + 2], verts[o + 5], verts[o + 8]);
+        const maxx = Math.max(verts[o], verts[o + 3], verts[o + 6]);
+        const maxy = Math.max(verts[o + 1], verts[o + 4], verts[o + 7]);
+        const maxz = Math.max(verts[o + 2], verts[o + 5], verts[o + 8]);
+        const packed = (mi << 24) | t;
+        const x0 = Math.min(n - 1, Math.max(0, Math.floor((minx - box.min.x) * inv[0])));
+        const y0 = Math.min(n - 1, Math.max(0, Math.floor((miny - box.min.y) * inv[1])));
+        const z0 = Math.min(n - 1, Math.max(0, Math.floor((minz - box.min.z) * inv[2])));
+        const x1 = Math.min(n - 1, Math.max(0, Math.floor((maxx - box.min.x) * inv[0])));
+        const y1 = Math.min(n - 1, Math.max(0, Math.floor((maxy - box.min.y) * inv[1])));
+        const z1 = Math.min(n - 1, Math.max(0, Math.floor((maxz - box.min.z) * inv[2])));
+        const span = (x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1);
+        if (span > 27) {
+          [0, 3, 6].forEach((off) => {
+            const ci = cellOf(verts[o + off], verts[o + off + 1], verts[o + off + 2]);
+            const bucket = cells[ci] || (cells[ci] = []);
+            bucket.push(packed);
+          });
+          continue;
+        }
+        for (let iz = z0; iz <= z1; iz++) {
+          for (let iy = y0; iy <= y1; iy++) {
+            for (let ix = x0; ix <= x1; ix++) {
+              const ci = (iz * n + iy) * n + ix;
+              const bucket = cells[ci] || (cells[ci] = []);
+              bucket.push(packed);
+            }
+          }
+        }
+      }
+      meshes.push({ verts, triCount });
+    });
+
+    skinAccel = { box, n, inv, cells, meshes };
+    } catch (err) {
+      console.warn(err);
+      skinAccel = null;
+    }
+  }
+
+  function rayTriT(ox, oy, oz, dx, dy, dz, ax, ay, az, bx, by, bz, cx, cy, cz) {
+    const e1x = bx - ax;
+    const e1y = by - ay;
+    const e1z = bz - az;
+    const e2x = cx - ax;
+    const e2y = cy - ay;
+    const e2z = cz - az;
+    const px = dy * e2z - dz * e2y;
+    const py = dz * e2x - dx * e2z;
+    const pz = dx * e2y - dy * e2x;
+    const det = e1x * px + e1y * py + e1z * pz;
+    if (det > -1e-7 && det < 1e-7) return null;
+    const invDet = 1 / det;
+    const tx = ox - ax;
+    const ty = oy - ay;
+    const tz = oz - az;
+    const u = (tx * px + ty * py + tz * pz) * invDet;
+    if (u < 0 || u > 1) return null;
+    const qx = ty * e1z - tz * e1y;
+    const qy = tz * e1x - tx * e1z;
+    const qz = tx * e1y - ty * e1x;
+    const v = (dx * qx + dy * qy + dz * qz) * invDet;
+    if (v < 0 || u + v > 1) return null;
+    const t = (e2x * qx + e2y * qy + e2z * qz) * invDet;
+    if (!(t >= 0)) return null;
+    return t;
+  }
+
+  function raycastSkinAccel(origin, dir, far) {
+    if (!skinAccel) return null;
+    const { box, n, inv, cells, meshes } = skinAccel;
+    const ox = origin.x;
+    const oy = origin.y;
+    const oz = origin.z;
+    const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
+    const dx = dir.x / len;
+    const dy = dir.y / len;
+    const dz = dir.z / len;
+    const maxT = far > 0 ? far : bodyHeight * 4;
+    const x1 = ox + dx * maxT;
+    const y1 = oy + dy * maxT;
+    const z1 = oz + dz * maxT;
+    const minx = Math.min(ox, x1);
+    const miny = Math.min(oy, y1);
+    const minz = Math.min(oz, z1);
+    const maxx = Math.max(ox, x1);
+    const maxy = Math.max(oy, y1);
+    const maxz = Math.max(oz, z1);
+    if (maxx < box.min.x || maxy < box.min.y || maxz < box.min.z || minx > box.max.x || miny > box.max.y || minz > box.max.z) {
+      return null;
+    }
+    const ix0 = Math.min(n - 1, Math.max(0, Math.floor((Math.max(minx, box.min.x) - box.min.x) * inv[0])));
+    const iy0 = Math.min(n - 1, Math.max(0, Math.floor((Math.max(miny, box.min.y) - box.min.y) * inv[1])));
+    const iz0 = Math.min(n - 1, Math.max(0, Math.floor((Math.max(minz, box.min.z) - box.min.z) * inv[2])));
+    const ix1 = Math.min(n - 1, Math.max(0, Math.floor((Math.min(maxx, box.max.x) - box.min.x) * inv[0])));
+    const iy1 = Math.min(n - 1, Math.max(0, Math.floor((Math.min(maxy, box.max.y) - box.min.y) * inv[1])));
+    const iz1 = Math.min(n - 1, Math.max(0, Math.floor((Math.min(maxz, box.max.z) - box.min.z) * inv[2])));
+    let bestT = maxT;
+    let best = null;
+    const seen = new Set();
+    for (let iz = iz0; iz <= iz1; iz++) {
+      for (let iy = iy0; iy <= iy1; iy++) {
+        for (let ix = ix0; ix <= ix1; ix++) {
+          const bucket = cells[(iz * n + iy) * n + ix];
+          if (!bucket) continue;
+          for (let i = 0; i < bucket.length; i++) {
+            const packed = bucket[i];
+            if (seen.has(packed)) continue;
+            seen.add(packed);
+            const mi = packed >>> 24;
+            const tIdx = packed & 0xffffff;
+            const mesh = meshes[mi];
+            if (!mesh) continue;
+            const o = tIdx * 9;
+            const v = mesh.verts;
+            const t = rayTriT(
+              ox, oy, oz, dx, dy, dz,
+              v[o], v[o + 1], v[o + 2],
+              v[o + 3], v[o + 4], v[o + 5],
+              v[o + 6], v[o + 7], v[o + 8],
+            );
+            if (t == null || t > bestT) continue;
+            bestT = t;
+            const ax = v[o]; const ay = v[o + 1]; const az = v[o + 2];
+            const bx = v[o + 3]; const by = v[o + 4]; const bz = v[o + 5];
+            const cx = v[o + 6]; const cy = v[o + 7]; const cz = v[o + 8];
+            const nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+            const ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+            const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+            best = { t, nx, ny, nz };
+          }
+        }
+      }
+    }
+    if (!best) return null;
+    const nLen = Math.hypot(best.nx, best.ny, best.nz) || 1;
+    return {
+      point: { x: ox + dx * best.t, y: oy + dy * best.t, z: oz + dz * best.t },
+      distance: best.t,
+      face: { normal: { x: best.nx / nLen, y: best.ny / nLen, z: best.nz / nLen } },
+      object: null,
+    };
+  }
+
+  function raycastSkin(THREE, origin, dir, far) {
+    const maxFar = far > 0 ? far : bodyHeight * 4;
+    if (skinAccel) {
+      const hit = raycastSkinAccel(origin, dir, maxFar);
+      if (hit) return hit;
+    }
+    const ray = new THREE.Raycaster(origin, dir.clone().normalize(), 0, maxFar);
+    ray.firstHitOnly = true;
     const hits = ray.intersectObjects(bodyMeshes, true);
     return hits[0] || null;
   }
@@ -816,17 +1073,33 @@ const Meridian3D = (() => {
     const mm = worldPerMm();
     const pull = Number(maxPullMm) > 0 ? maxPullMm : 10;
     const origin = new THREE.Vector3().fromArray(worldPos).addScaledVector(n, mm * (pull + 2));
-    const hit = raycastSkin(THREE, origin, n.clone().negate());
+    const far = mm * (pull * 2 + 4);
+    const hit = raycastSkin(THREE, origin, n.clone().negate(), far);
     if (!hit) return { position: worldPos, normal: [n.x, n.y, n.z] };
     const mapped = new THREE.Vector3().fromArray(worldPos);
-    if (hit.point.distanceTo(mapped) > mm * pull) {
+    const hx = hit.point.x;
+    const hy = hit.point.y;
+    const hz = hit.point.z;
+    if (Math.hypot(hx - mapped.x, hy - mapped.y, hz - mapped.z) > mm * pull) {
       return { position: worldPos, normal: [n.x, n.y, n.z] };
     }
-    const hn = hit.face && hit.object
-      ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize()
-      : n;
-    if (hn.dot(n) < 0) hn.negate();
-    return { position: [hit.point.x, hit.point.y, hit.point.z], normal: [hn.x, hn.y, hn.z] };
+    let nx;
+    let ny;
+    let nz;
+    if (hit.object && hit.face && hit.face.normal && hit.face.normal.clone) {
+      const hn = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+      nx = hn.x; ny = hn.y; nz = hn.z;
+    } else if (hit.face && hit.face.normal) {
+      nx = hit.face.normal.x;
+      ny = hit.face.normal.y;
+      nz = hit.face.normal.z;
+    } else {
+      nx = n.x; ny = n.y; nz = n.z;
+    }
+    if (nx * n.x + ny * n.y + nz * n.z < 0) {
+      nx = -nx; ny = -ny; nz = -nz;
+    }
+    return { position: [hx, hy, hz], normal: [nx, ny, nz] };
   }
 
   function liftPoint(position, normal) {
@@ -1404,10 +1677,13 @@ const Meridian3D = (() => {
   }
 
   function placedPoint(p) {
+    const key = `${loadedGender}|${p.id}`;
+    const cached = pointCache.get(key);
+    if (cached) return cached;
     const mapped = toWorld(p.position);
     const snapped = snapToSkin(mapped, p.normal);
     const position = liftPoint(snapped.position, snapped.normal);
-    return {
+    const rec = {
       id: p.id,
       name: p.name,
       code: p.code,
@@ -1418,39 +1694,97 @@ const Meridian3D = (() => {
       position,
       normal: snapped.normal,
     };
+    pointCache.set(key, rec);
+    return rec;
+  }
+
+  function ribbonSamples(route, chunk, chunkIdx) {
+    const key = `${loadedGender}|${route.meridianId}|${route.side}|${chunkIdx}`;
+    const cached = ribbonCache.get(key);
+    if (cached) return cached;
+    const samples = densifyNodes(chunk, route.meridianId);
+    ribbonCache.set(key, samples);
+    return samples;
+  }
+
+  function resetAnnotScene() {
+    if (annotRoot && three) {
+      disposeObject(annotRoot, { keepShared: true });
+      annotRoot.clear();
+    }
+    pickables = [];
+    highlighted = null;
+    annotPlaced = new Set();
+  }
+
+  function placeMeridian(meridianId) {
+    if (!annotRoot || !three || !meridianId || annotPlaced.has(meridianId)) return;
+    const { THREE } = three;
+    const doc = currentMap();
+    if (!doc) return;
+    (doc.meridians || []).forEach((route) => {
+      if (route.meridianId !== meridianId || !sideAllowed(route.side)) return;
+      const color = route.color || lineColorFor(route.meridianId);
+      splitRouteNodes(route.nodes || []).forEach((chunk, chunkIdx) => {
+        addRibbon(THREE, ribbonSamples(route, chunk, chunkIdx), color);
+      });
+    });
+    (doc.acupoints || []).forEach((p) => {
+      if (p.meridianId !== meridianId || !sideAllowed(p.side)) return;
+      addMarker(THREE, placedPoint(p), markerColorFor());
+    });
+    annotPlaced.add(meridianId);
+    calloutsDirty = true;
   }
 
   function placeAnnotations() {
-    if (!annotRoot || !three) return;
-    const { THREE } = three;
-    disposeObject(annotRoot, { keepShared: true });
-    annotRoot.clear();
-    pickables = [];
-    highlighted = null;
-
-    const doc = currentMap();
-    const selected = selectedMeridians();
-    if (!doc || !selected.length) {
-      clearCallouts();
+    if (!annotRoot || !three) {
+      annotDirty = true;
       return;
     }
+    resetAnnotScene();
+    const selected = selectedMeridians();
+    if (!selected.length) {
+      clearCallouts();
+      annotDirty = false;
+      return;
+    }
+    selected.forEach((mer) => placeMeridian(mer.id));
+    annotDirty = false;
+  }
 
-    const selectedIds = new Set(selected.map((m) => m.id));
+  async function rebuildAnnotations({ ids = null, reset = false, work = annotWork } = {}) {
+    if (work !== annotWork) return;
+    if (!annotRoot || !three) {
+      annotDirty = true;
+      return;
+    }
+    const selected = selectedMeridians();
+    const want = ids && ids.length
+      ? ids.filter((id) => selected.some((m) => m.id === id))
+      : selected.map((m) => m.id);
+    if (reset) resetAnnotScene();
+    if (!want.length && reset) {
+      clearCallouts();
+      annotDirty = !selected.length ? false : true;
+      return;
+    }
+    for (let i = 0; i < want.length; i++) {
+      if (work !== annotWork) return;
+      placeMeridian(want[i]);
+      if (i < want.length - 1) await sleep(0);
+    }
+    if (work !== annotWork) return;
+    annotDirty = selected.some((m) => !annotPlaced.has(m.id));
+  }
 
-    (doc.meridians || []).forEach((route) => {
-      if (!selectedIds.has(route.meridianId) || !sideAllowed(route.side)) return;
-      const color = route.color || lineColorFor(route.meridianId);
-      splitRouteNodes(route.nodes || []).forEach((chunk) => {
-        addRibbon(THREE, densifyNodes(chunk, route.meridianId), color);
-      });
-    });
-
-    (doc.acupoints || []).forEach((p) => {
-      if (!selectedIds.has(p.meridianId) || !sideAllowed(p.side)) return;
-      const rec = placedPoint(p);
-      addMarker(THREE, rec, markerColorFor());
-    });
-    calloutsDirty = true;
+  function scheduleAnnotRebuild() {
+    if (!loadedGender || playingAuto || !annotDirty) return;
+    const work = ++annotWork;
+    setTimeout(() => {
+      if (work !== annotWork || playingAuto || !annotDirty) return;
+      rebuildAnnotations({ reset: true, work }).catch(() => {});
+    }, 0);
   }
 
   function highlightPoint(rec) {
@@ -1533,6 +1867,7 @@ const Meridian3D = (() => {
     let cssH = 0;
     const loop = () => {
       raf = requestAnimationFrame(loop);
+      if ($('m3d-modal') && !$('m3d-modal').hidden) return;
       const moving = orbiting || performance.now() < movingUntil;
       try { controls.update(); } catch {}
       const rect = mount.getBoundingClientRect();
@@ -1603,7 +1938,8 @@ const Meridian3D = (() => {
     const wanted = gender === 'female' ? 'female' : 'male';
     const doc = await loadMap(wanted);
     if (loadedGender === wanted && modelRoot.children.length) {
-      placeAnnotations();
+      if (!skinAccel) buildSkinAccel();
+      if (!playingAuto && annotDirty) await rebuildAnnotations({ reset: true });
       applyCameraLimits();
       if (!playingAuto) {
         faceFront();
@@ -1638,7 +1974,11 @@ const Meridian3D = (() => {
     });
     modelRoot.add(root);
     loadedGender = wanted;
-    placeAnnotations();
+    clearSkinAccel();
+    buildSkinAccel();
+    clearAnnotCache();
+    resetAnnotScene();
+    if (!playingAuto) await rebuildAnnotations({ reset: false });
     if (!playingAuto) {
       faceFront();
       applyScale();
@@ -1691,6 +2031,7 @@ const Meridian3D = (() => {
     const list = selectedMeridians();
     if (!list.length) return;
     const gen = ++playGeneration;
+    const work = ++annotWork;
     playingAuto = true;
     autoAbort = false;
     lastReframeName = '';
@@ -1703,6 +2044,7 @@ const Meridian3D = (() => {
 
     try {
       setLoading(true);
+      await yieldPaint();
       try {
         await Promise.all([loadBody(opts.gender), waitForVoices()]);
       } catch (err) {
@@ -1712,12 +2054,19 @@ const Meridian3D = (() => {
         setLoading(false);
         return;
       }
-      if (autoAbort || gen !== playGeneration) {
+      if (autoAbort || gen !== playGeneration || work !== annotWork) {
         setLoading(false);
         return;
       }
-      placeAnnotations();
+      const firstId = list[0] && list[0].id;
+      if (firstId && (annotDirty || !annotPlaced.has(firstId))) {
+        await rebuildAnnotations({ ids: [firstId], reset: true, work });
+      }
       setLoading(false);
+      const rest = list.slice(1).map((m) => m.id);
+      if (rest.length) {
+        rebuildAnnotations({ ids: rest, reset: false, work }).catch(() => {});
+      }
 
       let mIndex = resume && autoCursor ? autoCursor.mIndex : 0;
       let pIndex = resume && autoCursor ? autoCursor.pIndex : -1;
@@ -1726,6 +2075,10 @@ const Meridian3D = (() => {
       for (; mIndex < list.length; mIndex++) {
         if (autoAbort || gen !== playGeneration) return;
         const mer = list[mIndex];
+        if (!annotPlaced.has(mer.id)) {
+          await rebuildAnnotations({ ids: [mer.id], reset: false, work });
+          if (autoAbort || gen !== playGeneration || work !== annotWork) return;
+        }
         const pts = tourPoints(mer.id);
         if (!pts.length) continue;
         setTitle(mer.name);
@@ -1819,9 +2172,12 @@ const Meridian3D = (() => {
     if (!el) return;
     let last = 0;
     const run = (ev) => {
-      if (ev && ev.type === 'pointerup' && ev.pointerType === 'mouse' && (ev.button ?? 0) !== 0) return;
+      if (ev && ev.type === 'pointerup') {
+        if ((ev.button ?? 0) !== 0) return;
+        if (ev.pointerType === 'mouse') return;
+      }
       const now = performance.now();
-      if (now - last < 400) return;
+      if (now - last < 80) return;
       last = now;
       handler(ev);
     };
@@ -1838,26 +2194,30 @@ const Meridian3D = (() => {
       `<label><input type="checkbox" data-mid="${m.id}">${m.name}<span style="margin-left:auto;color:var(--clr-muted)">${m.id}</span></label>`
     )).join('');
 
-    list.addEventListener('change', (e) => {
-      const id = e.target.dataset.mid;
+    const syncMeridianBox = (el) => {
+      const id = el && el.dataset && el.dataset.mid;
       if (!id) return;
-      if (e.target.checked) opts.meridians.add(id);
+      if (el.checked) opts.meridians.add(id);
       else opts.meridians.delete(id);
-      autoCursor = null;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
+    };
+    list.addEventListener('change', (e) => {
+      if (e.target && e.target.matches('input[data-mid]')) syncMeridianBox(e.target);
+    });
+    list.addEventListener('click', (e) => {
+      const box = e.target.closest('input[data-mid]') || e.target.closest('label')?.querySelector('input[data-mid]');
+      if (box) syncMeridianBox(box);
     });
 
     $('m3d-select-all').onclick = () => {
       MERIDIANS.forEach((m) => opts.meridians.add(m.id));
       list.querySelectorAll('input').forEach((el) => { el.checked = true; });
-      autoCursor = null;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
     };
     $('m3d-select-none').onclick = () => {
       opts.meridians.clear();
       list.querySelectorAll('input').forEach((el) => { el.checked = false; });
-      autoCursor = null;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
     };
 
     $('m3d-gender').onclick = (e) => {
@@ -1883,7 +2243,7 @@ const Meridian3D = (() => {
         autoCursor = null;
       }
       opts.mode = next;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
     };
 
     const scale = $('m3d-scale');
@@ -1901,11 +2261,13 @@ const Meridian3D = (() => {
     $('m3d-modal-close').onclick = () => {
       setModal(false);
       if (opts.gender !== loadedGender && loadedGender) playManual();
+      else scheduleAnnotRebuild();
     };
     $('m3d-modal').addEventListener('click', (e) => {
       if (e.target === $('m3d-modal')) {
         setModal(false);
         if (opts.gender !== loadedGender && loadedGender) playManual();
+        else scheduleAnnotRebuild();
       }
     });
 
@@ -2033,6 +2395,18 @@ const Meridian3D = (() => {
           pr: renderer.getPixelRatio(),
         };
       },
+      annotCache: () => ({
+        ribbons: ribbonCache.size,
+        points: pointCache.size,
+        dirty: annotDirty,
+        placed: [...annotPlaced],
+        skin: !!skinAccel,
+      }),
+      selection: () => ({
+        gender: opts.gender,
+        mode: opts.mode,
+        meridians: [...opts.meridians],
+      }),
       meshStats() {
         let verts = 0;
         let tris = 0;
