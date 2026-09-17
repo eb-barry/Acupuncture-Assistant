@@ -1819,7 +1819,7 @@ const Meridian3D = (() => {
     if (!el) return;
     let last = 0;
     const run = (ev) => {
-      if (ev && ev.type === 'pointerup' && ev.pointerType === 'mouse' && ev.button !== 0) return;
+      if (ev && ev.type === 'pointerup' && ev.pointerType === 'mouse' && (ev.button ?? 0) !== 0) return;
       const now = performance.now();
       if (now - last < 400) return;
       last = now;

@@ -791,7 +791,10 @@ body::before {
 #m3d-menu-btn img { width: 26px; height: 26px; }
 .m3d-icon-btn:active { background: rgba(255,255,255,0.18); }
 .m3d-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-#m3d-title { font-size: var(--fs-md); padding: 0 4px; }
+#m3d-title {
+  font-size: var(--fs-md); padding: 0 4px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .m3d-stage {
   flex: 1; min-height: 0; position: relative;
