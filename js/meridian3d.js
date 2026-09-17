@@ -81,6 +81,9 @@ const Meridian3D = (() => {
   let lastReframeName = '';
   let reframeLog = [];
   let capturedPointerId = null;
+  let annotDirty = true;
+  let ribbonCache = new Map();
+  let pointCache = new Map();
 
   const $ = (id) => document.getElementById(id);
 
@@ -299,6 +302,17 @@ const Meridian3D = (() => {
   function currentMap() {
     const key = opts.gender === 'female' ? 'female' : 'male';
     return mapCache[key];
+  }
+
+  function clearAnnotCache() {
+    ribbonCache.clear();
+    pointCache.clear();
+    annotDirty = true;
+  }
+
+  function markAnnotDirty() {
+    annotDirty = true;
+    autoCursor = null;
   }
 
   function sideAllowed(side) {
@@ -537,6 +551,7 @@ const Meridian3D = (() => {
     pickables = [];
     loadedGender = null;
     clearCallouts();
+    clearAnnotCache();
     if (skinMaterial) { skinMaterial.dispose(); skinMaterial = null; }
     if (nailMaterial) { nailMaterial.dispose(); nailMaterial = null; }
   }
@@ -1404,10 +1419,13 @@ const Meridian3D = (() => {
   }
 
   function placedPoint(p) {
+    const key = `${loadedGender}|${p.id}`;
+    const cached = pointCache.get(key);
+    if (cached) return cached;
     const mapped = toWorld(p.position);
     const snapped = snapToSkin(mapped, p.normal);
     const position = liftPoint(snapped.position, snapped.normal);
-    return {
+    const rec = {
       id: p.id,
       name: p.name,
       code: p.code,
@@ -1418,10 +1436,24 @@ const Meridian3D = (() => {
       position,
       normal: snapped.normal,
     };
+    pointCache.set(key, rec);
+    return rec;
+  }
+
+  function ribbonSamples(route, chunk, chunkIdx) {
+    const key = `${loadedGender}|${route.meridianId}|${route.side}|${chunkIdx}`;
+    const cached = ribbonCache.get(key);
+    if (cached) return cached;
+    const samples = densifyNodes(chunk, route.meridianId);
+    ribbonCache.set(key, samples);
+    return samples;
   }
 
   function placeAnnotations() {
-    if (!annotRoot || !three) return;
+    if (!annotRoot || !three) {
+      annotDirty = true;
+      return;
+    }
     const { THREE } = three;
     disposeObject(annotRoot, { keepShared: true });
     annotRoot.clear();
@@ -1432,6 +1464,7 @@ const Meridian3D = (() => {
     const selected = selectedMeridians();
     if (!doc || !selected.length) {
       clearCallouts();
+      annotDirty = false;
       return;
     }
 
@@ -1440,17 +1473,17 @@ const Meridian3D = (() => {
     (doc.meridians || []).forEach((route) => {
       if (!selectedIds.has(route.meridianId) || !sideAllowed(route.side)) return;
       const color = route.color || lineColorFor(route.meridianId);
-      splitRouteNodes(route.nodes || []).forEach((chunk) => {
-        addRibbon(THREE, densifyNodes(chunk, route.meridianId), color);
+      splitRouteNodes(route.nodes || []).forEach((chunk, chunkIdx) => {
+        addRibbon(THREE, ribbonSamples(route, chunk, chunkIdx), color);
       });
     });
 
     (doc.acupoints || []).forEach((p) => {
       if (!selectedIds.has(p.meridianId) || !sideAllowed(p.side)) return;
-      const rec = placedPoint(p);
-      addMarker(THREE, rec, markerColorFor());
+      addMarker(THREE, placedPoint(p), markerColorFor());
     });
     calloutsDirty = true;
+    annotDirty = false;
   }
 
   function highlightPoint(rec) {
@@ -1603,7 +1636,7 @@ const Meridian3D = (() => {
     const wanted = gender === 'female' ? 'female' : 'male';
     const doc = await loadMap(wanted);
     if (loadedGender === wanted && modelRoot.children.length) {
-      placeAnnotations();
+      if (!playingAuto) placeAnnotations();
       applyCameraLimits();
       if (!playingAuto) {
         faceFront();
@@ -1638,7 +1671,8 @@ const Meridian3D = (() => {
     });
     modelRoot.add(root);
     loadedGender = wanted;
-    placeAnnotations();
+    clearAnnotCache();
+    if (!playingAuto) placeAnnotations();
     if (!playingAuto) {
       faceFront();
       applyScale();
@@ -1843,21 +1877,18 @@ const Meridian3D = (() => {
       if (!id) return;
       if (e.target.checked) opts.meridians.add(id);
       else opts.meridians.delete(id);
-      autoCursor = null;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
     });
 
     $('m3d-select-all').onclick = () => {
       MERIDIANS.forEach((m) => opts.meridians.add(m.id));
       list.querySelectorAll('input').forEach((el) => { el.checked = true; });
-      autoCursor = null;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
     };
     $('m3d-select-none').onclick = () => {
       opts.meridians.clear();
       list.querySelectorAll('input').forEach((el) => { el.checked = false; });
-      autoCursor = null;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
     };
 
     $('m3d-gender').onclick = (e) => {
@@ -1883,7 +1914,7 @@ const Meridian3D = (() => {
         autoCursor = null;
       }
       opts.mode = next;
-      if (loadedGender) placeAnnotations();
+      markAnnotDirty();
     };
 
     const scale = $('m3d-scale');
@@ -1901,11 +1932,13 @@ const Meridian3D = (() => {
     $('m3d-modal-close').onclick = () => {
       setModal(false);
       if (opts.gender !== loadedGender && loadedGender) playManual();
+      else if (loadedGender && annotDirty) placeAnnotations();
     };
     $('m3d-modal').addEventListener('click', (e) => {
       if (e.target === $('m3d-modal')) {
         setModal(false);
         if (opts.gender !== loadedGender && loadedGender) playManual();
+        else if (loadedGender && annotDirty) placeAnnotations();
       }
     });
 
