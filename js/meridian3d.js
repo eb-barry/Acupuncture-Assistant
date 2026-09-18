@@ -1601,13 +1601,48 @@ const Meridian3D = (() => {
     items.sort((a, b) => (Number(a.rec && a.rec.sequence) || 0) - (Number(b.rec && b.rec.sequence) || 0) || a.py - b.py);
     const n = items.length;
     if (!n) return;
-    const bot = height - pad;
     const span = (n - 1) * slotH;
-    let y = Math.max(pad, Math.min(bot - span, items[0].py));
-    items.forEach((item) => {
-      item.slotY = y;
-      y += slotH;
+    const mid = items.reduce((sum, it) => sum + it.py, 0) / n;
+    let y0 = mid - span / 2;
+    y0 = Math.max(pad, Math.min(height - pad - span, y0));
+    items.forEach((item, i) => {
+      item.slotY = y0 + i * slotH;
     });
+  }
+
+  function packBlPairColumns(innerItems, outerItems, height, slotH, pad) {
+    packSlots(outerItems, height, slotH, pad, true);
+    const innerAll = [...innerItems].sort((a, b) => a.py - b.py);
+    const kept = [];
+    const taken = new Set();
+    const canPlace = (y) => kept.every((it) => Math.abs(it.slotY - y) >= slotH);
+    const place = (item, y) => {
+      const slotY = Math.max(pad, Math.min(height - pad, y));
+      if (!canPlace(slotY)) return false;
+      item.slotY = slotY;
+      kept.push(item);
+      taken.add(item);
+      return true;
+    };
+    outerItems.forEach((outer) => {
+      let best = null;
+      let bestD = slotH * 0.95;
+      innerAll.forEach((inner) => {
+        if (taken.has(inner)) return;
+        const d = Math.abs(inner.py - outer.py);
+        if (d < bestD) {
+          best = inner;
+          bestD = d;
+        }
+      });
+      if (best) place(best, best.py);
+    });
+    innerAll.forEach((inner) => {
+      if (!taken.has(inner)) place(inner, inner.py);
+    });
+    kept.sort((a, b) => a.py - b.py);
+    innerItems.length = 0;
+    innerItems.push(...kept);
   }
 
   function svgEl(name, attrs) {
@@ -1683,21 +1718,31 @@ const Meridian3D = (() => {
     ['right', 'left'].forEach((park) => {
       const columns = splitCalloutColumns(buckets[park], park, width);
       const outerW = Math.max(0, ...columns.filter((col) => !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
+      const innerStick = columns.find((col) => col.stick && col.indent);
+      const outerStick = columns.find((col) => col.stick && !col.indent);
+      if (innerStick && outerStick) {
+        const slotH = Math.max(18, (outerStick.items[0]?.textH || innerStick.items[0]?.textH || 16) * 0.86);
+        packBlPairColumns(innerStick.items, outerStick.items, height, slotH, pad + 6);
+      }
       columns.forEach((col) => {
         const baseH = col.items[0]?.textH || 16;
         if (col.liao) {
-          packLiaoColumn(col.items, height, Math.max(18, baseH * 0.76), pad + 6);
-        } else {
-          const slotH = col.stick ? Math.max(18, baseH * 0.9) : Math.max(16, baseH + 3);
-          packSlots(col.items, height, slotH, pad + 6, !!col.stick);
+          packLiaoColumn(col.items, height, Math.max(22, baseH * 1.08), pad + 6);
+        } else if (col.stick && !(innerStick && outerStick)) {
+          packSlots(col.items, height, Math.max(18, baseH * 0.86), pad + 6, true);
+        } else if (!col.stick && !col.liao) {
+          packSlots(col.items, height, Math.max(16, baseH + 3), pad + 6, false);
         }
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
-            const inset = col.indent ? Math.max(outerW + 16, 56) : 0;
+            const inset = col.indent ? Math.max(outerW + 18, 56) : 0;
             let textX = width - pad - item.textW - inset;
-            if (textX < item.px + 10) textX = item.px + 10;
+            if (!col.stick) {
+              if (textX < item.px + 10) textX = item.px + 10;
+            }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
+            if (textX < 2) textX = 2;
             const joinX = textX;
             const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
             const elbowX = Math.max(item.px + 6, joinX - horiz);
@@ -2448,6 +2493,15 @@ const Meridian3D = (() => {
           t.y + (camera.position.y - t.y) * s,
           t.z + (camera.position.z - t.z) * s,
         );
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
+      nudgeTarget(dyBody) {
+        if (!camera || !controls) return;
+        const dy = (Number(dyBody) || 0) * (Number(bodyHeight) || 1);
+        controls.target.y += dy;
+        camera.position.y += dy;
         controls.update();
         noteCameraMoving(280);
         calloutsDirty = true;
