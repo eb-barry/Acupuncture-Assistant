@@ -1678,7 +1678,7 @@ const Meridian3D = (() => {
     laid.forEach((item) => {
       const focus = !!(playingAuto && isFocusRec(item.rec));
       const joinX = item.park === 'left' ? item.textX + item.textW : item.textX;
-      const aligned = Math.abs(item.slotY - item.py) < 2;
+      const aligned = Math.abs(item.slotY - item.py) < Math.max(6, item.textH * 0.35);
       const d = aligned
         ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
         : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${item.elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
@@ -2405,6 +2405,17 @@ const Meridian3D = (() => {
         const svg = $('m3d-callouts');
         if (!svg || svg.hasAttribute('hidden')) return [];
         return [...svg.querySelectorAll('text')].map((el) => el.textContent);
+      },
+      calloutLayout() {
+        const svg = $('m3d-callouts');
+        if (!svg || svg.hasAttribute('hidden')) return [];
+        const { width } = viewportSize();
+        return [...svg.querySelectorAll('text')].map((el) => ({
+          name: el.textContent,
+          x: Number(el.getAttribute('x')),
+          y: Number(el.getAttribute('y')),
+          left: Number(el.getAttribute('x')) < width * 0.45,
+        }));
       },
       ndcOf(name) {
         const rec = testRecord(name);
