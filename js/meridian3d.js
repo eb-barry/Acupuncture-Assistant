@@ -137,6 +137,21 @@ const Meridian3D = (() => {
     return sides;
   }
 
+  const BL_LIAO_NAMES = new Set(['上髎', '次髎', '中髎', '下髎']);
+
+  function blCalloutBand(rec) {
+    if (!rec || rec.meridianId !== 'BL') return '';
+    if (BL_LIAO_NAMES.has(rec.name)) return 'liao';
+    const seq = Number(rec.sequence) || 0;
+    if (seq >= 11 && seq <= 30) return 'inner';
+    if (seq >= 41 && seq <= 54) return 'outer';
+    return '';
+  }
+
+  function calloutParkFor(rec, fallback = 'right') {
+    return blCalloutBand(rec) === 'liao' ? 'left' : fallback;
+  }
+
   function clusterByX(items, width) {
     const sorted = [...items].sort((a, b) => a.px - b.px);
     const minGap = Math.max(8, width * 0.022);
@@ -189,7 +204,8 @@ const Meridian3D = (() => {
   function ensureFocusItem(items, visible, park, sides) {
     const focusItem = visible.find((it) => isFocusRec(it.rec));
     if (!focusItem) return items;
-    const want = (sides && sides.get(focusItem.rec.meridianId)) || 'right';
+    const meridianPark = (sides && sides.get(focusItem.rec.meridianId)) || 'right';
+    const want = calloutParkFor(focusItem.rec, meridianPark);
     if (park !== want) return items;
     if (items.some((it) => isFocusRec(it.rec))) return items;
     return items.concat([{ ...focusItem, park }]);
@@ -245,6 +261,16 @@ const Meridian3D = (() => {
 
   function splitCalloutColumns(items, park, width) {
     if (!items.length) return [];
+    const hasBlPair = items.some((it) => blCalloutBand(it.rec) === 'inner')
+      && items.some((it) => blCalloutBand(it.rec) === 'outer');
+    if (hasBlPair) {
+      const innerCol = items.filter((it) => blCalloutBand(it.rec) === 'inner');
+      const outerCol = items.filter((it) => blCalloutBand(it.rec) !== 'inner');
+      const cols = [];
+      if (outerCol.length) cols.push({ items: outerCol, indent: 0, stick: true });
+      if (innerCol.length) cols.push({ items: innerCol, indent: 1, stick: true });
+      return cols;
+    }
     const yTol = Math.max(12, (items[0]?.textH || 16) * 0.9);
     const ranked = [...items].sort((a, b) => a.py - b.py);
     ranked.forEach((it) => { it.indent = 0; });
@@ -1514,7 +1540,7 @@ const Meridian3D = (() => {
     return { w: Math.max(fs, name.length * fs), h: fs * 1.35, fs };
   }
 
-  function packSlots(items, height, slotH, pad) {
+  function packSlots(items, height, slotH, pad, stickToPoint = false) {
     items.sort((a, b) => a.py - b.py);
     const minSlot = Math.max(14, slotH * 0.72);
     const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
@@ -1534,8 +1560,9 @@ const Meridian3D = (() => {
     let next = pad;
     const bot = height - pad;
     items.forEach((item) => {
-      let y = Math.max(next, item.py);
-      if (y > bot) y = bot;
+      let y = stickToPoint ? item.py : Math.max(next, item.py);
+      y = Math.max(pad, Math.min(bot, y));
+      if (y < next) y = next;
       item.slotY = y;
       next = y + slotH;
     });
@@ -1593,29 +1620,30 @@ const Meridian3D = (() => {
     const pad = 8;
     const buckets = { left: [], right: [] };
     visible.forEach((it) => {
-      const park = sides.get(it.rec.meridianId) || 'right';
+      const meridianPark = sides.get(it.rec.meridianId) || 'right';
+      const park = calloutParkFor(it.rec, meridianPark);
       buckets[park].push({ ...it, park });
     });
 
-    buckets.right = ensureFocusItem(
-      focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width)),
-      visible,
-      'right',
-      sides,
-    );
-    buckets.left = ensureFocusItem(
-      focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width)),
-      visible,
-      'left',
-      sides,
-    );
+    const preparePark = (park) => {
+      const raw = dedupeParkItems(buckets[park], park);
+      const hasBlPair = raw.some((it) => blCalloutBand(it.rec) === 'inner')
+        && raw.some((it) => blCalloutBand(it.rec) === 'outer');
+      const next = hasBlPair
+        ? focusTorsoItems(raw)
+        : focusTorsoItems(pickEdgeItems(raw, park, width));
+      return ensureFocusItem(next, visible, park, sides);
+    };
+    buckets.right = preparePark('right');
+    buckets.left = preparePark('left');
 
     const laid = [];
     ['right', 'left'].forEach((park) => {
       const columns = splitCalloutColumns(buckets[park], park, width);
       columns.forEach((col) => {
         const slotH = Math.max(16, (col.items[0]?.textH || 16) + 3);
-        packSlots(col.items, height, slotH, pad + 6);
+        const stick = !!(col.stick || park === 'left' && col.items.every((it) => blCalloutBand(it.rec) === 'liao'));
+        packSlots(col.items, height, slotH, pad + 6, stick);
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
