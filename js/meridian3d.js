@@ -261,6 +261,9 @@ const Meridian3D = (() => {
 
   function splitCalloutColumns(items, park, width) {
     if (!items.length) return [];
+    if (items.every((it) => blCalloutBand(it.rec) === 'liao')) {
+      return [{ items: [...items], indent: 0, liao: true }];
+    }
     const hasBlPair = items.some((it) => blCalloutBand(it.rec) === 'inner')
       && items.some((it) => blCalloutBand(it.rec) === 'outer');
     if (hasBlPair) {
@@ -1542,6 +1545,33 @@ const Meridian3D = (() => {
 
   function packSlots(items, height, slotH, pad, stickToPoint = false) {
     items.sort((a, b) => a.py - b.py);
+    const bot = height - pad;
+    if (stickToPoint) {
+      const kept = [];
+      let lastY = pad - slotH;
+      items.forEach((item) => {
+        const y = Math.max(pad, Math.min(bot, item.py));
+        if (y < lastY + slotH) {
+          const nudged = lastY + slotH;
+          if (nudged <= bot && nudged - item.py <= Math.max(6, item.textH * 0.28)) {
+            item.slotY = nudged;
+            kept.push(item);
+            lastY = nudged;
+          }
+          return;
+        }
+        item.slotY = y;
+        kept.push(item);
+        lastY = y;
+      });
+      if (!kept.length && items.length) {
+        items[0].slotY = Math.max(pad, Math.min(bot, items[0].py));
+        kept.push(items[0]);
+      }
+      items.length = 0;
+      items.push(...kept);
+      return;
+    }
     const minSlot = Math.max(14, slotH * 0.72);
     const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
     if (items.length > maxN) {
@@ -1558,13 +1588,25 @@ const Meridian3D = (() => {
       }
     }
     let next = pad;
-    const bot = height - pad;
     items.forEach((item) => {
-      let y = stickToPoint ? item.py : Math.max(next, item.py);
+      let y = Math.max(next, item.py);
       y = Math.max(pad, Math.min(bot, y));
       if (y < next) y = next;
       item.slotY = y;
       next = y + slotH;
+    });
+  }
+
+  function packLiaoColumn(items, height, slotH, pad) {
+    items.sort((a, b) => (Number(a.rec && a.rec.sequence) || 0) - (Number(b.rec && b.rec.sequence) || 0) || a.py - b.py);
+    const n = items.length;
+    if (!n) return;
+    const bot = height - pad;
+    const span = (n - 1) * slotH;
+    let y = Math.max(pad, Math.min(bot - span, items[0].py));
+    items.forEach((item) => {
+      item.slotY = y;
+      y += slotH;
     });
   }
 
@@ -1640,14 +1682,19 @@ const Meridian3D = (() => {
     const laid = [];
     ['right', 'left'].forEach((park) => {
       const columns = splitCalloutColumns(buckets[park], park, width);
+      const outerW = Math.max(0, ...columns.filter((col) => !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
       columns.forEach((col) => {
-        const slotH = Math.max(16, (col.items[0]?.textH || 16) + 3);
-        const stick = !!(col.stick || park === 'left' && col.items.every((it) => blCalloutBand(it.rec) === 'liao'));
-        packSlots(col.items, height, slotH, pad + 6, stick);
+        const baseH = col.items[0]?.textH || 16;
+        if (col.liao) {
+          packLiaoColumn(col.items, height, Math.max(18, baseH * 0.76), pad + 6);
+        } else {
+          const slotH = col.stick ? Math.max(18, baseH * 0.9) : Math.max(16, baseH + 3);
+          packSlots(col.items, height, slotH, pad + 6, !!col.stick);
+        }
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
-            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
+            const inset = col.indent ? Math.max(outerW + 16, 56) : 0;
             let textX = width - pad - item.textW - inset;
             if (textX < item.px + 10) textX = item.px + 10;
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
@@ -1656,13 +1703,12 @@ const Meridian3D = (() => {
             const elbowX = Math.max(item.px + 6, joinX - horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           } else {
-            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
-            let textX = pad + inset;
-            if (textX + item.textW + 10 > item.px) textX = item.px - item.textW - 10;
+            let textX = pad;
+            if (textX + item.textW + 10 > item.px) textX = Math.max(2, item.px - item.textW - 10);
             if (textX < 2) textX = 2;
             const joinX = textX + item.textW;
-            const horiz = Math.min(28, Math.max(8, Math.abs(item.px - joinX) * 0.28));
-            const elbowX = Math.min(item.px - 6, joinX + horiz);
+            const horiz = Math.min(36, Math.max(10, Math.abs(item.px - joinX) * 0.22));
+            const elbowX = Math.min(item.px - 8, joinX + horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           }
         });
@@ -2393,6 +2439,19 @@ const Meridian3D = (() => {
     window.__m3dTest = {
       faceFront: () => { faceFront(); calloutsDirty = true; },
       faceBack: () => { faceBack(); calloutsDirty = true; },
+      dolly(factor) {
+        if (!camera || !controls) return;
+        const t = controls.target;
+        const s = Number(factor) || 1;
+        camera.position.set(
+          t.x + (camera.position.x - t.x) * s,
+          t.y + (camera.position.y - t.y) * s,
+          t.z + (camera.position.z - t.z) * s,
+        );
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
       playingAuto: () => playingAuto,
       viewScale,
       bodyHeight: () => bodyHeight,
@@ -2410,12 +2469,19 @@ const Meridian3D = (() => {
         const svg = $('m3d-callouts');
         if (!svg || svg.hasAttribute('hidden')) return [];
         const { width } = viewportSize();
-        return [...svg.querySelectorAll('text')].map((el) => ({
-          name: el.textContent,
-          x: Number(el.getAttribute('x')),
-          y: Number(el.getAttribute('y')),
-          left: Number(el.getAttribute('x')) < width * 0.45,
-        }));
+        const paths = [...svg.querySelectorAll('path.leader')];
+        return [...svg.querySelectorAll('text')].map((el, i) => {
+          const d = paths[i] ? paths[i].getAttribute('d') || '' : '';
+          const ys = [...d.matchAll(/[ML]\s*[\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]));
+          const horizontal = ys.length >= 2 && ys.every((y) => Math.abs(y - ys[0]) < 1.5);
+          return {
+            name: el.textContent,
+            x: Number(el.getAttribute('x')),
+            y: Number(el.getAttribute('y')),
+            left: Number(el.getAttribute('x')) < width * 0.45,
+            horizontal,
+          };
+        });
       },
       ndcOf(name) {
         const rec = testRecord(name);
