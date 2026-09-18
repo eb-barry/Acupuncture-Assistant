@@ -1708,9 +1708,19 @@ const Meridian3D = (() => {
     return samples;
   }
 
+  function bakedRibbonSpan(ribbon) {
+    const samples = ribbon?.samples || [];
+    if (samples.length < 2) return 0;
+    const a = samples[0].position || [0, 0, 0];
+    const b = samples[samples.length - 1].position || [0, 0, 0];
+    return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  }
+
   function routeUsesBakedRibbons(route) {
     return Array.isArray(route?.ribbons)
-      && route.ribbons.some((ribbon) => (ribbon?.samples || []).length >= 2);
+      && route.ribbons.some((ribbon) => (
+        (ribbon?.samples || []).length >= 2 && bakedRibbonSpan(ribbon) > 1e-4
+      ));
   }
 
   function bakedRibbonSamples(route, ribbon, ribbonIdx) {
