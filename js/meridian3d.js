@@ -1741,23 +1741,22 @@ const Meridian3D = (() => {
     // instead of stacking on 崑崙 / the lateral malleolus.
     let y0 = mid + textH * 0.28;
     y0 = Math.max(pad, Math.min(height - pad - span, y0));
+    const capElbow = (item, slotY) => {
+      const drop = Math.abs(slotY - item.py);
+      item.dogleg = drop >= 6;
+      item.elbowX = item.px + Math.min(drop, Math.max(14, textH * 0.55));
+    };
     pairs.forEach((pair, i) => {
       const rowY = y0 + i * slotH;
       if (pair.outer) {
         pair.outer.slotY = rowY;
-        const drop = Math.abs(rowY - pair.outer.py);
-        pair.outer.dogleg = drop >= 6;
-        pair.outer.elbowX = pair.outer.px + drop;
+        capElbow(pair.outer, rowY);
       }
       if (pair.inner) {
-        const partner = pair.outer;
         const nextRow = i < pairs.length - 1 ? y0 + (i + 1) * slotH : height - pad;
-        pair.inner.dogleg = true;
         pair.inner.slotY = Math.min(nextRow - textH * 0.72, rowY + innerDrop);
         pair.inner.slotY = Math.max(pad, Math.min(height - pad, pair.inner.slotY));
-        const drop = Math.abs(pair.inner.slotY - pair.inner.py);
-        const sign = partner && partner.px < pair.inner.px ? -1 : 1;
-        pair.inner.elbowX = pair.inner.px + sign * Math.max(drop, 12);
+        capElbow(pair.inner, pair.inner.slotY);
       }
     });
   }
@@ -1952,8 +1951,16 @@ const Meridian3D = (() => {
       let elbowX = item.elbowX;
       if (item.dogleg) {
         const drop = Math.abs(item.slotY - item.py);
-        const sign = (item.elbowX >= item.px ? 1 : -1);
-        elbowX = item.px + sign * drop;
+        if (isBlFootLateral(item.rec)) {
+          const toward = item.park === 'left' ? -1 : 1;
+          const cap = Math.min(drop, Math.max(14, item.textH * 0.55));
+          elbowX = item.px + toward * cap;
+          if (toward > 0) elbowX = Math.min(elbowX, joinX - 8);
+          else elbowX = Math.max(elbowX, joinX + 8);
+        } else {
+          const sign = (item.elbowX >= item.px ? 1 : -1);
+          elbowX = item.px + sign * drop;
+        }
       }
       const d = aligned
         ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
