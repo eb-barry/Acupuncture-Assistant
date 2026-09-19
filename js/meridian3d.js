@@ -138,10 +138,21 @@ const Meridian3D = (() => {
   }
 
   const BL_LIAO_NAMES = new Set(['上髎', '次髎', '中髎', '下髎']);
+  const BL_FOOT_NAMES = new Set(['僕參', '申脈', '金門', '京骨', '束骨', '足通谷', '至陰']);
+  const BL_PARALLEL_PAIRS = [
+    ['眉衝', '曲差'],
+    ['委中', '委陽'],
+  ];
+
+  function isBlFootLateral(rec) {
+    return !!(rec && rec.meridianId === 'BL' && BL_FOOT_NAMES.has(rec.name));
+  }
 
   function blCalloutBand(rec) {
     if (!rec || rec.meridianId !== 'BL') return '';
     if (BL_LIAO_NAMES.has(rec.name)) return 'liao';
+    if (rec.name === '委中') return 'inner';
+    if (rec.name === '委陽') return 'outer';
     const seq = Number(rec.sequence) || 0;
     if (seq >= 11 && seq <= 30) return 'inner';
     if (seq >= 41 && seq <= 54) return 'outer';
@@ -264,7 +275,7 @@ const Meridian3D = (() => {
     const span = Math.max(1, ys[ys.length - 1] - y0);
     const lo = y0 + span * 0.1;
     const hi = y0 + span * 0.72;
-    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || (name && name.endsWith('髎'));
+    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || name === '委中' || name === '委陽' || BL_FOOT_NAMES.has(name) || (name && name.endsWith('髎'));
     const core = items.filter((it) => isFocusRec(it.rec) || keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
     return core.length >= 8 ? core : items;
   }
@@ -274,6 +285,22 @@ const Meridian3D = (() => {
     if (items.every((it) => blCalloutBand(it.rec) === 'liao')) {
       return [{ items: [...items], indent: 0, liao: true }];
     }
+    const foot = items.filter((it) => isBlFootLateral(it.rec));
+    const rest = items.filter((it) => !isBlFootLateral(it.rec));
+    const cols = rest.length ? splitCalloutColumnsRest(rest, park, width) : [];
+    if (foot.length >= 2) {
+      const bySeq = (a, b) => (Number(a.rec.sequence) || 0) - (Number(b.rec.sequence) || 0);
+      const outerFoot = foot.filter((it) => (Number(it.rec.sequence) || 0) % 2 === 0).sort(bySeq);
+      const innerFoot = foot.filter((it) => (Number(it.rec.sequence) || 0) % 2 === 1).sort(bySeq);
+      if (outerFoot.length) cols.push({ items: outerFoot, indent: 0, foot: true });
+      if (innerFoot.length) cols.push({ items: innerFoot, indent: 1, foot: true });
+    } else if (foot.length === 1) {
+      cols.push({ items: foot, indent: 0 });
+    }
+    return cols;
+  }
+
+  function splitCalloutColumnsRest(items, park, width) {
     const hasBlPair = items.some((it) => blCalloutBand(it.rec) === 'inner')
       && items.some((it) => blCalloutBand(it.rec) === 'outer');
     if (hasBlPair) {
@@ -1544,7 +1571,7 @@ const Meridian3D = (() => {
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     const facing = n.dot(toCam);
-    return facing >= 0.12;
+    return facing >= (isBlFootLateral(rec) ? -0.2 : 0.12);
   }
 
   function measureCallout(name) {
@@ -1687,16 +1714,103 @@ const Meridian3D = (() => {
     innerItems.push(...paired, ...rest);
   }
 
-  function applyHeadParallelDogleg(laid) {
-    const mei = laid.find((it) => it.rec && it.rec.name === '眉衝');
-    const qu = laid.find((it) => it.rec && it.rec.name === '曲差');
-    if (!mei || !qu) return;
-    applyDown45Dogleg(mei, qu, nextLowerPy(mei, laid));
-    laid.forEach((it) => {
-      if (it === mei || it === qu || it.park !== mei.park) return;
-      if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82 && it.slotY >= mei.py) {
-        it.slotY = mei.slotY + mei.textH * 0.9;
+  function packBlFootColumns(columns, height, pad) {
+    const inner = columns.find((col) => col.foot && col.indent);
+    const outer = columns.find((col) => col.foot && !col.indent);
+    if (!inner && !outer) return;
+    const sample = (outer && outer.items[0]) || (inner && inner.items[0]);
+    const textH = sample?.textH || 16;
+    // Two 排 of names, like BL 風門/附分: each pair shares a row, inner sits
+    // a 45° drop below outer, and the next pair must clear that drop.
+    const slotH = Math.max(34, textH * 1.32);
+    const innerDrop = Math.min(textH * 0.48, slotH * 0.36);
+    const all = [...(outer?.items || []), ...(inner?.items || [])];
+    const mid = all.reduce((sum, it) => sum + it.py, 0) / Math.max(1, all.length);
+    const bySeq = new Map();
+    all.forEach((it) => bySeq.set(Number(it.rec.sequence) || 0, it));
+    const pairs = [];
+    [61, 63, 65].forEach((odd) => {
+      const inn = bySeq.get(odd);
+      const out = bySeq.get(odd + 1);
+      if (inn || out) pairs.push({ inner: inn, outer: out });
+    });
+    if (bySeq.get(67)) pairs.push({ inner: bySeq.get(67), outer: null });
+    if (!pairs.length) return;
+    const span = Math.max(0, (pairs.length - 1) * slotH);
+    // Bias the two 排 downward so names occupy empty space below the tarsus
+    // instead of stacking on 崑崙 / the lateral malleolus.
+    let y0 = mid + textH * 0.28;
+    y0 = Math.max(pad, Math.min(height - pad - span, y0));
+    const capElbow = (item, slotY) => {
+      const drop = Math.abs(slotY - item.py);
+      item.dogleg = drop >= 6;
+      item.elbowX = item.px + Math.min(drop, Math.max(14, textH * 0.55));
+    };
+    pairs.forEach((pair, i) => {
+      const rowY = y0 + i * slotH;
+      if (pair.outer) {
+        pair.outer.slotY = rowY;
+        capElbow(pair.outer, rowY);
       }
+      if (pair.inner) {
+        const nextRow = i < pairs.length - 1 ? y0 + (i + 1) * slotH : height - pad;
+        pair.inner.slotY = Math.min(nextRow - textH * 0.72, rowY + innerDrop);
+        pair.inner.slotY = Math.max(pad, Math.min(height - pad, pair.inner.slotY));
+        capElbow(pair.inner, pair.inner.slotY);
+      }
+    });
+  }
+
+  function liftKunlunAboveFoot(columns, pad) {
+    const all = columns.flatMap((col) => col.items);
+    const kun = all.find((it) => it.rec && it.rec.name === '崑崙');
+    const foot = all.filter((it) => isBlFootLateral(it.rec) && it.slotY != null);
+    if (!kun || !foot.length) return;
+    const footY = Math.min(...foot.map((it) => it.slotY));
+    const need = footY - Math.max(26, kun.textH * 1.18);
+    if (kun.slotY > need) {
+      kun.slotY = Math.max(pad, need);
+      kun.dogleg = Math.abs(kun.slotY - kun.py) >= 6;
+      kun.elbowX = kun.px + Math.abs(kun.slotY - kun.py);
+    }
+  }
+
+  function cascadeCalloutRows(items, minRatio) {
+    const sorted = [...items].sort((a, b) => a.slotY - b.slotY);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const cur = sorted[i];
+      const gap = Math.max(prev.textH, cur.textH) * minRatio;
+      if (cur.slotY < prev.slotY + gap) {
+        cur.slotY = prev.slotY + gap;
+        if (Math.abs(cur.slotY - cur.py) >= 6) {
+          cur.dogleg = true;
+          cur.elbowX = cur.px + Math.abs(cur.slotY - cur.py);
+        }
+      }
+    }
+  }
+
+  function applyBlParallelDoglegs(laid) {
+    BL_PARALLEL_PAIRS.forEach(([medial, lateral]) => {
+      const mei = laid.find((it) => it.rec && it.rec.name === medial);
+      const lat = laid.find((it) => it.rec && it.rec.name === lateral);
+      if (!mei || !lat) return;
+      applyDown45Dogleg(mei, lat, nextLowerPy(mei, laid));
+      laid.forEach((it) => {
+        if (it === mei || it === lat || it.park !== mei.park) return;
+        if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82) {
+          it.slotY = mei.slotY + mei.textH * 0.95;
+          if (Math.abs(it.slotY - it.py) >= 6) {
+            it.dogleg = true;
+            it.elbowX = it.px + Math.abs(it.slotY - it.py);
+          }
+        }
+      });
+      const outerCol = laid.filter((it) => (
+        it.park === mei.park && Math.abs(it.textX - lat.textX) <= 48
+      ));
+      cascadeCalloutRows(outerCol, 0.78);
     });
   }
 
@@ -1779,23 +1893,27 @@ const Meridian3D = (() => {
         const slotH = Math.max(18, (outerStick.items[0]?.textH || innerStick.items[0]?.textH || 16) * 0.86);
         packBlPairColumns(innerStick.items, outerStick.items, height, slotH, pad + 6);
       }
+      packBlFootColumns(columns, height, pad + 6);
       columns.forEach((col) => {
         const baseH = col.items[0]?.textH || 16;
         if (col.liao) {
           packLiaoColumn(col.items, height, Math.max(22, baseH * 1.08), pad + 6);
+        } else if (col.foot) {
+          return;
         } else if (col.stick && !(innerStick && outerStick)) {
           packSlots(col.items, height, Math.max(18, baseH * 0.86), pad + 6, true);
         } else if (!col.stick && !col.liao) {
           packSlots(col.items, height, Math.max(16, baseH + 3), pad + 6, false);
         }
       });
+      liftKunlunAboveFoot(columns, pad + 6);
       columns.forEach((col) => {
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
             const inset = col.indent ? Math.max(outerW + 32, 72) : 0;
             let textX = width - pad - item.textW - inset;
-            if (!col.stick && !item.dogleg) {
+            if (!col.stick && !col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
@@ -1818,7 +1936,7 @@ const Meridian3D = (() => {
         });
       });
     });
-    applyHeadParallelDogleg(laid);
+    applyBlParallelDoglegs(laid);
 
     svg.innerHTML = '';
     if (!laid.length) {
@@ -1833,8 +1951,16 @@ const Meridian3D = (() => {
       let elbowX = item.elbowX;
       if (item.dogleg) {
         const drop = Math.abs(item.slotY - item.py);
-        const sign = (item.elbowX >= item.px ? 1 : -1);
-        elbowX = item.px + sign * drop;
+        if (isBlFootLateral(item.rec)) {
+          const toward = item.park === 'left' ? -1 : 1;
+          const cap = Math.min(drop, Math.max(14, item.textH * 0.55));
+          elbowX = item.px + toward * cap;
+          if (toward > 0) elbowX = Math.min(elbowX, joinX - 8);
+          else elbowX = Math.max(elbowX, joinX + 8);
+        } else {
+          const sign = (item.elbowX >= item.px ? 1 : -1);
+          elbowX = item.px + sign * drop;
+        }
       }
       const d = aligned
         ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
@@ -2581,6 +2707,22 @@ const Meridian3D = (() => {
         const dz = camera.position.z - controls.target.z;
         controls.target.set(pos[0], pos[1], pos[2]);
         camera.position.set(pos[0] + dx, pos[1] + dy, pos[2] + dz);
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
+      orbitYaw(deg) {
+        if (!camera || !controls) return;
+        const t = controls.target;
+        const dx = camera.position.x - t.x;
+        const dy = camera.position.y - t.y;
+        const dz = camera.position.z - t.z;
+        const rad = (Number(deg) || 0) * Math.PI / 180;
+        camera.position.set(
+          t.x + dx * Math.cos(rad) + dz * Math.sin(rad),
+          t.y + dy,
+          t.z + -dx * Math.sin(rad) + dz * Math.cos(rad),
+        );
         controls.update();
         noteCameraMoving(280);
         calloutsDirty = true;
