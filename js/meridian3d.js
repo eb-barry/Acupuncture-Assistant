@@ -1651,45 +1651,42 @@ const Meridian3D = (() => {
   function packBlPairColumns(innerItems, outerItems, height, slotH, pad) {
     packSlots(outerItems, height, slotH, pad, true);
     const bot = height - pad;
+    const paired = [];
+    const rest = [];
     innerItems.forEach((inner) => {
-      if (!blPairedInner(inner.rec)) {
-        inner.dogleg = false;
-        inner.slotY = Math.max(pad, Math.min(bot, inner.py));
-        return;
-      }
+      if (blPairedInner(inner.rec)) paired.push(inner);
+      else rest.push(inner);
+    });
+    paired.forEach((inner) => {
       applyDown45Dogleg(inner, findBlOuterPartner(inner, outerItems));
       inner.slotY = Math.max(pad, Math.min(bot, inner.slotY));
     });
-    innerItems.sort((a, b) => a.slotY - b.slotY);
+    paired.sort((a, b) => a.slotY - b.slotY);
     let next = pad;
-    innerItems.forEach((item) => {
+    const minGap = Math.max(18, (paired[0]?.textH || slotH) * 0.92);
+    paired.forEach((item) => {
       let y = item.slotY;
       if (y < next) y = next;
-      item.slotY = y;
-      if (item.dogleg) {
-        const drop = Math.abs(item.slotY - item.py);
-        const sign = item.elbowX >= item.px ? 1 : -1;
-        item.elbowX = item.px + sign * drop;
-      }
-      next = y + Math.max(14, slotH * 0.62);
+      item.slotY = Math.min(bot, y);
+      const drop = Math.abs(item.slotY - item.py);
+      const sign = item.elbowX >= item.px ? 1 : -1;
+      item.elbowX = item.px + sign * drop;
+      next = item.slotY + minGap;
     });
+    rest.forEach((item) => {
+      item.dogleg = false;
+      item.slotY = Math.max(pad, Math.min(bot, item.py));
+    });
+    packSlots(rest, height, slotH, pad, true);
+    innerItems.length = 0;
+    innerItems.push(...paired, ...rest);
   }
 
-  function applyHeadParallelDogleg(columns) {
-    const items = columns.flatMap((col) => col.items);
-    const mei = items.find((it) => it.rec && it.rec.name === '眉衝');
-    const qu = items.find((it) => it.rec && it.rec.name === '曲差');
+  function applyHeadParallelDogleg(laid) {
+    const mei = laid.find((it) => it.rec && it.rec.name === '眉衝');
+    const qu = laid.find((it) => it.rec && it.rec.name === '曲差');
     if (!mei || !qu) return;
-    if (Math.abs(mei.py - qu.py) > Math.max(mei.textH * 1.2, 28)) return;
     applyDown45Dogleg(mei, qu);
-    const others = items.filter((it) => it !== mei);
-    let y = mei.slotY;
-    others.forEach((it) => {
-      if (Math.abs(it.slotY - y) < (mei.textH * 0.7) && it.slotY >= mei.py) {
-        y = it.slotY + Math.max(16, mei.textH * 0.7);
-      }
-    });
-    mei.slotY = y;
     const drop = Math.abs(mei.slotY - mei.py);
     const sign = mei.elbowX >= mei.px ? 1 : -1;
     mei.elbowX = mei.px + sign * drop;
@@ -1784,7 +1781,6 @@ const Meridian3D = (() => {
           packSlots(col.items, height, Math.max(16, baseH + 3), pad + 6, false);
         }
       });
-      applyHeadParallelDogleg(columns);
       columns.forEach((col) => {
         col.items.forEach((item) => {
           const slotY = item.slotY;
@@ -1814,6 +1810,7 @@ const Meridian3D = (() => {
         });
       });
     });
+    applyHeadParallelDogleg(laid);
 
     svg.innerHTML = '';
     if (!laid.length) {
@@ -2563,6 +2560,19 @@ const Meridian3D = (() => {
         const dy = (Number(dyBody) || 0) * (Number(bodyHeight) || 1);
         controls.target.y += dy;
         camera.position.y += dy;
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
+      lookAtName(name) {
+        const rec = testRecord(name);
+        if (!rec || !camera || !controls) return;
+        const pos = rec.position;
+        const dx = camera.position.x - controls.target.x;
+        const dy = camera.position.y - controls.target.y;
+        const dz = camera.position.z - controls.target.z;
+        controls.target.set(pos[0], pos[1], pos[2]);
+        camera.position.set(pos[0] + dx, pos[1] + dy, pos[2] + dz);
         controls.update();
         noteCameraMoving(280);
         calloutsDirty = true;
