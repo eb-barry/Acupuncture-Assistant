@@ -1693,10 +1693,9 @@ const Meridian3D = (() => {
     if (!mei || !qu) return;
     applyDown45Dogleg(mei, qu, nextLowerPy(mei, laid));
     laid.forEach((it) => {
-      if (it === mei || it.park !== mei.park) return;
+      if (it === mei || it === qu || it.park !== mei.park) return;
       if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82 && it.slotY >= mei.py) {
         it.slotY = mei.slotY + mei.textH * 0.9;
-        it.dogleg = it.dogleg || Math.abs(it.slotY - it.py) >= Math.max(6, it.textH * 0.35);
       }
     });
   }
