@@ -63,8 +63,10 @@ const Meridian3D = (() => {
   let loadedGender = null;
   let raf = 0;
   let playingAuto = false;
+  let autoPaused = false;
   let autoAbort = false;
   let autoCursor = null;
+  const calloutRecByKey = new Map();
   let autoLockedSide = 'right';
   let currentPoint = null;
   let pickables = [];
@@ -114,6 +116,7 @@ const Meridian3D = (() => {
     const svg = $('m3d-callouts');
     if (!svg) return;
     svg.innerHTML = '';
+    calloutRecByKey.clear();
     setCalloutsVisible(false);
   }
 
@@ -128,7 +131,7 @@ const Meridian3D = (() => {
   }
 
   function viewScale() {
-    return playingAuto ? AUTO_SCALE : (Number(opts.scale) || 1);
+    return (playingAuto || autoPaused) ? AUTO_SCALE : (Number(opts.scale) || 1);
   }
 
   function labelSideByMeridian(selected) {
@@ -431,10 +434,11 @@ const Meridian3D = (() => {
     }
   }
 
-  function closeOverlay() {
+  function closeOverlay({ resumeAuto = false } = {}) {
     const el = $('m3d-point-overlay');
     if (el) el.hidden = true;
     calloutsDirty = true;
+    if (resumeAuto) resumeAutoTour();
   }
 
   async function openOverlay(point) {
@@ -448,6 +452,73 @@ const Meridian3D = (() => {
     await UI.renderPointPanel(sheet, point.name, {
       meridian: point.meridian,
       intlCode: point.code,
+    });
+  }
+
+  function pauseAutoTour() {
+    if (!playingAuto) return;
+    autoPaused = true;
+    playingAuto = false;
+    autoAbort = true;
+    restoreControls();
+    cancelSpeech();
+    setPlayIcon('play');
+  }
+
+  function resumeAutoTour() {
+    if (!autoPaused || opts.mode !== 'auto') {
+      autoPaused = false;
+      return;
+    }
+    autoPaused = false;
+    playAuto(true).catch((err) => console.warn(err));
+  }
+
+  function openPointFromUser(rec) {
+    if (!rec) return;
+    currentPoint = rec;
+    highlightPoint(rec);
+    pauseAutoTour();
+    openOverlay(rec);
+  }
+
+  function calloutKey(rec) {
+    if (!rec) return '';
+    return `${rec.meridianId}|${rec.code}|${rec.side}|${rec.name}`;
+  }
+
+  function bindCalloutClicks() {
+    const svg = $('m3d-callouts');
+    if (!svg || svg.dataset.calloutBound) return;
+    svg.dataset.calloutBound = '1';
+    let down = null;
+    const keyOf = (ev) => {
+      const el = ev.target && ev.target.closest && ev.target.closest('[data-callout-key]');
+      return el ? el.dataset.calloutKey : '';
+    };
+    svg.addEventListener('pointerdown', (ev) => {
+      const key = keyOf(ev);
+      if (!key) return;
+      down = { x: ev.clientX, y: ev.clientY, key };
+    });
+    svg.addEventListener('pointerup', (ev) => {
+      const key = keyOf(ev);
+      if (!key || !down || down.key !== key) {
+        down = null;
+        return;
+      }
+      const dx = ev.clientX - down.x;
+      const dy = ev.clientY - down.y;
+      down = null;
+      if (dx * dx + dy * dy > 64) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const rec = calloutRecByKey.get(key);
+      if (rec) openPointFromUser(rec);
+    });
+    svg.addEventListener('click', (ev) => {
+      if (!keyOf(ev)) return;
+      ev.preventDefault();
     });
   }
 
@@ -640,7 +711,7 @@ const Meridian3D = (() => {
   }
 
   function applyScale() {
-    if (!camera || !controls || !bodyHeight || playingAuto) return;
+    if (!camera || !controls || !bodyHeight || playingAuto || autoPaused) return;
     const { THREE } = three;
     const fov = THREE.MathUtils.degToRad(camera.fov);
     const dist = (bodyHeight / 2) / Math.tan(fov / 2) * 1.7 / Math.max(viewScale(), 0.5);
@@ -1939,11 +2010,13 @@ const Meridian3D = (() => {
     applyBlParallelDoglegs(laid);
 
     svg.innerHTML = '';
+    calloutRecByKey.clear();
     if (!laid.length) {
       setCalloutsVisible(false);
       return;
     }
     laid.sort((a, b) => Number(playingAuto && isFocusRec(a.rec)) - Number(playingAuto && isFocusRec(b.rec)));
+    calloutRecByKey.clear();
     laid.forEach((item) => {
       const focus = !!(playingAuto && isFocusRec(item.rec));
       const joinX = item.park === 'left' ? item.textX + item.textW : item.textX;
@@ -1967,14 +2040,33 @@ const Meridian3D = (() => {
         : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
       svg.appendChild(svgEl('path', { class: focus ? 'leader-halo is-focus' : 'leader-halo', d }));
       svg.appendChild(svgEl('path', { class: focus ? 'leader is-focus' : 'leader', d }));
+      const key = calloutKey(item.rec);
+      calloutRecByKey.set(key, item.rec);
+      const hitPadX = 8;
+      const hitPadY = Math.max(12, item.textH * 0.48);
+      const link = svgEl('a', {
+        class: 'callout-link',
+        href: `#point/${encodeURIComponent(item.rec.name || '')}`,
+        'data-callout-key': key,
+      });
+      link.appendChild(svgEl('rect', {
+        class: 'callout-hit',
+        x: (item.textX - hitPadX).toFixed(1),
+        y: (item.slotY - hitPadY).toFixed(1),
+        width: (item.textW + hitPadX * 2).toFixed(1),
+        height: (hitPadY * 2).toFixed(1),
+        'data-callout-key': key,
+      }));
       const text = svgEl('text', {
         class: focus ? 'callout-name is-focus' : 'callout-name',
         x: item.textX.toFixed(1),
         y: item.slotY.toFixed(1),
         'text-anchor': 'start',
+        'data-callout-key': key,
       });
       text.textContent = item.rec.name;
-      svg.appendChild(text);
+      link.appendChild(text);
+      svg.appendChild(link);
     });
     setCalloutsVisible(true);
   }
@@ -2160,11 +2252,7 @@ const Meridian3D = (() => {
     ray.setFromCamera({ x, y }, camera);
     const hits = ray.intersectObjects(pickables, false);
     const hit = hits.find((h) => h.object.userData.point);
-    if (hit) {
-      currentPoint = hit.object.userData.point;
-      if (playingAuto) stopAuto({ keepCursor: true });
-      openOverlay(currentPoint);
-    }
+    if (hit) openPointFromUser(hit.object.userData.point);
   }
 
   async function ensureScene() {
@@ -2247,7 +2335,6 @@ const Meridian3D = (() => {
     });
     renderer.domElement.addEventListener('pointerup', (ev) => {
       capturedPointerId = null;
-      if (playingAuto) return;
       if (ptrDown) {
         const dx = ev.clientX - ptrDown.x;
         const dy = ev.clientY - ptrDown.y;
@@ -2350,6 +2437,7 @@ const Meridian3D = (() => {
   }
 
   function stopAuto({ keepCursor = false } = {}) {
+    autoPaused = false;
     playingAuto = false;
     autoAbort = true;
     restoreControls();
@@ -2392,8 +2480,12 @@ const Meridian3D = (() => {
     $('m3d-hint').hidden = true;
 
     try {
-      setLoading(true);
-      await yieldPaint();
+      const wanted = opts.gender === 'female' ? 'female' : 'male';
+      const alreadyLoaded = loadedGender === wanted && modelRoot && modelRoot.children.length;
+      if (!alreadyLoaded) {
+        setLoading(true);
+        await yieldPaint();
+      }
       try {
         await Promise.all([loadBody(opts.gender), waitForVoices()]);
       } catch (err) {
@@ -2499,6 +2591,7 @@ const Meridian3D = (() => {
   }
 
   async function onPlayClick() {
+    autoPaused = false;
     closeOverlay();
     if (playingAuto) {
       stopAuto({ keepCursor: true });
@@ -2604,7 +2697,7 @@ const Meridian3D = (() => {
     };
 
     bindTap('m3d-menu-btn', () => {
-      if (playingAuto) stopAuto({ keepCursor: true });
+      if (playingAuto || autoPaused) stopAuto({ keepCursor: true });
       setModal($('m3d-modal').hidden);
     });
     $('m3d-modal-close').onclick = () => {
@@ -2620,12 +2713,13 @@ const Meridian3D = (() => {
       }
     });
 
+    bindCalloutClicks();
     bindTap('m3d-play', onPlayClick);
     bindTap('back-meridian-3d', () => {
       leave();
       UI.showPage('page-home');
     });
-    $('m3d-point-dismiss').onclick = closeOverlay;
+    $('m3d-point-dismiss').onclick = () => closeOverlay({ resumeAuto: true });
     $('m3d-title').addEventListener('click', () => {
       if (currentPoint && $('m3d-point-overlay').hidden && !playingAuto) openOverlay(currentPoint);
     });
@@ -2728,6 +2822,33 @@ const Meridian3D = (() => {
         calloutsDirty = true;
       },
       playingAuto: () => playingAuto,
+      autoPaused: () => autoPaused,
+      overlayOpen: () => {
+        const el = $('m3d-point-overlay');
+        return !!(el && !el.hidden);
+      },
+      overlayTitle() {
+        const el = document.querySelector('#m3d-point-sheet .point-title');
+        return el ? el.textContent : '';
+      },
+      clickCallout(name) {
+        const svg = $('m3d-callouts');
+        if (!svg) return false;
+        const text = [...svg.querySelectorAll('text.callout-name')].find((el) => el.textContent === name);
+        const target = text && (text.closest('[data-callout-key]') || text);
+        if (!target) return false;
+        const rect = target.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const opts = { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch' };
+        target.dispatchEvent(new PointerEvent('pointerdown', opts));
+        target.dispatchEvent(new PointerEvent('pointerup', opts));
+        return true;
+      },
+      dismissOverlay() {
+        const btn = $('m3d-point-dismiss');
+        if (btn) btn.click();
+      },
       viewScale,
       bodyHeight: () => bodyHeight,
       cameraMoving: () => orbiting || performance.now() < movingUntil,
