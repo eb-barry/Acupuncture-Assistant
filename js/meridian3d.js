@@ -138,10 +138,21 @@ const Meridian3D = (() => {
   }
 
   const BL_LIAO_NAMES = new Set(['上髎', '次髎', '中髎', '下髎']);
+  const BL_FOOT_NAMES = new Set(['僕參', '申脈', '金門', '京骨', '束骨', '足通谷', '至陰']);
+  const BL_PARALLEL_PAIRS = [
+    ['眉衝', '曲差'],
+    ['委中', '委陽'],
+  ];
+
+  function isBlFootLateral(rec) {
+    return !!(rec && rec.meridianId === 'BL' && BL_FOOT_NAMES.has(rec.name));
+  }
 
   function blCalloutBand(rec) {
     if (!rec || rec.meridianId !== 'BL') return '';
     if (BL_LIAO_NAMES.has(rec.name)) return 'liao';
+    if (rec.name === '委中') return 'inner';
+    if (rec.name === '委陽') return 'outer';
     const seq = Number(rec.sequence) || 0;
     if (seq >= 11 && seq <= 30) return 'inner';
     if (seq >= 41 && seq <= 54) return 'outer';
@@ -274,6 +285,22 @@ const Meridian3D = (() => {
     if (items.every((it) => blCalloutBand(it.rec) === 'liao')) {
       return [{ items: [...items], indent: 0, liao: true }];
     }
+    const foot = items.filter((it) => isBlFootLateral(it.rec));
+    const rest = items.filter((it) => !isBlFootLateral(it.rec));
+    const cols = rest.length ? splitCalloutColumnsRest(rest, park, width) : [];
+    if (foot.length >= 2) {
+      const bySeq = (a, b) => (Number(a.rec.sequence) || 0) - (Number(b.rec.sequence) || 0);
+      const outerFoot = foot.filter((it) => (Number(it.rec.sequence) || 0) % 2 === 0).sort(bySeq);
+      const innerFoot = foot.filter((it) => (Number(it.rec.sequence) || 0) % 2 === 1).sort(bySeq);
+      if (outerFoot.length) cols.push({ items: outerFoot, indent: 0, foot: true });
+      if (innerFoot.length) cols.push({ items: innerFoot, indent: 1, foot: true });
+    } else if (foot.length === 1) {
+      cols.push({ items: foot, indent: 0 });
+    }
+    return cols;
+  }
+
+  function splitCalloutColumnsRest(items, park, width) {
     const hasBlPair = items.some((it) => blCalloutBand(it.rec) === 'inner')
       && items.some((it) => blCalloutBand(it.rec) === 'outer');
     if (hasBlPair) {
@@ -1687,16 +1714,58 @@ const Meridian3D = (() => {
     innerItems.push(...paired, ...rest);
   }
 
-  function applyHeadParallelDogleg(laid) {
-    const mei = laid.find((it) => it.rec && it.rec.name === '眉衝');
-    const qu = laid.find((it) => it.rec && it.rec.name === '曲差');
-    if (!mei || !qu) return;
-    applyDown45Dogleg(mei, qu, nextLowerPy(mei, laid));
-    laid.forEach((it) => {
-      if (it === mei || it === qu || it.park !== mei.park) return;
-      if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82 && it.slotY >= mei.py) {
-        it.slotY = mei.slotY + mei.textH * 0.9;
+  function packBlFootColumns(columns, height, pad) {
+    const inner = columns.find((col) => col.foot && col.indent);
+    const outer = columns.find((col) => col.foot && !col.indent);
+    if (!inner && !outer) return;
+    const sample = (outer && outer.items[0]) || (inner && inner.items[0]);
+    const slotH = Math.max(20, (sample?.textH || 16) * 0.95);
+    const all = [...(outer?.items || []), ...(inner?.items || [])];
+    const mid = all.reduce((sum, it) => sum + it.py, 0) / Math.max(1, all.length);
+    const bySeq = new Map();
+    all.forEach((it) => bySeq.set(Number(it.rec.sequence) || 0, it));
+    const pairs = [];
+    [61, 63, 65].forEach((odd) => {
+      const inn = bySeq.get(odd);
+      const out = bySeq.get(odd + 1);
+      if (inn || out) pairs.push({ inner: inn, outer: out });
+    });
+    if (bySeq.get(67)) pairs.push({ inner: bySeq.get(67), outer: null });
+    if (!pairs.length) return;
+    const span = Math.max(0, (pairs.length - 1) * slotH);
+    let y0 = mid - span / 2;
+    y0 = Math.max(pad, Math.min(height - pad - span, y0));
+    pairs.forEach((pair, i) => {
+      const rowY = y0 + i * slotH;
+      if (pair.outer) {
+        pair.outer.slotY = rowY;
+        const drop = Math.abs(rowY - pair.outer.py);
+        pair.outer.dogleg = drop >= 6;
+        pair.outer.elbowX = pair.outer.px + drop;
       }
+      if (pair.inner) {
+        const partner = pair.outer;
+        pair.inner.dogleg = true;
+        pair.inner.slotY = Math.min(height - pad, rowY + slotH * 0.42);
+        const drop = Math.abs(pair.inner.slotY - pair.inner.py);
+        const sign = partner && partner.px < pair.inner.px ? -1 : 1;
+        pair.inner.elbowX = pair.inner.px + sign * Math.max(drop, 12);
+      }
+    });
+  }
+
+  function applyBlParallelDoglegs(laid) {
+    BL_PARALLEL_PAIRS.forEach(([medial, lateral]) => {
+      const mei = laid.find((it) => it.rec && it.rec.name === medial);
+      const lat = laid.find((it) => it.rec && it.rec.name === lateral);
+      if (!mei || !lat) return;
+      applyDown45Dogleg(mei, lat, nextLowerPy(mei, laid));
+      laid.forEach((it) => {
+        if (it === mei || it === lat || it.park !== mei.park) return;
+        if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82 && it.slotY >= mei.py) {
+          it.slotY = mei.slotY + mei.textH * 0.9;
+        }
+      });
     });
   }
 
@@ -1779,10 +1848,13 @@ const Meridian3D = (() => {
         const slotH = Math.max(18, (outerStick.items[0]?.textH || innerStick.items[0]?.textH || 16) * 0.86);
         packBlPairColumns(innerStick.items, outerStick.items, height, slotH, pad + 6);
       }
+      packBlFootColumns(columns, height, pad + 6);
       columns.forEach((col) => {
         const baseH = col.items[0]?.textH || 16;
         if (col.liao) {
           packLiaoColumn(col.items, height, Math.max(22, baseH * 1.08), pad + 6);
+        } else if (col.foot) {
+          return;
         } else if (col.stick && !(innerStick && outerStick)) {
           packSlots(col.items, height, Math.max(18, baseH * 0.86), pad + 6, true);
         } else if (!col.stick && !col.liao) {
@@ -1795,7 +1867,7 @@ const Meridian3D = (() => {
           if (park === 'right') {
             const inset = col.indent ? Math.max(outerW + 32, 72) : 0;
             let textX = width - pad - item.textW - inset;
-            if (!col.stick && !item.dogleg) {
+            if (!col.stick && !col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
@@ -1818,7 +1890,7 @@ const Meridian3D = (() => {
         });
       });
     });
-    applyHeadParallelDogleg(laid);
+    applyBlParallelDoglegs(laid);
 
     svg.innerHTML = '';
     if (!laid.length) {
