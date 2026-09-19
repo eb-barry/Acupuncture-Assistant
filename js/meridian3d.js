@@ -148,6 +148,16 @@ const Meridian3D = (() => {
     return '';
   }
 
+  function blPairedInner(rec) {
+    const seq = Number(rec && rec.sequence) || 0;
+    return !!(rec && rec.meridianId === 'BL' && seq >= 12 && seq <= 23);
+  }
+
+  function blPairedOuter(rec) {
+    const seq = Number(rec && rec.sequence) || 0;
+    return !!(rec && rec.meridianId === 'BL' && seq >= 41 && seq <= 52);
+  }
+
   function calloutParkFor(rec, fallback = 'right') {
     return blCalloutBand(rec) === 'liao' ? 'left' : fallback;
   }
@@ -1610,39 +1620,79 @@ const Meridian3D = (() => {
     });
   }
 
+  function findBlOuterPartner(inner, outerItems) {
+    const want = (Number(inner.rec && inner.rec.sequence) || 0) + 29;
+    const sameSide = outerItems.filter((o) => blPairedOuter(o.rec) && (!inner.rec.side || !o.rec.side || o.rec.side === inner.rec.side));
+    const exact = sameSide.find((o) => (Number(o.rec.sequence) || 0) === want);
+    if (exact) return exact;
+    let best = null;
+    let bestD = Infinity;
+    sameSide.forEach((o) => {
+      const d = Math.abs(o.py - inner.py);
+      if (d < bestD) {
+        best = o;
+        bestD = d;
+      }
+    });
+    return best;
+  }
+
+  function applyDown45Dogleg(item, partner) {
+    const sign = partner && partner.px < item.px ? -1 : 1;
+    const midX = partner
+      ? (item.px + partner.px) / 2
+      : item.px + sign * Math.max(16, item.textH * 0.55);
+    const drop = Math.max(1, Math.abs(midX - item.px));
+    item.dogleg = true;
+    item.elbowX = item.px + sign * drop;
+    item.slotY = item.py + drop;
+  }
+
   function packBlPairColumns(innerItems, outerItems, height, slotH, pad) {
     packSlots(outerItems, height, slotH, pad, true);
-    const innerAll = [...innerItems].sort((a, b) => a.py - b.py);
-    const kept = [];
-    const taken = new Set();
-    const canPlace = (y) => kept.every((it) => Math.abs(it.slotY - y) >= slotH);
-    const place = (item, y) => {
-      const slotY = Math.max(pad, Math.min(height - pad, y));
-      if (!canPlace(slotY)) return false;
-      item.slotY = slotY;
-      kept.push(item);
-      taken.add(item);
-      return true;
-    };
-    outerItems.forEach((outer) => {
-      let best = null;
-      let bestD = slotH * 0.95;
-      innerAll.forEach((inner) => {
-        if (taken.has(inner)) return;
-        const d = Math.abs(inner.py - outer.py);
-        if (d < bestD) {
-          best = inner;
-          bestD = d;
-        }
-      });
-      if (best) place(best, best.py);
+    const bot = height - pad;
+    innerItems.forEach((inner) => {
+      if (!blPairedInner(inner.rec)) {
+        inner.dogleg = false;
+        inner.slotY = Math.max(pad, Math.min(bot, inner.py));
+        return;
+      }
+      applyDown45Dogleg(inner, findBlOuterPartner(inner, outerItems));
+      inner.slotY = Math.max(pad, Math.min(bot, inner.slotY));
     });
-    innerAll.forEach((inner) => {
-      if (!taken.has(inner)) place(inner, inner.py);
+    innerItems.sort((a, b) => a.slotY - b.slotY);
+    let next = pad;
+    innerItems.forEach((item) => {
+      let y = item.slotY;
+      if (y < next) y = next;
+      item.slotY = y;
+      if (item.dogleg) {
+        const drop = Math.abs(item.slotY - item.py);
+        const sign = item.elbowX >= item.px ? 1 : -1;
+        item.elbowX = item.px + sign * drop;
+      }
+      next = y + Math.max(14, slotH * 0.62);
     });
-    kept.sort((a, b) => a.py - b.py);
-    innerItems.length = 0;
-    innerItems.push(...kept);
+  }
+
+  function applyHeadParallelDogleg(columns) {
+    const items = columns.flatMap((col) => col.items);
+    const mei = items.find((it) => it.rec && it.rec.name === '眉衝');
+    const qu = items.find((it) => it.rec && it.rec.name === '曲差');
+    if (!mei || !qu) return;
+    if (Math.abs(mei.py - qu.py) > Math.max(mei.textH * 1.2, 28)) return;
+    applyDown45Dogleg(mei, qu);
+    const others = items.filter((it) => it !== mei);
+    let y = mei.slotY;
+    others.forEach((it) => {
+      if (Math.abs(it.slotY - y) < (mei.textH * 0.7) && it.slotY >= mei.py) {
+        y = it.slotY + Math.max(16, mei.textH * 0.7);
+      }
+    });
+    mei.slotY = y;
+    const drop = Math.abs(mei.slotY - mei.py);
+    const sign = mei.elbowX >= mei.px ? 1 : -1;
+    mei.elbowX = mei.px + sign * drop;
   }
 
   function svgEl(name, attrs) {
@@ -1733,19 +1783,24 @@ const Meridian3D = (() => {
         } else if (!col.stick && !col.liao) {
           packSlots(col.items, height, Math.max(16, baseH + 3), pad + 6, false);
         }
+      });
+      applyHeadParallelDogleg(columns);
+      columns.forEach((col) => {
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
             const inset = col.indent ? Math.max(outerW + 18, 56) : 0;
             let textX = width - pad - item.textW - inset;
-            if (!col.stick) {
+            if (!col.stick && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
             if (textX < 2) textX = 2;
             const joinX = textX;
             const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
-            const elbowX = Math.max(item.px + 6, joinX - horiz);
+            const elbowX = item.dogleg
+              ? item.elbowX
+              : Math.max(item.px + 6, joinX - horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           } else {
             let textX = pad;
@@ -1769,10 +1824,16 @@ const Meridian3D = (() => {
     laid.forEach((item) => {
       const focus = !!(playingAuto && isFocusRec(item.rec));
       const joinX = item.park === 'left' ? item.textX + item.textW : item.textX;
-      const aligned = Math.abs(item.slotY - item.py) < Math.max(6, item.textH * 0.35);
+      const aligned = !item.dogleg && Math.abs(item.slotY - item.py) < Math.max(6, item.textH * 0.35);
+      let elbowX = item.elbowX;
+      if (item.dogleg) {
+        const drop = Math.abs(item.slotY - item.py);
+        const sign = (item.elbowX >= item.px ? 1 : -1);
+        elbowX = item.px + sign * drop;
+      }
       const d = aligned
         ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
-        : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${item.elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
+        : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
       svg.appendChild(svgEl('path', { class: focus ? 'leader-halo is-focus' : 'leader-halo', d }));
       svg.appendChild(svgEl('path', { class: focus ? 'leader is-focus' : 'leader', d }));
       const text = svgEl('text', {
@@ -2527,13 +2588,18 @@ const Meridian3D = (() => {
         return [...svg.querySelectorAll('text')].map((el, i) => {
           const d = paths[i] ? paths[i].getAttribute('d') || '' : '';
           const ys = [...d.matchAll(/[ML]\s*[\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]));
+          const xs = [...d.matchAll(/[ML]\s*([\d.]+) /g)].map((m) => Number(m[1]));
           const horizontal = ys.length >= 2 && ys.every((y) => Math.abs(y - ys[0]) < 1.5);
+          const dogleg = ys.length >= 3 && Math.abs(ys[0] - ys[1]) > 2 && Math.abs(ys[1] - ys[ys.length - 1]) < 1.5;
           return {
             name: el.textContent,
             x: Number(el.getAttribute('x')),
             y: Number(el.getAttribute('y')),
             left: Number(el.getAttribute('x')) < width * 0.45,
             horizontal,
+            dogleg,
+            py0: ys[0] || 0,
+            elbowX: xs[1] || xs[0] || 0,
           };
         });
       },
