@@ -2044,10 +2044,10 @@ const Meridian3D = (() => {
       calloutRecByKey.set(key, item.rec);
       const hitPadX = 8;
       const hitPadY = Math.max(12, item.textH * 0.48);
-      const link = svgEl('a', {
+      const link = svgEl('g', {
         class: 'callout-link',
-        href: `#point/${encodeURIComponent(item.rec.name || '')}`,
         'data-callout-key': key,
+        role: 'link',
       });
       link.appendChild(svgEl('rect', {
         class: 'callout-hit',
