@@ -275,7 +275,7 @@ const Meridian3D = (() => {
     const span = Math.max(1, ys[ys.length - 1] - y0);
     const lo = y0 + span * 0.1;
     const hi = y0 + span * 0.72;
-    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || (name && name.endsWith('髎'));
+    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || name === '委中' || name === '委陽' || BL_FOOT_NAMES.has(name) || (name && name.endsWith('髎'));
     const core = items.filter((it) => isFocusRec(it.rec) || keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
     return core.length >= 8 ? core : items;
   }
@@ -1571,7 +1571,7 @@ const Meridian3D = (() => {
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     const facing = n.dot(toCam);
-    return facing >= 0.12;
+    return facing >= (isBlFootLateral(rec) ? -0.2 : 0.12);
   }
 
   function measureCallout(name) {
@@ -1754,6 +1754,20 @@ const Meridian3D = (() => {
     });
   }
 
+  function liftKunlunAboveFoot(columns, pad) {
+    const all = columns.flatMap((col) => col.items);
+    const kun = all.find((it) => it.rec && it.rec.name === '崑崙');
+    const foot = all.filter((it) => isBlFootLateral(it.rec) && it.slotY != null);
+    if (!kun || !foot.length) return;
+    const footY = Math.min(...foot.map((it) => it.slotY));
+    const need = footY - Math.max(18, kun.textH * 0.95);
+    if (kun.slotY > need) {
+      kun.slotY = Math.max(pad, need);
+      kun.dogleg = Math.abs(kun.slotY - kun.py) >= 6;
+      kun.elbowX = kun.px + Math.abs(kun.slotY - kun.py);
+    }
+  }
+
   function applyBlParallelDoglegs(laid) {
     BL_PARALLEL_PAIRS.forEach(([medial, lateral]) => {
       const mei = laid.find((it) => it.rec && it.rec.name === medial);
@@ -1762,6 +1776,7 @@ const Meridian3D = (() => {
       applyDown45Dogleg(mei, lat, nextLowerPy(mei, laid));
       laid.forEach((it) => {
         if (it === mei || it === lat || it.park !== mei.park) return;
+        if (Math.abs(it.textX - mei.textX) > 48) return;
         if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82 && it.slotY >= mei.py) {
           it.slotY = mei.slotY + mei.textH * 0.9;
         }
@@ -1861,6 +1876,7 @@ const Meridian3D = (() => {
           packSlots(col.items, height, Math.max(16, baseH + 3), pad + 6, false);
         }
       });
+      liftKunlunAboveFoot(columns, pad + 6);
       columns.forEach((col) => {
         col.items.forEach((item) => {
           const slotY = item.slotY;
@@ -2653,6 +2669,22 @@ const Meridian3D = (() => {
         const dz = camera.position.z - controls.target.z;
         controls.target.set(pos[0], pos[1], pos[2]);
         camera.position.set(pos[0] + dx, pos[1] + dy, pos[2] + dz);
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
+      orbitYaw(deg) {
+        if (!camera || !controls) return;
+        const t = controls.target;
+        const dx = camera.position.x - t.x;
+        const dy = camera.position.y - t.y;
+        const dz = camera.position.z - t.z;
+        const rad = (Number(deg) || 0) * Math.PI / 180;
+        camera.position.set(
+          t.x + dx * Math.cos(rad) + dz * Math.sin(rad),
+          t.y + dy,
+          t.z + -dx * Math.sin(rad) + dz * Math.cos(rad),
+        );
         controls.update();
         noteCameraMoving(280);
         calloutsDirty = true;
