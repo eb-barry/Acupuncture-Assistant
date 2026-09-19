@@ -137,6 +137,21 @@ const Meridian3D = (() => {
     return sides;
   }
 
+  const BL_LIAO_NAMES = new Set(['上髎', '次髎', '中髎', '下髎']);
+
+  function blCalloutBand(rec) {
+    if (!rec || rec.meridianId !== 'BL') return '';
+    if (BL_LIAO_NAMES.has(rec.name)) return 'liao';
+    const seq = Number(rec.sequence) || 0;
+    if (seq >= 11 && seq <= 30) return 'inner';
+    if (seq >= 41 && seq <= 54) return 'outer';
+    return '';
+  }
+
+  function calloutParkFor(rec, fallback = 'right') {
+    return blCalloutBand(rec) === 'liao' ? 'left' : fallback;
+  }
+
   function clusterByX(items, width) {
     const sorted = [...items].sort((a, b) => a.px - b.px);
     const minGap = Math.max(8, width * 0.022);
@@ -189,7 +204,8 @@ const Meridian3D = (() => {
   function ensureFocusItem(items, visible, park, sides) {
     const focusItem = visible.find((it) => isFocusRec(it.rec));
     if (!focusItem) return items;
-    const want = (sides && sides.get(focusItem.rec.meridianId)) || 'right';
+    const meridianPark = (sides && sides.get(focusItem.rec.meridianId)) || 'right';
+    const want = calloutParkFor(focusItem.rec, meridianPark);
     if (park !== want) return items;
     if (items.some((it) => isFocusRec(it.rec))) return items;
     return items.concat([{ ...focusItem, park }]);
@@ -245,6 +261,19 @@ const Meridian3D = (() => {
 
   function splitCalloutColumns(items, park, width) {
     if (!items.length) return [];
+    if (items.every((it) => blCalloutBand(it.rec) === 'liao')) {
+      return [{ items: [...items], indent: 0, liao: true }];
+    }
+    const hasBlPair = items.some((it) => blCalloutBand(it.rec) === 'inner')
+      && items.some((it) => blCalloutBand(it.rec) === 'outer');
+    if (hasBlPair) {
+      const innerCol = items.filter((it) => blCalloutBand(it.rec) === 'inner');
+      const outerCol = items.filter((it) => blCalloutBand(it.rec) !== 'inner');
+      const cols = [];
+      if (outerCol.length) cols.push({ items: outerCol, indent: 0, stick: true });
+      if (innerCol.length) cols.push({ items: innerCol, indent: 1, stick: true });
+      return cols;
+    }
     const yTol = Math.max(12, (items[0]?.textH || 16) * 0.9);
     const ranked = [...items].sort((a, b) => a.py - b.py);
     ranked.forEach((it) => { it.indent = 0; });
@@ -1514,8 +1543,35 @@ const Meridian3D = (() => {
     return { w: Math.max(fs, name.length * fs), h: fs * 1.35, fs };
   }
 
-  function packSlots(items, height, slotH, pad) {
+  function packSlots(items, height, slotH, pad, stickToPoint = false) {
     items.sort((a, b) => a.py - b.py);
+    const bot = height - pad;
+    if (stickToPoint) {
+      const kept = [];
+      let lastY = pad - slotH;
+      items.forEach((item) => {
+        const y = Math.max(pad, Math.min(bot, item.py));
+        if (y < lastY + slotH) {
+          const nudged = lastY + slotH;
+          if (nudged <= bot && nudged - item.py <= Math.max(6, item.textH * 0.28)) {
+            item.slotY = nudged;
+            kept.push(item);
+            lastY = nudged;
+          }
+          return;
+        }
+        item.slotY = y;
+        kept.push(item);
+        lastY = y;
+      });
+      if (!kept.length && items.length) {
+        items[0].slotY = Math.max(pad, Math.min(bot, items[0].py));
+        kept.push(items[0]);
+      }
+      items.length = 0;
+      items.push(...kept);
+      return;
+    }
     const minSlot = Math.max(14, slotH * 0.72);
     const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
     if (items.length > maxN) {
@@ -1532,13 +1588,61 @@ const Meridian3D = (() => {
       }
     }
     let next = pad;
-    const bot = height - pad;
     items.forEach((item) => {
       let y = Math.max(next, item.py);
-      if (y > bot) y = bot;
+      y = Math.max(pad, Math.min(bot, y));
+      if (y < next) y = next;
       item.slotY = y;
       next = y + slotH;
     });
+  }
+
+  function packLiaoColumn(items, height, slotH, pad) {
+    items.sort((a, b) => (Number(a.rec && a.rec.sequence) || 0) - (Number(b.rec && b.rec.sequence) || 0) || a.py - b.py);
+    const n = items.length;
+    if (!n) return;
+    const span = (n - 1) * slotH;
+    const mid = items.reduce((sum, it) => sum + it.py, 0) / n;
+    let y0 = mid - span / 2;
+    y0 = Math.max(pad, Math.min(height - pad - span, y0));
+    items.forEach((item, i) => {
+      item.slotY = y0 + i * slotH;
+    });
+  }
+
+  function packBlPairColumns(innerItems, outerItems, height, slotH, pad) {
+    packSlots(outerItems, height, slotH, pad, true);
+    const innerAll = [...innerItems].sort((a, b) => a.py - b.py);
+    const kept = [];
+    const taken = new Set();
+    const canPlace = (y) => kept.every((it) => Math.abs(it.slotY - y) >= slotH);
+    const place = (item, y) => {
+      const slotY = Math.max(pad, Math.min(height - pad, y));
+      if (!canPlace(slotY)) return false;
+      item.slotY = slotY;
+      kept.push(item);
+      taken.add(item);
+      return true;
+    };
+    outerItems.forEach((outer) => {
+      let best = null;
+      let bestD = slotH * 0.95;
+      innerAll.forEach((inner) => {
+        if (taken.has(inner)) return;
+        const d = Math.abs(inner.py - outer.py);
+        if (d < bestD) {
+          best = inner;
+          bestD = d;
+        }
+      });
+      if (best) place(best, best.py);
+    });
+    innerAll.forEach((inner) => {
+      if (!taken.has(inner)) place(inner, inner.py);
+    });
+    kept.sort((a, b) => a.py - b.py);
+    innerItems.length = 0;
+    innerItems.push(...kept);
   }
 
   function svgEl(name, attrs) {
@@ -1593,48 +1697,63 @@ const Meridian3D = (() => {
     const pad = 8;
     const buckets = { left: [], right: [] };
     visible.forEach((it) => {
-      const park = sides.get(it.rec.meridianId) || 'right';
+      const meridianPark = sides.get(it.rec.meridianId) || 'right';
+      const park = calloutParkFor(it.rec, meridianPark);
       buckets[park].push({ ...it, park });
     });
 
-    buckets.right = ensureFocusItem(
-      focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.right, 'right'), 'right', width)),
-      visible,
-      'right',
-      sides,
-    );
-    buckets.left = ensureFocusItem(
-      focusTorsoItems(pickEdgeItems(dedupeParkItems(buckets.left, 'left'), 'left', width)),
-      visible,
-      'left',
-      sides,
-    );
+    const preparePark = (park) => {
+      const raw = dedupeParkItems(buckets[park], park);
+      const hasBlPair = raw.some((it) => blCalloutBand(it.rec) === 'inner')
+        && raw.some((it) => blCalloutBand(it.rec) === 'outer');
+      const next = hasBlPair
+        ? focusTorsoItems(raw)
+        : focusTorsoItems(pickEdgeItems(raw, park, width));
+      return ensureFocusItem(next, visible, park, sides);
+    };
+    buckets.right = preparePark('right');
+    buckets.left = preparePark('left');
 
     const laid = [];
     ['right', 'left'].forEach((park) => {
       const columns = splitCalloutColumns(buckets[park], park, width);
+      const outerW = Math.max(0, ...columns.filter((col) => !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
+      const innerStick = columns.find((col) => col.stick && col.indent);
+      const outerStick = columns.find((col) => col.stick && !col.indent);
+      if (innerStick && outerStick) {
+        const slotH = Math.max(18, (outerStick.items[0]?.textH || innerStick.items[0]?.textH || 16) * 0.86);
+        packBlPairColumns(innerStick.items, outerStick.items, height, slotH, pad + 6);
+      }
       columns.forEach((col) => {
-        const slotH = Math.max(16, (col.items[0]?.textH || 16) + 3);
-        packSlots(col.items, height, slotH, pad + 6);
+        const baseH = col.items[0]?.textH || 16;
+        if (col.liao) {
+          packLiaoColumn(col.items, height, Math.max(22, baseH * 1.08), pad + 6);
+        } else if (col.stick && !(innerStick && outerStick)) {
+          packSlots(col.items, height, Math.max(18, baseH * 0.86), pad + 6, true);
+        } else if (!col.stick && !col.liao) {
+          packSlots(col.items, height, Math.max(16, baseH + 3), pad + 6, false);
+        }
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
-            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
+            const inset = col.indent ? Math.max(outerW + 18, 56) : 0;
             let textX = width - pad - item.textW - inset;
-            if (textX < item.px + 10) textX = item.px + 10;
+            if (!col.stick) {
+              if (textX < item.px + 10) textX = item.px + 10;
+            }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
+            if (textX < 2) textX = 2;
             const joinX = textX;
             const horiz = Math.min(28, Math.max(8, Math.abs(joinX - item.px) * 0.28));
             const elbowX = Math.max(item.px + 6, joinX - horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           } else {
-            const inset = col.indent ? Math.max(item.textW + 12, 56) : 0;
-            let textX = pad + inset;
-            if (textX + item.textW + 10 > item.px) textX = item.px - item.textW - 10;
+            let textX = pad;
+            if (textX + item.textW + 10 > item.px) textX = Math.max(2, item.px - item.textW - 10);
             if (textX < 2) textX = 2;
             const joinX = textX + item.textW;
-            const horiz = Math.min(28, Math.max(8, Math.abs(item.px - joinX) * 0.28));
-            const elbowX = Math.min(item.px - 6, joinX + horiz);
+            const horiz = Math.min(36, Math.max(10, Math.abs(item.px - joinX) * 0.22));
+            const elbowX = Math.min(item.px - 8, joinX + horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           }
         });
@@ -1650,7 +1769,7 @@ const Meridian3D = (() => {
     laid.forEach((item) => {
       const focus = !!(playingAuto && isFocusRec(item.rec));
       const joinX = item.park === 'left' ? item.textX + item.textW : item.textX;
-      const aligned = Math.abs(item.slotY - item.py) < 2;
+      const aligned = Math.abs(item.slotY - item.py) < Math.max(6, item.textH * 0.35);
       const d = aligned
         ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
         : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${item.elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
@@ -2365,6 +2484,28 @@ const Meridian3D = (() => {
     window.__m3dTest = {
       faceFront: () => { faceFront(); calloutsDirty = true; },
       faceBack: () => { faceBack(); calloutsDirty = true; },
+      dolly(factor) {
+        if (!camera || !controls) return;
+        const t = controls.target;
+        const s = Number(factor) || 1;
+        camera.position.set(
+          t.x + (camera.position.x - t.x) * s,
+          t.y + (camera.position.y - t.y) * s,
+          t.z + (camera.position.z - t.z) * s,
+        );
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
+      nudgeTarget(dyBody) {
+        if (!camera || !controls) return;
+        const dy = (Number(dyBody) || 0) * (Number(bodyHeight) || 1);
+        controls.target.y += dy;
+        camera.position.y += dy;
+        controls.update();
+        noteCameraMoving(280);
+        calloutsDirty = true;
+      },
       playingAuto: () => playingAuto,
       viewScale,
       bodyHeight: () => bodyHeight,
@@ -2377,6 +2518,24 @@ const Meridian3D = (() => {
         const svg = $('m3d-callouts');
         if (!svg || svg.hasAttribute('hidden')) return [];
         return [...svg.querySelectorAll('text')].map((el) => el.textContent);
+      },
+      calloutLayout() {
+        const svg = $('m3d-callouts');
+        if (!svg || svg.hasAttribute('hidden')) return [];
+        const { width } = viewportSize();
+        const paths = [...svg.querySelectorAll('path.leader')];
+        return [...svg.querySelectorAll('text')].map((el, i) => {
+          const d = paths[i] ? paths[i].getAttribute('d') || '' : '';
+          const ys = [...d.matchAll(/[ML]\s*[\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]));
+          const horizontal = ys.length >= 2 && ys.every((y) => Math.abs(y - ys[0]) < 1.5);
+          return {
+            name: el.textContent,
+            x: Number(el.getAttribute('x')),
+            y: Number(el.getAttribute('y')),
+            left: Number(el.getAttribute('x')) < width * 0.45,
+            horizontal,
+          };
+        });
       },
       ndcOf(name) {
         const rec = testRecord(name);
