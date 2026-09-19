@@ -1719,7 +1719,11 @@ const Meridian3D = (() => {
     const outer = columns.find((col) => col.foot && !col.indent);
     if (!inner && !outer) return;
     const sample = (outer && outer.items[0]) || (inner && inner.items[0]);
-    const slotH = Math.max(20, (sample?.textH || 16) * 0.95);
+    const textH = sample?.textH || 16;
+    // Two 排 of names, like BL 風門/附分: each pair shares a row, inner sits
+    // a 45° drop below outer, and the next pair must clear that drop.
+    const slotH = Math.max(34, textH * 1.32);
+    const innerDrop = Math.min(textH * 0.48, slotH * 0.36);
     const all = [...(outer?.items || []), ...(inner?.items || [])];
     const mid = all.reduce((sum, it) => sum + it.py, 0) / Math.max(1, all.length);
     const bySeq = new Map();
@@ -1733,7 +1737,9 @@ const Meridian3D = (() => {
     if (bySeq.get(67)) pairs.push({ inner: bySeq.get(67), outer: null });
     if (!pairs.length) return;
     const span = Math.max(0, (pairs.length - 1) * slotH);
-    let y0 = mid - span / 2;
+    // Bias the two 排 downward so names occupy empty space below the tarsus
+    // instead of stacking on 崑崙 / the lateral malleolus.
+    let y0 = mid + textH * 0.28;
     y0 = Math.max(pad, Math.min(height - pad - span, y0));
     pairs.forEach((pair, i) => {
       const rowY = y0 + i * slotH;
@@ -1745,8 +1751,10 @@ const Meridian3D = (() => {
       }
       if (pair.inner) {
         const partner = pair.outer;
+        const nextRow = i < pairs.length - 1 ? y0 + (i + 1) * slotH : height - pad;
         pair.inner.dogleg = true;
-        pair.inner.slotY = Math.min(height - pad, rowY + slotH * 0.42);
+        pair.inner.slotY = Math.min(nextRow - textH * 0.72, rowY + innerDrop);
+        pair.inner.slotY = Math.max(pad, Math.min(height - pad, pair.inner.slotY));
         const drop = Math.abs(pair.inner.slotY - pair.inner.py);
         const sign = partner && partner.px < pair.inner.px ? -1 : 1;
         pair.inner.elbowX = pair.inner.px + sign * Math.max(drop, 12);
@@ -1760,11 +1768,27 @@ const Meridian3D = (() => {
     const foot = all.filter((it) => isBlFootLateral(it.rec) && it.slotY != null);
     if (!kun || !foot.length) return;
     const footY = Math.min(...foot.map((it) => it.slotY));
-    const need = footY - Math.max(18, kun.textH * 0.95);
+    const need = footY - Math.max(26, kun.textH * 1.18);
     if (kun.slotY > need) {
       kun.slotY = Math.max(pad, need);
       kun.dogleg = Math.abs(kun.slotY - kun.py) >= 6;
       kun.elbowX = kun.px + Math.abs(kun.slotY - kun.py);
+    }
+  }
+
+  function cascadeCalloutRows(items, minRatio) {
+    const sorted = [...items].sort((a, b) => a.slotY - b.slotY);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const cur = sorted[i];
+      const gap = Math.max(prev.textH, cur.textH) * minRatio;
+      if (cur.slotY < prev.slotY + gap) {
+        cur.slotY = prev.slotY + gap;
+        if (Math.abs(cur.slotY - cur.py) >= 6) {
+          cur.dogleg = true;
+          cur.elbowX = cur.px + Math.abs(cur.slotY - cur.py);
+        }
+      }
     }
   }
 
@@ -1776,11 +1800,18 @@ const Meridian3D = (() => {
       applyDown45Dogleg(mei, lat, nextLowerPy(mei, laid));
       laid.forEach((it) => {
         if (it === mei || it === lat || it.park !== mei.park) return;
-        if (Math.abs(it.textX - mei.textX) > 48) return;
-        if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82 && it.slotY >= mei.py) {
-          it.slotY = mei.slotY + mei.textH * 0.9;
+        if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82) {
+          it.slotY = mei.slotY + mei.textH * 0.95;
+          if (Math.abs(it.slotY - it.py) >= 6) {
+            it.dogleg = true;
+            it.elbowX = it.px + Math.abs(it.slotY - it.py);
+          }
         }
       });
+      const outerCol = laid.filter((it) => (
+        it.park === mei.park && Math.abs(it.textX - lat.textX) <= 48
+      ));
+      cascadeCalloutRows(outerCol, 0.78);
     });
   }
 
