@@ -1637,41 +1637,46 @@ const Meridian3D = (() => {
     return best;
   }
 
-  function applyDown45Dogleg(item, partner) {
+  function nextLowerPy(item, items) {
+    let best = Infinity;
+    items.forEach((it) => {
+      if (it === item) return;
+      if (it.py > item.py + 3 && it.py < best) best = it.py;
+    });
+    return Number.isFinite(best) ? best : null;
+  }
+
+  function applyDown45Dogleg(item, partner, nextPy) {
     const sign = partner && partner.px < item.px ? -1 : 1;
     const midX = partner
       ? (item.px + partner.px) / 2
       : item.px + sign * Math.max(16, item.textH * 0.55);
-    const drop = Math.max(1, Math.abs(midX - item.px));
+    const gapDrop = Math.abs(midX - item.px);
+    const rowDrop = nextPy == null ? item.textH * 0.72 : Math.abs(nextPy - item.py) * 0.5;
+    const drop = Math.max(item.textH * 0.62, gapDrop, rowDrop);
     item.dogleg = true;
     item.elbowX = item.px + sign * drop;
     item.slotY = item.py + drop;
   }
 
   function packBlPairColumns(innerItems, outerItems, height, slotH, pad) {
-    packSlots(outerItems, height, slotH, pad, true);
     const bot = height - pad;
+    outerItems.forEach((outer) => {
+      outer.slotY = Math.max(pad, Math.min(bot, outer.py));
+    });
     const paired = [];
     const rest = [];
     innerItems.forEach((inner) => {
       if (blPairedInner(inner.rec)) paired.push(inner);
       else rest.push(inner);
     });
+    const neighbors = innerItems.concat(outerItems);
     paired.forEach((inner) => {
-      applyDown45Dogleg(inner, findBlOuterPartner(inner, outerItems));
+      applyDown45Dogleg(inner, findBlOuterPartner(inner, outerItems), nextLowerPy(inner, neighbors));
       inner.slotY = Math.max(pad, Math.min(bot, inner.slotY));
-    });
-    paired.sort((a, b) => a.slotY - b.slotY);
-    let next = pad;
-    const minGap = Math.max(18, (paired[0]?.textH || slotH) * 0.92);
-    paired.forEach((item) => {
-      let y = item.slotY;
-      if (y < next) y = next;
-      item.slotY = Math.min(bot, y);
-      const drop = Math.abs(item.slotY - item.py);
-      const sign = item.elbowX >= item.px ? 1 : -1;
-      item.elbowX = item.px + sign * drop;
-      next = item.slotY + minGap;
+      const drop = Math.abs(inner.slotY - inner.py);
+      const sign = inner.elbowX >= inner.px ? 1 : -1;
+      inner.elbowX = inner.px + sign * drop;
     });
     rest.forEach((item) => {
       item.dogleg = false;
@@ -1686,10 +1691,7 @@ const Meridian3D = (() => {
     const mei = laid.find((it) => it.rec && it.rec.name === '眉衝');
     const qu = laid.find((it) => it.rec && it.rec.name === '曲差');
     if (!mei || !qu) return;
-    applyDown45Dogleg(mei, qu);
-    const drop = Math.abs(mei.slotY - mei.py);
-    const sign = mei.elbowX >= mei.px ? 1 : -1;
-    mei.elbowX = mei.px + sign * drop;
+    applyDown45Dogleg(mei, qu, nextLowerPy(mei, laid));
   }
 
   function svgEl(name, attrs) {
