@@ -1692,6 +1692,13 @@ const Meridian3D = (() => {
     const qu = laid.find((it) => it.rec && it.rec.name === '曲差');
     if (!mei || !qu) return;
     applyDown45Dogleg(mei, qu, nextLowerPy(mei, laid));
+    laid.forEach((it) => {
+      if (it === mei || it.park !== mei.park) return;
+      if (Math.abs(it.slotY - mei.slotY) < mei.textH * 0.82 && it.slotY >= mei.py) {
+        it.slotY = mei.slotY + mei.textH * 0.9;
+        it.dogleg = it.dogleg || Math.abs(it.slotY - it.py) >= Math.max(6, it.textH * 0.35);
+      }
+    });
   }
 
   function svgEl(name, attrs) {
@@ -1787,7 +1794,7 @@ const Meridian3D = (() => {
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
-            const inset = col.indent ? Math.max(outerW + 18, 56) : 0;
+            const inset = col.indent ? Math.max(outerW + 32, 72) : 0;
             let textX = width - pad - item.textW - inset;
             if (!col.stick && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
