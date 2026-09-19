@@ -822,10 +822,20 @@ body::before {
 .m3d-callouts .leader-halo.is-focus {
   stroke-width: 6.4;
 }
+.m3d-callouts .callout-link {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.m3d-callouts .callout-hit {
+  fill: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+}
 .m3d-callouts .callout-name {
   font-family: var(--font-serif); font-size: calc(var(--fs-md) * 2); font-weight: 600;
   fill: #111111; stroke: rgba(255,255,255,0.92); stroke-width: 4px;
   paint-order: stroke; dominant-baseline: middle;
+  pointer-events: auto; cursor: pointer;
 }
 .m3d-callouts .callout-name.is-focus {
   fill: #e11d2a; font-weight: 800; stroke-width: 5px;
