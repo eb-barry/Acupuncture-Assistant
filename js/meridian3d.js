@@ -314,39 +314,7 @@ const Meridian3D = (() => {
       if (innerCol.length) cols.push({ items: innerCol, indent: 1, stick: true });
       return cols;
     }
-    const yTol = Math.max(12, (items[0]?.textH || 16) * 0.9);
-    const ranked = [...items].sort((a, b) => a.py - b.py);
-    ranked.forEach((it) => { it.indent = 0; });
-    for (let i = 0; i < ranked.length; i++) {
-      for (let j = i + 1; j < ranked.length; j++) {
-        if (ranked[j].py - ranked[i].py > yTol) break;
-        const outer = park === 'right'
-          ? (ranked[i].px >= ranked[j].px ? ranked[i] : ranked[j])
-          : (ranked[i].px <= ranked[j].px ? ranked[i] : ranked[j]);
-        const inner = outer === ranked[i] ? ranked[j] : ranked[i];
-        inner.indent = 1;
-      }
-    }
-    const outerItems = ranked.filter((it) => !it.indent);
-    const innerItems = ranked.filter((it) => it.indent);
-    if (innerItems.length) {
-      return [
-        { items: outerItems, indent: 0 },
-        { items: innerItems, indent: 1 },
-      ];
-    }
-    const clusters = clusterByX(items, width);
-    if (clusters.length < 2) return [{ items: ranked, indent: 0 }];
-    if (park === 'right') {
-      return [
-        { items: clusters[clusters.length - 1], indent: 0 },
-        { items: clusters.slice(0, -1).flat(), indent: 1 },
-      ];
-    }
-    return [
-      { items: clusters[0], indent: 0 },
-      { items: clusters.slice(1).flat(), indent: 1 },
-    ];
+    return [{ items: [...items], indent: 0 }];
   }
 
   function worldPerMm() {
@@ -1623,6 +1591,40 @@ const Meridian3D = (() => {
     };
   }
 
+  function isPointOccluded(world, dist) {
+    if (!bodyMeshes || !bodyMeshes.length || !three || !camera) return false;
+    const { THREE } = three;
+    const origin = camera.position;
+    const dir = world.clone().sub(origin);
+    const len = dir.length();
+    if (len < 1e-4) return false;
+    dir.multiplyScalar(1 / len);
+    const near = Math.max(worldPerMm() * (MARKER_DIAMETER_MM * 1.3 + 8), len * 0.045);
+    const ray = new THREE.Raycaster(origin, dir, 0, len);
+    const hits = ray.intersectObjects(bodyMeshes, false);
+    if (!hits.length) return false;
+    const hit = hits[0];
+    if (hit.point.distanceTo(world) <= near) return false;
+    return hit.distance < len - near * 0.2;
+  }
+
+  function facingAmounts(rec, toCam) {
+    const { THREE } = three;
+    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    const raw = n.dot(toCam);
+    const nFlat = n.clone();
+    nFlat.y = 0;
+    const camFlat = toCam.clone();
+    camFlat.y = 0;
+    let flat = raw;
+    if (nFlat.lengthSq() > 1e-8 && camFlat.lengthSq() > 1e-8) {
+      flat = nFlat.normalize().dot(camFlat.normalize());
+    }
+    return { raw, flat };
+  }
+
   function isPointVisible(rec, width, height) {
     if (!rec || !rec.position || !camera) return false;
     const screen = projectToScreen(rec.position, width, height);
@@ -1638,11 +1640,10 @@ const Meridian3D = (() => {
     const dist = toCam.length();
     if (dist < 1e-4) return false;
     toCam.multiplyScalar(1 / dist);
-    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
-    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
-    else n.normalize();
-    const facing = n.dot(toCam);
-    return facing >= (isBlFootLateral(rec) ? -0.2 : 0.12);
+    const { raw, flat } = facingAmounts(rec, toCam);
+    if (flat >= -0.18 || raw >= -0.12) return true;
+    if (flat < -0.55 && raw < -0.42) return false;
+    return !isPointOccluded(world, dist);
   }
 
   function measureCallout(name) {
@@ -1680,20 +1681,10 @@ const Meridian3D = (() => {
       items.push(...kept);
       return;
     }
-    const minSlot = Math.max(14, slotH * 0.72);
-    const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
-    if (items.length > maxN) {
-      const focusIdx = items.findIndex((it) => isFocusRec(it.rec));
-      if (focusIdx >= 0) {
-        let start = Math.min(Math.max(0, focusIdx - Math.floor((maxN - 1) / 2)), items.length - maxN);
-        const kept = items.slice(start, start + maxN);
-        if (!kept.some((it) => isFocusRec(it.rec))) kept[kept.length - 1] = items[focusIdx];
-        items.length = 0;
-        items.push(...kept);
-        items.sort((a, b) => a.py - b.py);
-      } else {
-        items.splice(maxN);
-      }
+    const usable = Math.max(1, height - pad * 2);
+    const minSlot = Math.max(13, Math.min(slotH * 0.52, usable / Math.max(1, items.length)));
+    if (items.length > 1) {
+      slotH = Math.min(slotH, Math.max(minSlot, usable / items.length));
     }
     let next = pad;
     items.forEach((item) => {
@@ -1703,6 +1694,23 @@ const Meridian3D = (() => {
       item.slotY = y;
       next = y + slotH;
     });
+  }
+
+  function splitOverflowColumns(columns, height) {
+    const extra = [];
+    columns.forEach((col) => {
+      if (col.stick || col.foot || col.liao || col.indent) return;
+      const textH = col.items[0]?.textH || 16;
+      const maxN = Math.max(8, Math.floor((height - 24) / Math.max(18, textH * 0.78)));
+      if (col.items.length <= maxN) return;
+      const sorted = [...col.items].sort((a, b) => a.py - b.py);
+      const outer = [];
+      const inner = [];
+      sorted.forEach((it, i) => (i % 2 ? inner : outer).push(it));
+      col.items = outer;
+      extra.push({ items: inner, indent: 1, overflow: true });
+    });
+    columns.push(...extra);
   }
 
   function packLiaoColumn(items, height, slotH, pad) {
@@ -1946,9 +1954,7 @@ const Meridian3D = (() => {
       const raw = dedupeParkItems(buckets[park], park);
       const hasBlPair = raw.some((it) => blCalloutBand(it.rec) === 'inner')
         && raw.some((it) => blCalloutBand(it.rec) === 'outer');
-      const next = hasBlPair
-        ? focusTorsoItems(raw)
-        : focusTorsoItems(pickEdgeItems(raw, park, width));
+      const next = hasBlPair ? focusTorsoItems(raw) : raw;
       return ensureFocusItem(next, visible, park, sides);
     };
     buckets.right = preparePark('right');
@@ -1957,6 +1963,7 @@ const Meridian3D = (() => {
     const laid = [];
     ['right', 'left'].forEach((park) => {
       const columns = splitCalloutColumns(buckets[park], park, width);
+      splitOverflowColumns(columns, height);
       const outerW = Math.max(0, ...columns.filter((col) => !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
       const innerStick = columns.find((col) => col.stick && col.indent);
       const outerStick = columns.find((col) => col.stick && !col.indent);
@@ -1982,9 +1989,17 @@ const Meridian3D = (() => {
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
-            const inset = col.indent ? Math.max(outerW + 32, 72) : 0;
+            const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao);
+            const fs = (item.textH || 32) / 1.35;
+            const band = fs * 2;
+            const gap = 12;
+            const inset = col.indent
+              ? (gutterCol ? band + gap : Math.max(outerW + 32, 72))
+              : 0;
             let textX = width - pad - item.textW - inset;
-            if (!col.stick && !col.foot && !item.dogleg) {
+            if (gutterCol) {
+              textX = width - pad - band - gap - item.textW;
+            } else if (!col.stick && !col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
@@ -2907,6 +2922,28 @@ const Meridian3D = (() => {
         const toCam = camera.position.clone().sub(world);
         if (toCam.lengthSq() < 1e-8) return 0;
         return viewNormal(rec.normal, rec).dot(toCam.normalize());
+      },
+      visibility(name) {
+        const rec = testRecord(name);
+        if (!rec || !camera || !three) return null;
+        const { THREE } = three;
+        const { width, height } = viewportSize();
+        const screen = projectToScreen(rec.position, width, height);
+        const world = new THREE.Vector3().fromArray(rec.position);
+        const toCam = camera.position.clone().sub(world);
+        const dist = toCam.length();
+        if (dist < 1e-8) return { name: rec.name, screen, visible: false };
+        toCam.multiplyScalar(1 / dist);
+        const { raw, flat } = facingAmounts(rec, toCam);
+        const occluded = isPointOccluded(world, dist);
+        return {
+          name: rec.name,
+          screen,
+          raw,
+          flat,
+          occluded,
+          visible: isPointVisible(rec, width, height),
+        };
       },
       dist() {
         if (!camera || !controls) return null;
