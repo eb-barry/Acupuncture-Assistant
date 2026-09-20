@@ -1623,6 +1623,21 @@ const Meridian3D = (() => {
     };
   }
 
+  function isPointOccluded(world, dist) {
+    if (!bodyMeshes || !bodyMeshes.length || !three || !camera) return false;
+    const { THREE } = three;
+    const origin = camera.position;
+    const dir = world.clone().sub(origin);
+    const len = dir.length();
+    if (len < 1e-4) return false;
+    dir.multiplyScalar(1 / len);
+    const reach = Math.max(0, Math.min(dist, len) - Math.max(worldPerMm() * 3, len * 0.012));
+    if (reach < 1e-4) return false;
+    const ray = new THREE.Raycaster(origin, dir, 0, reach);
+    const hits = ray.intersectObjects(bodyMeshes, false);
+    return hits.length > 0;
+  }
+
   function isPointVisible(rec, width, height) {
     if (!rec || !rec.position || !camera) return false;
     const screen = projectToScreen(rec.position, width, height);
@@ -1642,7 +1657,9 @@ const Meridian3D = (() => {
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     const facing = n.dot(toCam);
-    return facing >= (isBlFootLateral(rec) ? -0.2 : 0.12);
+    if (facing >= 0.08) return true;
+    if (facing < -0.42) return false;
+    return !isPointOccluded(world, dist);
   }
 
   function measureCallout(name) {
@@ -1680,20 +1697,10 @@ const Meridian3D = (() => {
       items.push(...kept);
       return;
     }
-    const minSlot = Math.max(14, slotH * 0.72);
-    const maxN = Math.max(1, Math.floor((height - pad * 2) / minSlot));
-    if (items.length > maxN) {
-      const focusIdx = items.findIndex((it) => isFocusRec(it.rec));
-      if (focusIdx >= 0) {
-        let start = Math.min(Math.max(0, focusIdx - Math.floor((maxN - 1) / 2)), items.length - maxN);
-        const kept = items.slice(start, start + maxN);
-        if (!kept.some((it) => isFocusRec(it.rec))) kept[kept.length - 1] = items[focusIdx];
-        items.length = 0;
-        items.push(...kept);
-        items.sort((a, b) => a.py - b.py);
-      } else {
-        items.splice(maxN);
-      }
+    const minSlot = Math.max(14, slotH * 0.62);
+    const usable = Math.max(1, height - pad * 2);
+    if (items.length > 1) {
+      slotH = Math.min(slotH, Math.max(minSlot, usable / items.length));
     }
     let next = pad;
     items.forEach((item) => {
@@ -1703,6 +1710,23 @@ const Meridian3D = (() => {
       item.slotY = y;
       next = y + slotH;
     });
+  }
+
+  function splitOverflowColumns(columns, height) {
+    const extra = [];
+    columns.forEach((col) => {
+      if (col.stick || col.foot || col.liao || col.indent) return;
+      const textH = col.items[0]?.textH || 16;
+      const maxN = Math.max(8, Math.floor((height - 24) / Math.max(18, textH * 0.78)));
+      if (col.items.length <= maxN) return;
+      const sorted = [...col.items].sort((a, b) => a.py - b.py);
+      const outer = [];
+      const inner = [];
+      sorted.forEach((it, i) => (i % 2 ? inner : outer).push(it));
+      col.items = outer;
+      extra.push({ items: inner, indent: 1 });
+    });
+    columns.push(...extra);
   }
 
   function packLiaoColumn(items, height, slotH, pad) {
@@ -1946,9 +1970,7 @@ const Meridian3D = (() => {
       const raw = dedupeParkItems(buckets[park], park);
       const hasBlPair = raw.some((it) => blCalloutBand(it.rec) === 'inner')
         && raw.some((it) => blCalloutBand(it.rec) === 'outer');
-      const next = hasBlPair
-        ? focusTorsoItems(raw)
-        : focusTorsoItems(pickEdgeItems(raw, park, width));
+      const next = hasBlPair ? focusTorsoItems(raw) : raw;
       return ensureFocusItem(next, visible, park, sides);
     };
     buckets.right = preparePark('right');
@@ -1957,6 +1979,7 @@ const Meridian3D = (() => {
     const laid = [];
     ['right', 'left'].forEach((park) => {
       const columns = splitCalloutColumns(buckets[park], park, width);
+      splitOverflowColumns(columns, height);
       const outerW = Math.max(0, ...columns.filter((col) => !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
       const innerStick = columns.find((col) => col.stick && col.indent);
       const outerStick = columns.find((col) => col.stick && !col.indent);
