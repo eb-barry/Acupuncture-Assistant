@@ -28,7 +28,13 @@ const Meridian3D = (() => {
   const REFERENCE_BODY_HEIGHT_M = 1.75;
   const RIBBON_WIDTH_MM = 3.5;
   const MARKER_DIAMETER_MM = 7;
+  const DENSE_MARKER_DIAMETER_MM = 3;
   const SKIN_LIFT_MM = 0.4;
+  const MARKER_ABOVE_RIBBON_MM = 1.2;
+  const GV_FACE_CODES = new Set(['GV25', 'GV26', 'GV27', 'GV28']);
+  const GV_FACE_DENSE_CODES = new Set(['GV26', 'GV27', 'GV28']);
+  /** Male 經絡繪圖室: 水溝 / 齦交 as a fraction of 素髎→兌端 descending Y. */
+  const GV_FACE_STUDIO_Y_T = { GV26: 0.635, GV28: 0.817 };
   const SAMPLE_STEP_MM = 1.5;
   const HANDLE_MIN_ARC_MM = 32;
   const HANDLE_SPACING_MM = 40.9;
@@ -1210,12 +1216,13 @@ const Meridian3D = (() => {
     return { position: [hx, hy, hz], normal: [nx, ny, nz] };
   }
 
-  function liftPoint(position, normal) {
+  function liftPoint(position, normal, liftMm = SKIN_LIFT_MM) {
     const mm = worldPerMm();
+    const lift = Number(liftMm) || 0;
     return [
-      position[0] + normal[0] * mm * SKIN_LIFT_MM,
-      position[1] + normal[1] * mm * SKIN_LIFT_MM,
-      position[2] + normal[2] * mm * SKIN_LIFT_MM,
+      position[0] + normal[0] * mm * lift,
+      position[1] + normal[1] * mm * lift,
+      position[2] + normal[2] * mm * lift,
     ];
   }
 
@@ -1698,18 +1705,25 @@ const Meridian3D = (() => {
     annotRoot.add(mesh);
   }
 
+  function markerDiameterMmFor(rec) {
+    return GV_FACE_DENSE_CODES.has(rec && rec.code) ? DENSE_MARKER_DIAMETER_MM : MARKER_DIAMETER_MM;
+  }
+
   function addMarker(THREE, rec, color) {
     const mm = worldPerMm();
-    const radius = mm * MARKER_DIAMETER_MM * 0.5;
-    const lifted = liftPoint(rec.position, rec.normal);
+    const diameterMm = markerDiameterMmFor(rec);
+    const radius = mm * diameterMm * 0.5;
+    const lifted = GV_FACE_CODES.has(rec.code)
+      ? rec.position
+      : liftPoint(rec.position, rec.normal);
     const geom = new THREE.CircleGeometry(radius, 20);
     const mat = new THREE.MeshBasicMaterial({
       color,
       side: THREE.DoubleSide,
       depthWrite: true,
       polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
+      polygonOffsetFactor: -8,
+      polygonOffsetUnits: -8,
     });
     const marker = new THREE.Mesh(geom, mat);
     marker.position.fromArray(lifted);
@@ -1720,7 +1734,8 @@ const Meridian3D = (() => {
     marker.userData.point = rec;
     marker.userData.kind = 'marker';
     marker.userData.baseColor = color;
-    marker.renderOrder = 3;
+    marker.userData.diameterMm = diameterMm;
+    marker.renderOrder = 8;
 
     const halo = new THREE.Mesh(
       new THREE.CircleGeometry(radius * 2.2, 20),
@@ -1731,12 +1746,12 @@ const Meridian3D = (() => {
         side: THREE.DoubleSide,
         depthWrite: false,
         polygonOffset: true,
-        polygonOffsetFactor: -3,
-        polygonOffsetUnits: -3,
+        polygonOffsetFactor: -6,
+        polygonOffsetUnits: -6,
       }),
     );
     halo.visible = false;
-    halo.renderOrder = 2;
+    halo.renderOrder = 7;
     halo.raycast = () => {};
     marker.add(halo);
     marker.userData.halo = halo;
@@ -2261,13 +2276,101 @@ const Meridian3D = (() => {
       .map((p) => placedPoint(p));
   }
 
+  function gvBakedFaceSpan() {
+    const doc = currentMap();
+    if (!doc) return null;
+    const route = (doc.meridians || []).find((item) => (
+      item.meridianId === 'GV' && sideAllowed(item.side)
+    ));
+    if (!route || !routeUsesBakedRibbons(route)) return null;
+    const ribbonIdx = (route.ribbons || []).findIndex((item) => (item.samples || []).length >= 2);
+    if (ribbonIdx < 0) return null;
+    const samples = bakedRibbonSamples(route, route.ribbons[ribbonIdx], ribbonIdx);
+    if (samples.length < 4) return null;
+    const byCode = {};
+    (doc.acupoints || []).forEach((point) => {
+      if (point.meridianId === 'GV' && point.code) byCode[point.code] = point;
+    });
+    const su = byCode.GV25;
+    const dui = byCode.GV27;
+    if (!su || !dui) return null;
+    const suW = toWorld(su.position);
+    const duiW = toWorld(dui.position);
+    if (!suW || !duiW) return null;
+    let suI = 0;
+    let duiI = 0;
+    let suBest = Infinity;
+    let duiBest = Infinity;
+    samples.forEach((sample, i) => {
+      const dSu = dist3(sample.position, suW);
+      const dDui = dist3(sample.position, duiW);
+      if (dSu < suBest) { suBest = dSu; suI = i; }
+      if (dDui < duiBest) { duiBest = dDui; duiI = i; }
+    });
+    if (duiI < suI) {
+      const tmp = suI;
+      suI = duiI;
+      duiI = tmp;
+    }
+    if (duiI - suI < 2) return null;
+    return {
+      samples,
+      suI,
+      duiI,
+      suY: samples[suI].position[1],
+      duiY: samples[duiI].position[1],
+    };
+  }
+
+  function gvFaceSampleAtT(span, t) {
+    const clamped = Math.min(1, Math.max(0, Number(t) || 0));
+    const y = span.suY + (span.duiY - span.suY) * clamped;
+    let best = span.suI;
+    let bestD = Infinity;
+    for (let i = span.suI; i <= span.duiI; i++) {
+      const d = Math.abs(span.samples[i].position[1] - y);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return span.samples[best];
+  }
+
+  function seatGvFacePoint(p, mapped, snapped) {
+    if (!GV_FACE_CODES.has(p.code)) return snapped;
+    const span = gvBakedFaceSpan();
+    if (!span) return snapped;
+    const ySpan = span.suY - span.duiY;
+    let t;
+    if (loadedGender === 'female' && GV_FACE_STUDIO_Y_T[p.code] != null) {
+      t = GV_FACE_STUDIO_Y_T[p.code];
+    } else if (Math.abs(ySpan) > 1e-8) {
+      t = (span.suY - mapped[1]) / ySpan;
+      t = Math.min(1, Math.max(0, t));
+    } else {
+      t = 0.5;
+    }
+    const sample = gvFaceSampleAtT(span, t);
+    return {
+      position: sample.position.slice(),
+      normal: sample.normal.slice(),
+    };
+  }
+
   function placedPoint(p) {
     const key = `${loadedGender}|${p.id}`;
     const cached = pointCache.get(key);
     if (cached) return cached;
     const mapped = toWorld(p.position);
-    const snapped = snapToSkin(mapped, p.normal);
-    const position = liftPoint(snapped.position, snapped.normal);
+    const snapped = GV_FACE_CODES.has(p.code)
+      ? { position: mapped, normal: p.normal || [0, 0, 1] }
+      : snapToSkin(mapped, p.normal);
+    const seated = seatGvFacePoint(p, mapped, snapped);
+    const liftMm = GV_FACE_CODES.has(p.code)
+      ? SKIN_LIFT_MM + MARKER_ABOVE_RIBBON_MM
+      : SKIN_LIFT_MM;
+    const position = liftPoint(seated.position, seated.normal, liftMm);
     const rec = {
       id: p.id,
       name: p.name,
@@ -2277,7 +2380,7 @@ const Meridian3D = (() => {
       side: p.side,
       sequence: p.sequence,
       position,
-      normal: snapped.normal,
+      normal: seated.normal,
     };
     pointCache.set(key, rec);
     return rec;
@@ -3151,6 +3254,33 @@ const Meridian3D = (() => {
           maxStepMm: maxStep / mm,
           maxAbsXMm: maxX / mm,
         };
+      },
+      gvFaceDots() {
+        const names = ['素髎', '水溝', '齦交', '兌端'];
+        const mm = worldPerMm();
+        const recs = names.map((name) => {
+          const rec = testRecord(name);
+          const marker = pickables.find((obj) => obj.userData.point && obj.userData.point.name === name);
+          return rec ? {
+            name: rec.name,
+            code: rec.code,
+            position: rec.position,
+            diameterMm: marker ? marker.userData.diameterMm : markerDiameterMmFor(rec),
+            renderOrder: marker ? marker.renderOrder : null,
+          } : null;
+        }).filter(Boolean);
+        const distMm = {};
+        recs.forEach((a, i) => {
+          recs.slice(i + 1).forEach((b) => {
+            distMm[`${a.name}-${b.name}`] = dist3(a.position, b.position) / Math.max(mm, 1e-9);
+          });
+        });
+        const gaps = {};
+        recs.forEach((rec) => {
+          const gap = window.__m3dTest.ribbonGap(rec.name);
+          gaps[rec.name] = gap ? gap.mm : null;
+        });
+        return { gender: loadedGender, distMm, gaps, recs };
       },
       visibility(name) {
         const rec = testRecord(name);
