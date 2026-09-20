@@ -314,39 +314,7 @@ const Meridian3D = (() => {
       if (innerCol.length) cols.push({ items: innerCol, indent: 1, stick: true });
       return cols;
     }
-    const yTol = Math.max(12, (items[0]?.textH || 16) * 0.9);
-    const ranked = [...items].sort((a, b) => a.py - b.py);
-    ranked.forEach((it) => { it.indent = 0; });
-    for (let i = 0; i < ranked.length; i++) {
-      for (let j = i + 1; j < ranked.length; j++) {
-        if (ranked[j].py - ranked[i].py > yTol) break;
-        const outer = park === 'right'
-          ? (ranked[i].px >= ranked[j].px ? ranked[i] : ranked[j])
-          : (ranked[i].px <= ranked[j].px ? ranked[i] : ranked[j]);
-        const inner = outer === ranked[i] ? ranked[j] : ranked[i];
-        inner.indent = 1;
-      }
-    }
-    const outerItems = ranked.filter((it) => !it.indent);
-    const innerItems = ranked.filter((it) => it.indent);
-    if (innerItems.length) {
-      return [
-        { items: outerItems, indent: 0 },
-        { items: innerItems, indent: 1 },
-      ];
-    }
-    const clusters = clusterByX(items, width);
-    if (clusters.length < 2) return [{ items: ranked, indent: 0 }];
-    if (park === 'right') {
-      return [
-        { items: clusters[clusters.length - 1], indent: 0 },
-        { items: clusters.slice(0, -1).flat(), indent: 1 },
-      ];
-    }
-    return [
-      { items: clusters[0], indent: 0 },
-      { items: clusters.slice(1).flat(), indent: 1 },
-    ];
+    return [{ items: [...items], indent: 0 }];
   }
 
   function worldPerMm() {
@@ -1713,8 +1681,8 @@ const Meridian3D = (() => {
       items.push(...kept);
       return;
     }
-    const minSlot = Math.max(14, slotH * 0.62);
     const usable = Math.max(1, height - pad * 2);
+    const minSlot = Math.max(13, Math.min(slotH * 0.52, usable / Math.max(1, items.length)));
     if (items.length > 1) {
       slotH = Math.min(slotH, Math.max(minSlot, usable / items.length));
     }
@@ -2022,19 +1990,19 @@ const Meridian3D = (() => {
           const slotY = item.slotY;
           if (park === 'right') {
             const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao);
+            const fs = (item.textH || 32) / 1.35;
+            const band = fs * 2;
+            const gap = 8;
             const inset = col.indent
-              ? (gutterCol
-                ? Math.min(
-                  Math.max(48, Math.min(outerW, Math.max(52, (item.textH || 32) * 2.05)) + 10),
-                  Math.max(56, width * 0.24),
-                )
-                : Math.max(outerW + 32, 72))
+              ? (gutterCol ? band + gap : Math.max(outerW + 32, 72))
               : 0;
             let textX = width - pad - item.textW - inset;
-            if (!col.stick && !col.foot && !gutterCol && !item.dogleg) {
+            if (gutterCol) {
+              textX = width - pad - band - gap - item.textW;
+              textX = Math.max(textX, width * 0.68);
+            } else if (!col.stick && !col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
-            if (gutterCol) textX = Math.max(textX, width * 0.56);
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
             if (textX < 2) textX = 2;
             const joinX = textX;
