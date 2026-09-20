@@ -1474,6 +1474,66 @@ const Meridian3D = (() => {
     return samples;
   }
 
+  function nearestSampleIndex(samples, pos) {
+    let best = Infinity;
+    let idx = -1;
+    samples.forEach((sample, i) => {
+      const d = dist3(sample.position, pos);
+      if (d < best) {
+        best = d;
+        idx = i;
+      }
+    });
+    return idx;
+  }
+
+  function repairGvSacrumSpan(samples, meridianId) {
+    if (meridianId !== 'GV' || !samples.length) return samples;
+    const doc = currentMap();
+    const chang = (doc.acupoints || []).find((p) => p.meridianId === 'GV' && p.name === '長強');
+    const yao = (doc.acupoints || []).find((p) => p.meridianId === 'GV' && p.name === '腰俞');
+    if (!chang || !yao) return samples;
+    const a = snapToSkin(toWorld(chang.position), chang.normal, 20);
+    const b = snapToSkin(toWorld(yao.position), yao.normal, 20);
+    const iA = nearestSampleIndex(samples, a.position);
+    const iB = nearestSampleIndex(samples, b.position);
+    if (iA < 0 || iB < 0) return samples;
+    const lo = Math.min(iA, iB);
+    const hi = Math.max(iA, iB);
+    const start = lo === iA ? a : b;
+    const end = lo === iA ? b : a;
+    const mm = worldPerMm();
+    const dist = dist3(start.position, end.position);
+    const segs = Math.max(12, Math.ceil(dist / Math.max(mm * 1.6, 1e-5)));
+    const midX = (start.position[0] + end.position[0]) * 0.5;
+    const zBack = Math.min(start.position[2], end.position[2]) - mm * 18;
+    const mid = [];
+    for (let s = 0; s <= segs; s++) {
+      const t = s / segs;
+      if (s === 0) {
+        mid.push({ position: start.position.slice(), normal: start.normal.slice() });
+        continue;
+      }
+      if (s === segs) {
+        mid.push({ position: end.position.slice(), normal: end.normal.slice() });
+        continue;
+      }
+      const y = start.position[1] + (end.position[1] - start.position[1]) * t;
+      const zChord = start.position[2] + (end.position[2] - start.position[2]) * t;
+      const z = zChord + Math.sin(Math.PI * t) * (zBack - zChord) * 0.55;
+      const n = [0, 0, -1];
+      let hugged = snapToSkin([midX, y, z], n, 48);
+      if (Math.abs(hugged.position[0] - midX) > mm * 8) {
+        hugged = snapToSkin([midX, y, zBack], n, 64);
+      }
+      mid.push({
+        position: [midX, hugged.position[1], hugged.position[2]],
+        normal: hugged.normal[2] < 0 ? hugged.normal : n,
+      });
+    }
+    return samples.slice(0, lo).concat(mid, samples.slice(hi + 1));
+  }
+
   function innerBackDoglegs(prev, node, mm, meridianId) {
     if (meridianId !== 'BL') return [];
     if (prev.type !== 'acupoint' || node.type !== 'acupoint') return [];
@@ -2259,10 +2319,13 @@ const Meridian3D = (() => {
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
       };
     }).filter((sample) => sample.position);
-    const samples = pinHeadYangSamples(
-      hugHeadYangSamples(mapped, route.meridianId, route.side),
+    const samples = repairGvSacrumSpan(
+      pinHeadYangSamples(
+        hugHeadYangSamples(mapped, route.meridianId, route.side),
+        route.meridianId,
+        route.side,
+      ),
       route.meridianId,
-      route.side,
     );
     ribbonCache.set(key, samples);
     return samples;
@@ -2841,6 +2904,12 @@ const Meridian3D = (() => {
 
     bindCalloutClicks();
     bindTap('m3d-play', onPlayClick);
+    const page3d = $('page-meridian-3d');
+    if (page3d) {
+      const blockCallout = (e) => e.preventDefault();
+      page3d.addEventListener('contextmenu', blockCallout);
+      page3d.addEventListener('selectstart', blockCallout);
+    }
     bindTap('back-meridian-3d', () => {
       leave();
       UI.showPage('page-home');
@@ -3047,6 +3116,41 @@ const Meridian3D = (() => {
           });
         });
         return Number.isFinite(best) ? { mm: best / Math.max(mm, 1e-9), world: best } : null;
+      },
+      gvSacrumPath() {
+        const chang = testRecord('長強');
+        const yao = testRecord('腰俞');
+        if (!chang || !yao) return null;
+        const mm = worldPerMm();
+        let samples = [];
+        ribbonCache.forEach((list) => {
+          if (list.length > samples.length) samples = list;
+        });
+        if (!samples.length) return null;
+        const iA = nearestSampleIndex(samples, chang.position);
+        const iB = nearestSampleIndex(samples, yao.position);
+        const lo = Math.min(iA, iB);
+        const hi = Math.max(iA, iB);
+        let path = 0;
+        let maxStep = 0;
+        let minZ = Infinity;
+        let maxX = 0;
+        for (let i = lo + 1; i <= hi; i++) {
+          const d = dist3(samples[i - 1].position, samples[i].position);
+          path += d;
+          maxStep = Math.max(maxStep, d);
+          minZ = Math.min(minZ, samples[i].position[2]);
+          maxX = Math.max(maxX, Math.abs(samples[i].position[0]));
+        }
+        const chord = dist3(chang.position, yao.position);
+        return {
+          count: hi - lo + 1,
+          pathMm: path / mm,
+          chordMm: chord / mm,
+          ratio: chord > 1e-8 ? path / chord : 0,
+          maxStepMm: maxStep / mm,
+          maxAbsXMm: maxX / mm,
+        };
       },
       visibility(name) {
         const rec = testRecord(name);

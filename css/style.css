@@ -774,7 +774,19 @@ body::before {
 /* .home-hit-area { border: 2px dashed rgba(255,0,0,0.6) !important; } */
 
 /* ── 3D 經絡模型 ── */
-#page-meridian-3d { overflow: hidden; }
+#page-meridian-3d {
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+#page-meridian-3d * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
 #page-meridian-3d .m3d-topbar {
   gap: 6px;
   position: relative;
@@ -805,6 +817,7 @@ body::before {
 #m3d-title {
   font-size: var(--fs-md); padding: 0 4px;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 
 .m3d-stage {
@@ -813,7 +826,11 @@ body::before {
   z-index: 0;
 }
 #m3d-viewport { position: absolute; inset: 0; touch-action: none; }
-#m3d-viewport canvas { display: block; width: 100%; height: 100%; }
+#m3d-viewport canvas {
+  display: block; width: 100%; height: 100%;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  outline: none;
+}
 .m3d-callouts {
   position: absolute; inset: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 6; overflow: hidden;
@@ -838,6 +855,9 @@ body::before {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: rgba(255,255,255,0.18);
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .m3d-callouts .callout-hit {
   fill: transparent;
@@ -849,6 +869,7 @@ body::before {
   fill: #111111; stroke: rgba(255,255,255,0.92); stroke-width: 4px;
   paint-order: stroke; dominant-baseline: middle;
   pointer-events: auto; cursor: pointer;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 .m3d-callouts .callout-name.is-focus {
   fill: #e11d2a; font-weight: 800; stroke-width: 5px;
