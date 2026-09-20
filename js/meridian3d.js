@@ -1378,10 +1378,51 @@ const Meridian3D = (() => {
     return (Number(bodyHeight) || 0) * HEAD_BODY_FRACTION;
   }
 
-  function hugHeadYangSamples(samples, meridianId) {
+  function headYangPoints(meridianId, side) {
+    const y0 = headMinY();
+    const doc = currentMap();
+    return (doc.acupoints || []).filter((p) => {
+      if (p.meridianId !== meridianId || !sideAllowed(p.side)) return false;
+      if (side && p.side && p.side !== 'midline' && p.side !== side) return false;
+      return toWorld(p.position)[1] >= y0;
+    }).map((p) => {
+      const mapped = toWorld(p.position);
+      const snapped = snapToSkin(mapped, p.normal, 16);
+      return { position: snapped.position, normal: snapped.normal };
+    });
+  }
+
+  function projectToNearbyHeadPoint(sample, pts, mm) {
+    let best = null;
+    let bestD = mm * 45;
+    pts.forEach((pt) => {
+      const d = dist3(sample.position, pt.position);
+      if (d < bestD) {
+        bestD = d;
+        best = pt;
+      }
+    });
+    if (!best) return sample;
+    const n = best.normal;
+    const along = (sample.position[0] - best.position[0]) * n[0]
+      + (sample.position[1] - best.position[1]) * n[1]
+      + (sample.position[2] - best.position[2]) * n[2];
+    if (Math.abs(along) <= mm * 1.2) return sample;
+    return {
+      position: [
+        sample.position[0] - n[0] * along,
+        sample.position[1] - n[1] * along,
+        sample.position[2] - n[2] * along,
+      ],
+      normal: n,
+    };
+  }
+
+  function hugHeadYangSamples(samples, meridianId, side) {
     if (!HEAD_YANG_IDS.has(meridianId) || !samples.length) return samples;
     const mm = worldPerMm();
     const y0 = headMinY();
+    const pts = headYangPoints(meridianId, side);
     const minStep = mm * 1.8;
     const out = [];
     samples.forEach((sample, i) => {
@@ -1395,34 +1436,37 @@ const Meridian3D = (() => {
         || !prev
         || dist3(prev.position, sample.position) >= minStep;
       if (!keep) return;
-      const hugged = snapToSkin(sample.position, sample.normal, RIBBON_HUG_MM);
+      const plane = projectToNearbyHeadPoint(sample, pts, mm);
+      const hugged = snapToSkin(plane.position, plane.normal, 12);
       out.push({ position: hugged.position, normal: hugged.normal });
     });
     return out.length >= 2 ? out : samples;
   }
 
-  function pinHeadYangSamples(samples, meridianId) {
+  function pinHeadYangSamples(samples, meridianId, side) {
     if (!HEAD_YANG_IDS.has(meridianId) || !samples.length) return samples;
     const mm = worldPerMm();
-    const y0 = headMinY();
-    const doc = currentMap();
-    (doc.acupoints || []).forEach((p) => {
-      if (p.meridianId !== meridianId || !sideAllowed(p.side)) return;
-      const mapped = toWorld(p.position);
-      if (mapped[1] < y0) return;
-      const snapped = snapToSkin(mapped, p.normal, 16);
+    const pts = headYangPoints(meridianId, side);
+    pts.forEach((pt) => {
       let bestI = -1;
-      let bestD = mm * 14;
+      let bestD = mm * 40;
       for (let i = 0; i < samples.length; i++) {
-        const d = dist3(samples[i].position, snapped.position);
+        const d = dist3(samples[i].position, pt.position);
         if (d < bestD) {
           bestD = d;
           bestI = i;
         }
       }
-      if (bestI >= 0) {
-        samples[bestI] = { position: snapped.position, normal: snapped.normal };
+      if (bestI < 0) return;
+      const snapped = { position: pt.position, normal: pt.normal };
+      if (bestD <= mm * 6) {
+        samples[bestI] = snapped;
+        return;
       }
+      const prevD = bestI > 0 ? dist3(samples[bestI - 1].position, pt.position) : Infinity;
+      const nextD = bestI + 1 < samples.length ? dist3(samples[bestI + 1].position, pt.position) : Infinity;
+      const insertAt = nextD < prevD ? bestI + 1 : bestI;
+      samples.splice(insertAt, 0, snapped);
     });
     return samples;
   }
@@ -2213,8 +2257,9 @@ const Meridian3D = (() => {
       };
     }).filter((sample) => sample.position);
     const samples = pinHeadYangSamples(
-      hugHeadYangSamples(mapped, route.meridianId),
+      hugHeadYangSamples(mapped, route.meridianId, route.side),
       route.meridianId,
+      route.side,
     );
     ribbonCache.set(key, samples);
     return samples;
