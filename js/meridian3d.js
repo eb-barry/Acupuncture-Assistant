@@ -1631,11 +1631,30 @@ const Meridian3D = (() => {
     const len = dir.length();
     if (len < 1e-4) return false;
     dir.multiplyScalar(1 / len);
-    const reach = Math.max(0, Math.min(dist, len) - Math.max(worldPerMm() * 3, len * 0.012));
-    if (reach < 1e-4) return false;
-    const ray = new THREE.Raycaster(origin, dir, 0, reach);
+    const near = Math.max(worldPerMm() * (MARKER_DIAMETER_MM * 1.3 + 8), len * 0.045);
+    const ray = new THREE.Raycaster(origin, dir, 0, len);
     const hits = ray.intersectObjects(bodyMeshes, false);
-    return hits.length > 0;
+    if (!hits.length) return false;
+    const hit = hits[0];
+    if (hit.point.distanceTo(world) <= near) return false;
+    return hit.distance < len - near * 0.2;
+  }
+
+  function facingAmounts(rec, toCam) {
+    const { THREE } = three;
+    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    else n.normalize();
+    const raw = n.dot(toCam);
+    const nFlat = n.clone();
+    nFlat.y = 0;
+    const camFlat = toCam.clone();
+    camFlat.y = 0;
+    let flat = raw;
+    if (nFlat.lengthSq() > 1e-8 && camFlat.lengthSq() > 1e-8) {
+      flat = nFlat.normalize().dot(camFlat.normalize());
+    }
+    return { raw, flat };
   }
 
   function isPointVisible(rec, width, height) {
@@ -1653,12 +1672,9 @@ const Meridian3D = (() => {
     const dist = toCam.length();
     if (dist < 1e-4) return false;
     toCam.multiplyScalar(1 / dist);
-    const n = new THREE.Vector3().fromArray(rec.normal || [0, 0, 1]);
-    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
-    else n.normalize();
-    const facing = n.dot(toCam);
-    if (facing >= 0.08) return true;
-    if (facing < -0.42) return false;
+    const { raw, flat } = facingAmounts(rec, toCam);
+    if (flat >= -0.18 || raw >= -0.12) return true;
+    if (flat < -0.55 && raw < -0.42) return false;
     return !isPointOccluded(world, dist);
   }
 
@@ -1724,7 +1740,7 @@ const Meridian3D = (() => {
       const inner = [];
       sorted.forEach((it, i) => (i % 2 ? inner : outer).push(it));
       col.items = outer;
-      extra.push({ items: inner, indent: 1 });
+      extra.push({ items: inner, indent: 1, overflow: true });
     });
     columns.push(...extra);
   }
@@ -2005,11 +2021,20 @@ const Meridian3D = (() => {
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
-            const inset = col.indent ? Math.max(outerW + 32, 72) : 0;
+            const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao);
+            const inset = col.indent
+              ? (gutterCol
+                ? Math.min(
+                  Math.max(48, Math.min(outerW, Math.max(52, (item.textH || 32) * 2.05)) + 10),
+                  Math.max(56, width * 0.24),
+                )
+                : Math.max(outerW + 32, 72))
+              : 0;
             let textX = width - pad - item.textW - inset;
-            if (!col.stick && !col.foot && !item.dogleg) {
+            if (!col.stick && !col.foot && !gutterCol && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
+            if (gutterCol) textX = Math.max(textX, width * 0.56);
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
             if (textX < 2) textX = 2;
             const joinX = textX;
@@ -2930,6 +2955,28 @@ const Meridian3D = (() => {
         const toCam = camera.position.clone().sub(world);
         if (toCam.lengthSq() < 1e-8) return 0;
         return viewNormal(rec.normal, rec).dot(toCam.normalize());
+      },
+      visibility(name) {
+        const rec = testRecord(name);
+        if (!rec || !camera || !three) return null;
+        const { THREE } = three;
+        const { width, height } = viewportSize();
+        const screen = projectToScreen(rec.position, width, height);
+        const world = new THREE.Vector3().fromArray(rec.position);
+        const toCam = camera.position.clone().sub(world);
+        const dist = toCam.length();
+        if (dist < 1e-8) return { name: rec.name, screen, visible: false };
+        toCam.multiplyScalar(1 / dist);
+        const { raw, flat } = facingAmounts(rec, toCam);
+        const occluded = isPointOccluded(world, dist);
+        return {
+          name: rec.name,
+          screen,
+          raw,
+          flat,
+          occluded,
+          visible: isPointVisible(rec, width, height),
+        };
       },
       dist() {
         if (!camera || !controls) return null;
