@@ -1504,27 +1504,32 @@ const Meridian3D = (() => {
     const end = lo === iA ? b : a;
     const mm = worldPerMm();
     const dist = dist3(start.position, end.position);
-    const segs = Math.max(10, Math.ceil(dist / Math.max(mm * 1.6, 1e-5)));
+    const segs = Math.max(12, Math.ceil(dist / Math.max(mm * 1.6, 1e-5)));
+    const midX = (start.position[0] + end.position[0]) * 0.5;
+    const zBack = Math.min(start.position[2], end.position[2]) - mm * 18;
     const mid = [];
     for (let s = 0; s <= segs; s++) {
-      const node = lerpNode(
-        { position: start.position, normal: start.normal },
-        { position: end.position, normal: end.normal },
-        s / segs,
-      );
-      const n = node.normal.slice();
-      if (n[2] > -0.4) n[2] = -0.75;
-      const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
-      n[0] /= nLen;
-      n[1] /= nLen;
-      n[2] /= nLen;
-      const probe = [
-        node.position[0] + n[0] * mm * 4,
-        node.position[1] + n[1] * mm * 4,
-        node.position[2] + n[2] * mm * 4,
-      ];
-      const hugged = snapToSkin(probe, n, 36);
-      mid.push({ position: hugged.position, normal: hugged.normal });
+      const t = s / segs;
+      if (s === 0) {
+        mid.push({ position: start.position.slice(), normal: start.normal.slice() });
+        continue;
+      }
+      if (s === segs) {
+        mid.push({ position: end.position.slice(), normal: end.normal.slice() });
+        continue;
+      }
+      const y = start.position[1] + (end.position[1] - start.position[1]) * t;
+      const zChord = start.position[2] + (end.position[2] - start.position[2]) * t;
+      const z = zChord + Math.sin(Math.PI * t) * (zBack - zChord) * 0.55;
+      const n = [0, 0, -1];
+      let hugged = snapToSkin([midX, y, z], n, 48);
+      if (Math.abs(hugged.position[0] - midX) > mm * 8) {
+        hugged = snapToSkin([midX, y, zBack], n, 64);
+      }
+      mid.push({
+        position: [midX, hugged.position[1], hugged.position[2]],
+        normal: hugged.normal[2] < 0 ? hugged.normal : n,
+      });
     }
     return samples.slice(0, lo).concat(mid, samples.slice(hi + 1));
   }
