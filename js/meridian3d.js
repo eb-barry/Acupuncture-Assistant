@@ -91,7 +91,8 @@ const Meridian3D = (() => {
   let orbiting = false;
   let lastReframeName = '';
   let reframeLog = [];
-  let capturedPointerId = null;
+  let overlayPinch = null;
+  let overlayPinched = false;
   let annotDirty = true;
   let ribbonCache = new Map();
   let pointCache = new Map();
@@ -479,6 +480,11 @@ const Meridian3D = (() => {
     });
     svg.addEventListener('pointerup', (ev) => {
       const key = keyOf(ev);
+      if (overlayPinched) {
+        overlayPinched = false;
+        down = null;
+        return;
+      }
       if (!key || !down || down.key !== key) {
         down = null;
         return;
@@ -496,6 +502,72 @@ const Meridian3D = (() => {
       if (!keyOf(ev)) return;
       ev.preventDefault();
     });
+  }
+
+  function pinchTouchDist(touches) {
+    if (!touches || touches.length < 2) return 0;
+    return Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY,
+    );
+  }
+
+  function touchOnViewportCanvas(node) {
+    const canvas = renderer && renderer.domElement;
+    return !!(canvas && node && (node === canvas || canvas.contains(node)));
+  }
+
+  function bothTouchesOnCanvas(touches) {
+    return !!(
+      touches
+      && touches.length >= 2
+      && touchOnViewportCanvas(touches[0].target)
+      && touchOnViewportCanvas(touches[1].target)
+    );
+  }
+
+  function bindViewportPinchLock() {
+    const page3d = $('page-meridian-3d');
+    if (!page3d || page3d.dataset.pinchLockBound) return;
+    page3d.dataset.pinchLockBound = '1';
+    const stopPageZoom = (ev) => ev.preventDefault();
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach((type) => {
+      page3d.addEventListener(type, stopPageZoom, { capture: true, passive: false });
+    });
+    page3d.addEventListener('touchstart', (ev) => {
+      if (ev.touches.length < 2) return;
+      overlayPinched = true;
+      if (!camera || !controls || bothTouchesOnCanvas(ev.touches)) {
+        overlayPinch = null;
+        return;
+      }
+      overlayPinch = {
+        dist: pinchTouchDist(ev.touches),
+        camDist: cameraTargetDist(),
+      };
+    }, { capture: true, passive: true });
+    page3d.addEventListener('touchmove', (ev) => {
+      const scaled = typeof ev.scale === 'number' && ev.scale !== 1;
+      if (ev.touches.length < 2 && !scaled) return;
+      if (!bothTouchesOnCanvas(ev.touches)) ev.preventDefault();
+      if (!overlayPinch || ev.touches.length < 2 || !camera || !controls) return;
+      const dist = pinchTouchDist(ev.touches);
+      if (!(overlayPinch.dist > 1) || !(dist > 1)) return;
+      overlayPinched = true;
+      orbiting = true;
+      hideCallouts();
+      dollyToDistance(overlayPinch.camDist * (overlayPinch.dist / dist));
+    }, { capture: true, passive: false });
+    const endPinch = (ev) => {
+      if (ev.touches && ev.touches.length >= 2) return;
+      if (overlayPinch) {
+        overlayPinch = null;
+        orbiting = false;
+        noteCameraMoving(280);
+      }
+    };
+    page3d.addEventListener('touchend', endPinch, { capture: true });
+    page3d.addEventListener('touchcancel', endPinch, { capture: true });
   }
 
   function unlockSpeech() {
@@ -711,6 +783,30 @@ const Meridian3D = (() => {
     camera.lookAt(controls.target);
     controls.update();
     noteCameraMoving(280);
+  }
+
+  function cameraTargetDist() {
+    if (!camera || !controls) return 0;
+    return camera.position.distanceTo(controls.target);
+  }
+
+  function dollyToDistance(want) {
+    if (!camera || !controls) return;
+    const t = controls.target;
+    const cur = cameraTargetDist();
+    if (!(cur > 1e-8)) return;
+    const minD = Number(controls.minDistance) > 0 ? controls.minDistance : cur * 0.05;
+    const maxD = Number(controls.maxDistance) > 0 ? controls.maxDistance : cur * 20;
+    const next = Math.min(maxD, Math.max(minD, Number(want) || cur));
+    const s = next / cur;
+    camera.position.set(
+      t.x + (camera.position.x - t.x) * s,
+      t.y + (camera.position.y - t.y) * s,
+      t.z + (camera.position.z - t.z) * s,
+    );
+    controls.update();
+    noteCameraMoving(280);
+    calloutsDirty = true;
   }
 
   function faceFront() {
@@ -3006,6 +3102,7 @@ const Meridian3D = (() => {
     });
 
     bindCalloutClicks();
+    bindViewportPinchLock();
     bindTap('m3d-play', onPlayClick);
     const page3d = $('page-meridian-3d');
     if (page3d) {
@@ -3069,17 +3166,8 @@ const Meridian3D = (() => {
       faceFront: () => { faceFront(); calloutsDirty = true; },
       faceBack: () => { faceBack(); calloutsDirty = true; },
       dolly(factor) {
-        if (!camera || !controls) return;
-        const t = controls.target;
-        const s = Number(factor) || 1;
-        camera.position.set(
-          t.x + (camera.position.x - t.x) * s,
-          t.y + (camera.position.y - t.y) * s,
-          t.z + (camera.position.z - t.z) * s,
-        );
-        controls.update();
-        noteCameraMoving(280);
-        calloutsDirty = true;
+        const cur = cameraTargetDist();
+        dollyToDistance(cur * (Number(factor) || 1));
       },
       nudgeTarget(dyBody) {
         if (!camera || !controls) return;
@@ -3307,6 +3395,48 @@ const Meridian3D = (() => {
       dist() {
         if (!camera || !controls) return null;
         return camera.position.distanceTo(controls.target);
+      },
+      touchAction(sel) {
+        const el = typeof sel === 'string' ? document.querySelector(sel) : sel;
+        return el ? getComputedStyle(el).touchAction : null;
+      },
+      visualScale() {
+        return (window.visualViewport && window.visualViewport.scale) || 1;
+      },
+      overlayPinch(from, to) {
+        const page3d = $('page-meridian-3d');
+        const svg = $('m3d-callouts');
+        const target = (svg && svg.querySelector('text.callout-name')) || page3d;
+        if (!target || typeof TouchEvent === 'undefined' || typeof Touch === 'undefined') return false;
+        const mk = (id, pt) => new Touch({
+          identifier: id,
+          target,
+          clientX: pt.x,
+          clientY: pt.y,
+        });
+        const fire = (type, a, b, extra = {}) => {
+          const touches = a && b ? [mk(0, a), mk(1, b)] : [];
+          target.dispatchEvent(new TouchEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            touches,
+            targetTouches: touches,
+            changedTouches: touches,
+            ...extra,
+          }));
+        };
+        fire('touchstart', from[0], from[1]);
+        fire('touchmove', to[0], to[1]);
+        target.dispatchEvent(new TouchEvent('touchend', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: [],
+        }));
+        return true;
       },
       current() {
         if (!currentPoint) return null;
