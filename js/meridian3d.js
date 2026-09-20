@@ -1436,8 +1436,11 @@ const Meridian3D = (() => {
         || !prev
         || dist3(prev.position, sample.position) >= minStep;
       if (!keep) return;
-      const plane = projectToNearbyHeadPoint(sample, pts, mm);
-      const hugged = snapToSkin(plane.position, plane.normal, 12);
+      let hugged = snapToSkin(sample.position, sample.normal, 14);
+      if (dist3(hugged.position, sample.position) < 1e-8) {
+        const plane = projectToNearbyHeadPoint(sample, pts, mm);
+        hugged = snapToSkin(plane.position, plane.normal, 12);
+      }
       out.push({ position: hugged.position, normal: hugged.normal });
     });
     return out.length >= 2 ? out : samples;
