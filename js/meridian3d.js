@@ -34,6 +34,8 @@ const Meridian3D = (() => {
   const HANDLE_SPACING_MM = 40.9;
   const HANDLE_BULGE_MM = 22;
   const RIBBON_HUG_MM = 36;
+  const HEAD_BODY_FRACTION = 0.8;
+  const HEAD_YANG_IDS = new Set(['LI', 'ST', 'SI', 'BL', 'TE', 'GB']);
   const MAX_PAIR_HANDLES = 5;
   const ROUTE_BREAK_MM = 200;
   const AUTO_SCALE = 5;
@@ -1368,6 +1370,63 @@ const Meridian3D = (() => {
     return samples;
   }
 
+  function dist3(a, b) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  }
+
+  function headMinY() {
+    return (Number(bodyHeight) || 0) * HEAD_BODY_FRACTION;
+  }
+
+  function hugHeadYangSamples(samples, meridianId) {
+    if (!HEAD_YANG_IDS.has(meridianId) || !samples.length) return samples;
+    const mm = worldPerMm();
+    const y0 = headMinY();
+    const minStep = mm * 1.8;
+    const out = [];
+    samples.forEach((sample, i) => {
+      if (sample.position[1] < y0) {
+        out.push(sample);
+        return;
+      }
+      const prev = out[out.length - 1];
+      const keep = i === 0
+        || i === samples.length - 1
+        || !prev
+        || dist3(prev.position, sample.position) >= minStep;
+      if (!keep) return;
+      const hugged = snapToSkin(sample.position, sample.normal, RIBBON_HUG_MM);
+      out.push({ position: hugged.position, normal: hugged.normal });
+    });
+    return out.length >= 2 ? out : samples;
+  }
+
+  function pinHeadYangSamples(samples, meridianId) {
+    if (!HEAD_YANG_IDS.has(meridianId) || !samples.length) return samples;
+    const mm = worldPerMm();
+    const y0 = headMinY();
+    const doc = currentMap();
+    (doc.acupoints || []).forEach((p) => {
+      if (p.meridianId !== meridianId || !sideAllowed(p.side)) return;
+      const mapped = toWorld(p.position);
+      if (mapped[1] < y0) return;
+      const snapped = snapToSkin(mapped, p.normal, 16);
+      let bestI = -1;
+      let bestD = mm * 14;
+      for (let i = 0; i < samples.length; i++) {
+        const d = dist3(samples[i].position, snapped.position);
+        if (d < bestD) {
+          bestD = d;
+          bestI = i;
+        }
+      }
+      if (bestI >= 0) {
+        samples[bestI] = { position: snapped.position, normal: snapped.normal };
+      }
+    });
+    return samples;
+  }
+
   function innerBackDoglegs(prev, node, mm, meridianId) {
     if (meridianId !== 'BL') return [];
     if (prev.type !== 'acupoint' || node.type !== 'acupoint') return [];
@@ -2145,7 +2204,7 @@ const Meridian3D = (() => {
     const key = `${loadedGender}|baked|${route.meridianId}|${route.side}|${ribbonIdx}`;
     const cached = ribbonCache.get(key);
     if (cached) return cached;
-    const samples = (ribbon?.samples || []).map((sample) => {
+    const mapped = (ribbon?.samples || []).map((sample) => {
       const n = sample.normal || [0, 0, 1];
       const nLen = Math.hypot(n[0], n[1], n[2]) || 1;
       return {
@@ -2153,6 +2212,10 @@ const Meridian3D = (() => {
         normal: [n[0] / nLen, n[1] / nLen, n[2] / nLen],
       };
     }).filter((sample) => sample.position);
+    const samples = pinHeadYangSamples(
+      hugHeadYangSamples(mapped, route.meridianId),
+      route.meridianId,
+    );
     ribbonCache.set(key, samples);
     return samples;
   }
@@ -2922,6 +2985,20 @@ const Meridian3D = (() => {
         const toCam = camera.position.clone().sub(world);
         if (toCam.lengthSq() < 1e-8) return 0;
         return viewNormal(rec.normal, rec).dot(toCam.normalize());
+      },
+      ribbonGap(name) {
+        const rec = testRecord(name);
+        if (!rec) return null;
+        const mm = worldPerMm();
+        let best = Infinity;
+        ribbonCache.forEach((samples) => {
+          samples.forEach((sample) => {
+            const lifted = liftPoint(sample.position, sample.normal);
+            const d = dist3(lifted, rec.position);
+            if (d < best) best = d;
+          });
+        });
+        return Number.isFinite(best) ? { mm: best / Math.max(mm, 1e-9), world: best } : null;
       },
       visibility(name) {
         const rec = testRecord(name);
