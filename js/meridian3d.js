@@ -1992,14 +1992,13 @@ const Meridian3D = (() => {
             const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao);
             const fs = (item.textH || 32) / 1.35;
             const band = fs * 2;
-            const gap = 8;
+            const gap = 12;
             const inset = col.indent
               ? (gutterCol ? band + gap : Math.max(outerW + 32, 72))
               : 0;
             let textX = width - pad - item.textW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
-              textX = Math.max(textX, width * 0.68);
             } else if (!col.stick && !col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
