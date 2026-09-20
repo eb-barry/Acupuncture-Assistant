@@ -776,6 +776,8 @@ body::before {
 /* ── 3D 經絡模型 ── */
 #page-meridian-3d {
   overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -792,7 +794,7 @@ body::before {
   position: relative;
   z-index: 200;
   flex-shrink: 0;
-  touch-action: manipulation;
+  touch-action: none;
 }
 .m3d-top-actions {
   display: flex; align-items: center; gap: 4px; flex-shrink: 0;
@@ -803,7 +805,7 @@ body::before {
   border: none; background: transparent; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  touch-action: none;
   pointer-events: auto;
 }
 .m3d-icon-btn img {
@@ -824,6 +826,7 @@ body::before {
   flex: 1; min-height: 0; position: relative;
   background: #dce8ec; overflow: hidden;
   z-index: 0;
+  touch-action: none;
 }
 #m3d-viewport { position: absolute; inset: 0; touch-action: none; }
 #m3d-viewport canvas {
@@ -834,6 +837,7 @@ body::before {
 .m3d-callouts {
   position: absolute; inset: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 6; overflow: hidden;
+  touch-action: none;
 }
 .m3d-callouts[hidden] { display: none !important; }
 .m3d-callouts .leader-halo {
@@ -853,7 +857,7 @@ body::before {
 .m3d-callouts .callout-link {
   pointer-events: auto;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
   -webkit-tap-highlight-color: rgba(255,255,255,0.18);
   -webkit-touch-callout: none;
   -webkit-user-select: none;
@@ -863,12 +867,14 @@ body::before {
   fill: transparent;
   pointer-events: auto;
   cursor: pointer;
+  touch-action: none;
 }
 .m3d-callouts .callout-name {
   font-family: var(--font-serif); font-size: calc(var(--fs-md) * 2); font-weight: 600;
   fill: #111111; stroke: rgba(255,255,255,0.92); stroke-width: 4px;
   paint-order: stroke; dominant-baseline: middle;
   pointer-events: auto; cursor: pointer;
+  touch-action: none;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 .m3d-callouts .callout-name.is-focus {
@@ -915,6 +921,7 @@ body::before {
 }
 .m3d-sheet-body {
   padding: 12px 16px 20px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 .m3d-field-label {
   font-size: var(--fs-sm); color: var(--clr-teal-dark); font-weight: 600;
@@ -962,9 +969,13 @@ body::before {
 .m3d-point-sheet {
   flex: 1; background: var(--clr-bg); overflow-y: auto;
   border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgba(44,74,82,0.18);
+  touch-action: pan-y;
 }
 
 /* ── 返回主頁：Home 圖示（白色，在 Tiffany Green top-bar 上） ── */
+#page-meridian-3d .btn-home {
+  touch-action: none;
+}
 .btn-home {
   width: 52px; height: 52px;
   display: flex; align-items: center; justify-content: center;
