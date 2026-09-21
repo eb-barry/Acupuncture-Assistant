@@ -102,6 +102,7 @@ const Meridian3D = (() => {
   let annotWork = 0;
   let skinAccel = null;
   let lastPlayTapAt = 0;
+  let autoStartedAt = 0;
   let lastLaidCallouts = [];
 
   const $ = (id) => document.getElementById(id);
@@ -130,6 +131,7 @@ const Meridian3D = (() => {
     if (!svg) return;
     svg.innerHTML = '';
     calloutRecByKey.clear();
+    lastLaidCallouts = [];
     setCalloutsVisible(false);
   }
 
@@ -2555,8 +2557,16 @@ const Meridian3D = (() => {
       const raw = dedupeParkItems(buckets[park], park);
       const hasBlPair = raw.some((it) => blCalloutBand(it.rec) === 'inner')
         && raw.some((it) => blCalloutBand(it.rec) === 'outer');
-      const next = hasBlPair ? focusTorsoItems(raw) : raw;
-      return ensureFocusItem(next, visible, park, sides);
+      let next = hasBlPair ? focusTorsoItems(raw) : raw;
+      next = ensureFocusItem(next, visible, park, sides);
+      if (playingAuto && next.length > 12) {
+        const focus = next.filter((it) => isFocusRec(it.rec));
+        const fy = focus[0] ? focus[0].py : 0;
+        const rest = next.filter((it) => !isFocusRec(it.rec))
+          .sort((a, b) => Math.abs(a.py - fy) - Math.abs(b.py - fy));
+        next = focus.concat(rest.slice(0, 10));
+      }
+      return next;
     };
     buckets.right = preparePark('right');
     buckets.left = preparePark('left');
@@ -3185,6 +3195,7 @@ const Meridian3D = (() => {
     const work = ++annotWork;
     playingAuto = true;
     autoAbort = false;
+    autoStartedAt = performance.now();
     lastReframeName = '';
     reframeLog = [];
     autoViewDir = null;
@@ -3313,6 +3324,7 @@ const Meridian3D = (() => {
     autoPaused = false;
     closeOverlay();
     if (playingAuto) {
+      if (performance.now() - autoStartedAt < 1200) return;
       stopAuto({ keepCursor: true });
       return;
     }
@@ -3339,7 +3351,7 @@ const Meridian3D = (() => {
         if (ev.cancelable) ev.preventDefault();
       }
       const now = performance.now();
-      if (now - last < 400) return;
+      if (now - last < 700) return;
       last = now;
       handler(ev);
     };
