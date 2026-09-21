@@ -966,16 +966,6 @@ const Meridian3D = (() => {
     const id = rec && rec.meridianId;
     const seq = Number(rec && rec.sequence) || 0;
     if (id === 'HT' && seq <= 1) return fallbackViewDir(rec);
-    if (id === 'KI' && seq <= 1) {
-      const sole = new THREE.Vector3().fromArray(normal || rec.normal || [0, -1, 0.3]);
-      if (sole.lengthSq() < 1e-8) sole.set(0, -1, 0.3);
-      else sole.normalize();
-      const medial = rec && rec.side === 'left' ? 1 : -1;
-      sole.y = Math.min(sole.y, -0.42);
-      sole.z = Math.max(sole.z, 0.28);
-      sole.x = medial * Math.min(Math.max(Math.abs(sole.x), 0.18), 0.55);
-      return sole.normalize();
-    }
     if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
     const n = flattenHorizontal(normal);
     if (n.lengthSq() < 0.05) return fallbackViewDir(rec);
