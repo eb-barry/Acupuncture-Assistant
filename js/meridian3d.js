@@ -46,9 +46,10 @@ const Meridian3D = (() => {
   const ROUTE_BREAK_MM = 200;
   const AUTO_SCALE = 5;
   const EDGE_MARGIN = 0.1;
-  const FACE_DOT_MIN = 0.35;
+  const FACE_DOT_MIN = 0.45;
   const INNER_ARM_FACE_DOT_MIN = 0.85;
   const INNER_ARM_DIST_SCALE = 0.50;
+  const VIEW_CARDINAL_COS = 0.985;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -91,6 +92,7 @@ const Meridian3D = (() => {
   let orbiting = false;
   let lastReframeName = '';
   let reframeLog = [];
+  let autoViewDir = null;
   let overlayPinch = null;
   let overlayPinched = false;
   let annotDirty = true;
@@ -844,8 +846,37 @@ const Meridian3D = (() => {
     controls.maxDistance = Math.max(bodyHeight * 12, want * 8);
   }
 
+  function isInnerLimb(rec) {
+    if (!rec || rec.side === 'midline') return false;
+    const id = rec.meridianId;
+    const seq = Number(rec.sequence) || 0;
+    if (id === 'LU') return seq >= 8;
+    // 極泉 sits in the axilla; a medial camera goes through the chest.
+    if (id === 'HT') return seq >= 2;
+    if (id === 'PC') return seq >= 2;
+    if (id === 'SP' || id === 'KI' || id === 'LR') {
+      const y = Number(rec.position && rec.position[1]);
+      return Number.isFinite(y) && y < bodyHeight * 0.62;
+    }
+    return false;
+  }
+
+  function usesInnerCloseup(rec) {
+    if (!rec) return false;
+    const seq = Number(rec.sequence) || 0;
+    if (rec.meridianId === 'LU') return isInnerLimb(rec);
+    if (rec.meridianId === 'HT') return seq >= 3;
+    if (rec.meridianId === 'PC') return seq >= 3;
+    return false;
+  }
+
+  function isCavityPoint(rec) {
+    const seq = Number(rec && rec.sequence) || 0;
+    return !!(rec && rec.meridianId === 'HT' && seq <= 1);
+  }
+
   function isInnerForearmLu(rec) {
-    return !!(rec && rec.meridianId === 'LU' && (Number(rec.sequence) || 0) >= 8);
+    return isInnerLimb(rec) && rec && rec.meridianId === 'LU';
   }
 
   function innerArmSourceNormal(rec) {
@@ -859,42 +890,273 @@ const Meridian3D = (() => {
     return (palmar && palmar.normal) || rec.normal;
   }
 
-  function viewNormal(normal, rec) {
+  function fallbackViewDir(rec) {
     const { THREE } = three;
-    if (isInnerForearmLu(rec)) {
-      const medial = rec.side === 'left' ? 1 : -1;
-      const n = new THREE.Vector3().fromArray(innerArmSourceNormal(rec) || [medial, 0, 1]);
+    const id = rec && rec.meridianId;
+    const seq = Number(rec && rec.sequence) || 0;
+    const lateral = rec && rec.side === 'left' ? -1 : 1;
+    if (id === 'GV' || id === 'BL') return new THREE.Vector3(0, 0, -1);
+    if (id === 'GB') return new THREE.Vector3(lateral, 0, 0.18).normalize();
+    if (id === 'TE' || id === 'SI') {
+      return new THREE.Vector3(lateral * 0.62, 0.04, -0.78).normalize();
+    }
+    if (id === 'LI') return new THREE.Vector3(lateral, 0, 0.55).normalize();
+    if (id === 'HT' && seq <= 1) {
+      return new THREE.Vector3(lateral * 0.18, 0.08, 0.98).normalize();
+    }
+    if (id === 'HT' || id === 'PC') return innerLimbViewNormal(rec);
+    return new THREE.Vector3(0, 0, 1);
+  }
+
+  function innerLimbViewNormal(rec) {
+    const { THREE } = three;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    const id = rec && rec.meridianId;
+    if (id === 'LU') {
+      const src = innerArmSourceNormal(rec);
+      const n = new THREE.Vector3().fromArray(src || [medial, 0.16, 0.5]);
       if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
       else n.normalize();
-      n.x = medial * Math.max(Math.abs(n.x), 0.78);
-      n.y = Math.min(Math.max(n.y, 0.12), 0.32);
-      n.z = Math.max(n.z, 0.40);
+      n.x = medial * Math.max(Math.abs(n.x), 0.72);
+      n.y = Math.min(Math.max(n.y, 0.08), 0.32);
+      n.z = Math.max(n.z, 0.38);
       return n.normalize();
     }
+    if (id === 'HT') {
+      const src = rec && rec.normal;
+      const n = new THREE.Vector3().fromArray(src || [medial, 0.12, 0.42]);
+      if (n.lengthSq() < 1e-8) n.set(medial, 0.12, 0.42);
+      else n.normalize();
+      n.x = medial * Math.max(Math.abs(n.x), 0.58);
+      n.y = Math.min(Math.max(n.y, 0.04), 0.28);
+      if (n.z >= 0) n.z = Math.max(n.z, 0.32);
+      else n.z = Math.min(n.z, -0.32);
+      return n.normalize();
+    }
+    if (id === 'PC') {
+      return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
+    }
+    const src = rec && rec.normal;
+    const n = new THREE.Vector3().fromArray(src || [medial, 0.16, 0.5]);
+    if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
+    else n.normalize();
+    n.x = medial * Math.max(Math.abs(n.x), 0.72);
+    n.y = Math.min(Math.max(n.y, 0.08), 0.32);
+    n.z = Math.max(n.z, 0.38);
+    return n.normalize();
+  }
+
+  function flattenHorizontal(normal) {
+    const { THREE } = three;
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
     if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
     else n.normalize();
     n.y = 0;
-    if (n.lengthSq() < 0.05) n.set(0, 0, (normal && normal[2] < 0) ? -1 : 1);
-    else n.normalize();
-    if (n.z > 0.35) n.set(0, 0, 1);
-    else if (n.z < -0.35) n.set(0, 0, -1);
     return n;
   }
 
-  function cameraPoseForPoint(position, normal, rec) {
+  function snapNearCardinal(n) {
+    if (Math.abs(n.z) >= VIEW_CARDINAL_COS) n.set(0, 0, Math.sign(n.z) || 1);
+    else if (Math.abs(n.x) >= VIEW_CARDINAL_COS) n.set(Math.sign(n.x) || 1, 0, 0);
+    return n;
+  }
+
+  function viewNormal(normal, rec) {
+    const id = rec && rec.meridianId;
+    const seq = Number(rec && rec.sequence) || 0;
+    if (id === 'HT' && seq <= 1) return fallbackViewDir(rec);
+    if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
+    const n = flattenHorizontal(normal);
+    if (n.lengthSq() < 0.05) return fallbackViewDir(rec);
+    n.normalize();
+    if (id === 'PC' && seq <= 1) {
+      n.z = Math.max(n.z, 0.62);
+      return n.normalize();
+    }
+    if (id === 'ST') {
+      n.z = Math.max(n.z, 0.55);
+      return n.normalize();
+    }
+    return snapNearCardinal(n);
+  }
+
+  function shotViewDir(recs) {
     const { THREE } = three;
-    const n = viewNormal(normal, rec);
-    const dist = isInnerForearmLu(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
-    const target = new THREE.Vector3().fromArray(position);
+    const list = (recs || []).filter(Boolean);
+    if (!list.length) return new THREE.Vector3(0, 0, 1);
+    const inner = list.filter(isInnerLimb);
+    if (inner.length && inner.length * 2 >= list.length) {
+      return innerLimbViewNormal(inner[0]);
+    }
+    const acc = new THREE.Vector3();
+    list.forEach((rec) => {
+      const n = flattenHorizontal(rec.normal);
+      if (n.lengthSq() < 0.04) return;
+      acc.add(n.normalize());
+    });
+    if (acc.lengthSq() < 1e-4) return viewNormal(list[0].normal, list[0]);
+    return snapNearCardinal(acc.normalize());
+  }
+
+  function paddedBodyBox() {
+    const { THREE } = three;
+    const box = new THREE.Box3();
+    bodyMeshes.forEach((mesh) => {
+      mesh.updateWorldMatrix(true, false);
+      box.expandByObject(mesh);
+    });
+    if (box.isEmpty()) return box;
+    box.expandByScalar(Math.max(bodyHeight * 0.03, 0.02));
+    return box;
+  }
+
+  function poseSeesPoint(origin, world) {
+    if (!bodyMeshes.length || !three) return true;
+    const { THREE } = three;
+    const dir = world.clone().sub(origin);
+    const len = dir.length();
+    if (len < 1e-4) return false;
+    dir.multiplyScalar(1 / len);
+    const near = Math.max(worldPerMm() * (MARKER_DIAMETER_MM * 1.3 + 8), len * 0.045);
+    const ray = new THREE.Raycaster(origin, dir, 0, len);
+    const hits = ray.intersectObjects(bodyMeshes, false);
+    if (!hits.length) return true;
+    const hit = hits[0];
+    if (hit.point.distanceTo(world) <= near) return true;
+    return hit.distance >= len - near * 0.2;
+  }
+
+  function ensureOutsideDir(rec, dir, dist) {
+    const { THREE } = three;
+    const target = new THREE.Vector3().fromArray(rec.position);
+    const box = paddedBodyBox();
+    const skipLos = rec && (rec.meridianId === 'SP' || rec.meridianId === 'KI' || rec.meridianId === 'LR');
+    const ok = (d) => {
+      if (!d || d.lengthSq() < 1e-8) return false;
+      const p = target.clone().addScaledVector(d, dist);
+      if (!box.isEmpty() && box.containsPoint(p)) return false;
+      return skipLos || poseSeesPoint(p, target);
+    };
+    const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
+    if (ok(n)) return n;
+    const lateral = rec && rec.side === 'left' ? -1 : 1;
+    const id = rec && rec.meridianId;
+    const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE';
+    const candidates = [
+      fallbackViewDir(rec),
+      new THREE.Vector3(0, 0, preferBack ? -1 : 1),
+      new THREE.Vector3(0, 0, preferBack ? 1 : -1),
+      new THREE.Vector3(lateral * 0.35, 0.08, preferBack ? -0.93 : 0.93).normalize(),
+      new THREE.Vector3(lateral, 0.06, 0.2).normalize(),
+      new THREE.Vector3(n.x, 0.08, preferBack ? -1 : 1).normalize(),
+    ];
+    for (let i = 0; i < candidates.length; i++) {
+      if (ok(candidates[i])) return candidates[i].normalize();
+    }
+    return new THREE.Vector3(0, 0, preferBack ? -1 : 1);
+  }
+
+  function poseLookingAt(rec, dir) {
+    const { THREE } = three;
+    const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
+    const n = ensureOutsideDir(
+      rec,
+      dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec),
+      dist,
+    );
+    const target = new THREE.Vector3().fromArray(rec.position);
     const pos = target.clone().addScaledVector(n, dist);
-    return { pos, target };
+    return { pos, target, dir: n };
+  }
+
+  function cameraPoseForPoint(position, normal, rec) {
+    const fake = rec || { position, normal };
+    return poseLookingAt(fake, viewNormal(normal, rec));
   }
 
   function viewportSize() {
     if (!renderer) return { width: 1, height: 1 };
     const rect = renderer.domElement.getBoundingClientRect();
     return { width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
+  }
+
+  function poseProjectionCamera(pose, width, height) {
+    const cam = camera.clone();
+    cam.position.copy(pose.pos);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(pose.target);
+    cam.aspect = width / Math.max(height, 1);
+    cam.near = Math.max(bodyHeight / 200, 0.01);
+    cam.far = Math.max(bodyHeight * 40, cam.near * 20);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+    return cam;
+  }
+
+  function projectPoseToScreen(world, pose, width, height) {
+    const { THREE } = three;
+    const cam = poseProjectionCamera(pose, width, height);
+    const v = new THREE.Vector3().fromArray(world);
+    v.project(cam);
+    if (!Number.isFinite(v.x) || v.z > 1 || v.z < -1) return null;
+    return {
+      x: (v.x * 0.5 + 0.5) * width,
+      y: (-v.y * 0.5 + 0.5) * height,
+    };
+  }
+
+  function recFitsInPose(rec, pose, width, height) {
+    if (!rec || !pose) return false;
+    const { THREE } = three;
+    const screen = projectPoseToScreen(rec.position, pose, width, height);
+    if (!screen) return false;
+    const mx = width * EDGE_MARGIN;
+    const my = height * EDGE_MARGIN;
+    if (screen.x < mx || screen.x > width - mx || screen.y < my || screen.y > height - my) return false;
+    const world = new THREE.Vector3().fromArray(rec.position);
+    const toCam = pose.pos.clone().sub(world);
+    if (toCam.lengthSq() < 1e-8) return false;
+    toCam.normalize();
+    const n = viewNormal(rec.normal, rec);
+    const minDot = usesInnerCloseup(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
+    if (n.dot(toCam) < minDot) return false;
+    if (!isCavityPoint(rec)) {
+      const { flat } = facingAmounts(rec, toCam);
+      if (flat < 0.16) return false;
+      if (!poseSeesPoint(pose.pos, world)) return false;
+    }
+    return true;
+  }
+
+  function planShot(upcoming, prevDir) {
+    const { THREE } = three;
+    const list = (upcoming || []).filter(Boolean);
+    if (!list.length) {
+      return { recs: [], pose: null, dir: new THREE.Vector3(0, 0, 1) };
+    }
+    const { width, height } = viewportSize();
+    const anchor = list[0];
+    const rest = list.slice(1);
+    const packWith = (dir) => {
+      const pose = poseLookingAt(anchor, dir);
+      if (!recFitsInPose(anchor, pose, width, height)) return null;
+      const recs = [anchor];
+      for (let i = 0; i < rest.length; i++) {
+        if (!recFitsInPose(rest[i], pose, width, height)) break;
+        recs.push(rest[i]);
+      }
+      return { recs, pose, dir: pose.dir };
+    };
+    if (prevDir && prevDir.lengthSq() > 0.2) {
+      const kept = packWith(prevDir);
+      if (kept) return kept;
+    }
+    const dir = shotViewDir(list.slice(0, Math.min(10, list.length)));
+    const packed = packWith(dir);
+    if (packed) return packed;
+    const fb = viewNormal(anchor.normal, anchor);
+    const pose = poseLookingAt(anchor, fb);
+    return { recs: [anchor], pose, dir: pose.dir };
   }
 
   function needsReframe(rec) {
@@ -911,8 +1173,14 @@ const Meridian3D = (() => {
     if (toCam.lengthSq() < 1e-8) return true;
     toCam.normalize();
     const n = viewNormal(rec.normal, rec);
-    const minDot = isInnerForearmLu(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
-    return n.dot(toCam) < minDot;
+    const minDot = usesInnerCloseup(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
+    if (n.dot(toCam) < minDot) return true;
+    if (!isCavityPoint(rec)) {
+      const { flat } = facingAmounts(rec, toCam);
+      if (flat < 0.16) return true;
+      if (isPointOccluded(world, camera.position.distanceTo(world))) return true;
+    }
+    return false;
   }
 
   function easeInOutCubic(t) {
@@ -922,20 +1190,19 @@ const Meridian3D = (() => {
   function moveDuration(fromPos, toPos, fromTarget, toTarget) {
     const a = fromPos.clone().sub(fromTarget);
     const b = toPos.clone().sub(toTarget);
-    if (a.lengthSq() < 1e-8 || b.lengthSq() < 1e-8) return 500;
+    if (a.lengthSq() < 1e-8 || b.lengthSq() < 1e-8) return 800;
     a.normalize();
     b.normalize();
     const ang = a.angleTo(b);
     const dist = fromPos.distanceTo(toPos) + fromTarget.distanceTo(toTarget);
-    const ms = 400 + (ang / Math.PI) * 700 + (dist / Math.max(bodyHeight, 0.5)) * 350;
-    return Math.max(400, Math.min(1200, ms));
+    const ms = 700 + (ang / Math.PI) * 1100 + (dist / Math.max(bodyHeight, 0.5)) * 480;
+    return Math.max(700, Math.min(2000, ms));
   }
 
-  function animateCameraTo(position, normal, gen, rec) {
+  function animateCameraToPose(pose, gen) {
     return new Promise((resolve) => {
-      if (!camera || !controls || !three || !position) { resolve(); return; }
+      if (!camera || !controls || !three || !pose || !pose.pos) { resolve(); return; }
       applyCameraLimits();
-      const pose = cameraPoseForPoint(position, normal, rec);
       const startPos = camera.position.clone();
       const startTarget = controls.target.clone();
       let dur = moveDuration(startPos, pose.pos, startTarget, pose.target);
@@ -972,21 +1239,32 @@ const Meridian3D = (() => {
     });
   }
 
-  async function framePointIfNeeded(rec, force, gen) {
+  function animateCameraTo(position, normal, gen, rec) {
+    return animateCameraToPose(cameraPoseForPoint(position, normal, rec), gen);
+  }
+
+  async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
     if (!force && !needsReframe(rec)) return;
+    const shot = planShot((upcoming && upcoming.length) ? upcoming : [rec], force ? null : autoViewDir);
+    if (shot && shot.dir) autoViewDir = shot.dir.clone();
+    if (!force && shot && shot.pose && camera && controls) {
+      const samePos = camera.position.distanceTo(shot.pose.pos) < Math.max(bodyHeight * 0.02, 0.01);
+      const sameTgt = controls.target.distanceTo(shot.pose.target) < Math.max(bodyHeight * 0.02, 0.01);
+      if (samePos && sameTgt) return;
+    }
     lastReframeName = rec.name;
     reframeLog.push(rec.name);
-    await animateCameraTo(rec.position, rec.normal, gen, rec);
+    await animateCameraToPose(shot.pose, gen);
     if (autoAbort || (gen && gen !== playGeneration)) return;
     await sleep(300);
     calloutsDirty = true;
   }
 
-  function lookAtWorld(position, normal) {
+  function lookAtWorld(position, normal, rec) {
     if (!camera || !controls || !position || !three) return;
     applyCameraLimits();
-    const pose = cameraPoseForPoint(position, normal);
+    const pose = cameraPoseForPoint(position, normal, rec);
     controls.enableDamping = false;
     camera.zoom = 1;
     camera.position.copy(pose.pos);
@@ -2835,6 +3113,7 @@ const Meridian3D = (() => {
     setPlayIcon('play');
     if (!keepCursor) {
       autoCursor = null;
+      autoViewDir = null;
       highlightPoint(null);
       setTitle('3D 經絡模型');
     }
@@ -2861,6 +3140,7 @@ const Meridian3D = (() => {
     autoAbort = false;
     lastReframeName = '';
     reframeLog = [];
+    autoViewDir = null;
     if (window.__m3dTest) window.__m3dTest.trace = [];
     if (!resume) autoLockedSide = 'right';
     if (controls) controls.enabled = false;
@@ -2912,9 +3192,10 @@ const Meridian3D = (() => {
         if (!pts.length) continue;
         setTitle(mer.name);
         autoCursor = { mIndex, pIndex: -1, phase: 'name' };
+        autoViewDir = null;
         if (pts[0]) {
           highlightPoint(pts[0]);
-          await framePointIfNeeded(pts[0], true, gen);
+          await framePointIfNeeded(pts[0], true, gen, pts);
           if (autoAbort || gen !== playGeneration) return;
         }
 
@@ -2942,7 +3223,7 @@ const Meridian3D = (() => {
             if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
             window.__m3dTest.trace.push(rec.name);
           }
-          await framePointIfNeeded(rec, false, gen);
+          await framePointIfNeeded(rec, false, gen, pts.slice(i));
           if (autoAbort || gen !== playGeneration) return;
           await holdForTest(rec);
           if (autoAbort || gen !== playGeneration) return;
@@ -3240,6 +3521,38 @@ const Meridian3D = (() => {
       cameraMoving: () => orbiting || performance.now() < movingUntil,
       lastReframe: () => lastReframeName,
       reframeLog: () => reframeLog.slice(),
+      autoView: () => (autoViewDir ? autoViewDir.toArray() : null),
+      camDiag(name) {
+        const rec = testRecord(name);
+        if (!rec || !camera || !controls || !three) return null;
+        const { THREE } = three;
+        const box = paddedBodyBox();
+        const pos = camera.position.clone();
+        const tgt = controls.target.clone();
+        const inside = !box.isEmpty() && box.containsPoint(pos);
+        return {
+          name: rec.name,
+          seq: rec.sequence,
+          side: rec.side,
+          mid: rec.meridianId,
+          recPos: rec.position,
+          recN: rec.normal,
+          view: viewNormal(rec.normal, rec).toArray(),
+          autoView: autoViewDir ? autoViewDir.toArray() : null,
+          cam: pos.toArray(),
+          target: tgt.toArray(),
+          dist: pos.distanceTo(tgt),
+          frameDist: framingDistance(),
+          bodyH: bodyHeight,
+          inside,
+          ndc: window.__m3dTest.ndcOf(name),
+          face: window.__m3dTest.facingDot(name),
+          vis: window.__m3dTest.visibility(name),
+          labels: window.__m3dTest.callouts().slice(0, 8),
+          reframe: lastReframeName,
+          log: reframeLog.slice(),
+        };
+      },
       stopAfter: '',
       trace: [],
       callouts() {
