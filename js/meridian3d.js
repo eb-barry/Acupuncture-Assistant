@@ -962,7 +962,6 @@ const Meridian3D = (() => {
   }
 
   function viewNormal(normal, rec) {
-    const { THREE } = three;
     const id = rec && rec.meridianId;
     const seq = Number(rec && rec.sequence) || 0;
     if (id === 'HT' && seq <= 1) return fallbackViewDir(rec);
@@ -1031,11 +1030,12 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const target = new THREE.Vector3().fromArray(rec.position);
     const box = paddedBodyBox();
+    const skipLos = rec && (rec.meridianId === 'SP' || rec.meridianId === 'KI' || rec.meridianId === 'LR');
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
       if (!box.isEmpty() && box.containsPoint(p)) return false;
-      return poseSeesPoint(p, target);
+      return skipLos || poseSeesPoint(p, target);
     };
     const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
     if (ok(n)) return n;
