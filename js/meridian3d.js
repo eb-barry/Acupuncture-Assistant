@@ -101,6 +101,9 @@ const Meridian3D = (() => {
   let annotPlaced = new Set();
   let annotWork = 0;
   let skinAccel = null;
+  let lastPlayTapAt = 0;
+  let autoStartedAt = 0;
+  let lastLaidCallouts = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -128,6 +131,7 @@ const Meridian3D = (() => {
     if (!svg) return;
     svg.innerHTML = '';
     calloutRecByKey.clear();
+    lastLaidCallouts = [];
     setCalloutsVisible(false);
   }
 
@@ -870,6 +874,58 @@ const Meridian3D = (() => {
     return false;
   }
 
+  function focusLabelBounds(item) {
+    const textH = item.textH || 24;
+    const textW = item.textW || 48;
+    const left = item.textX || 0;
+    return {
+      left,
+      right: left + textW,
+      top: (item.slotY || 0) - textH * 0.55,
+      bot: (item.slotY || 0) + textH * 0.55,
+    };
+  }
+
+  function labelRectOffscreen(left, top, right, bot, width, height) {
+    const clip = 2;
+    return left < -clip || right > width + clip || top < clip || bot > height - clip;
+  }
+
+  function focusLabelOffscreen(rec) {
+    if (!rec) return false;
+    if (orbiting || performance.now() < movingUntil) return false;
+    const svg = $('m3d-callouts');
+    if (svg && svg.hasAttribute('hidden')) return false;
+    const { width, height } = viewportSize();
+    const focusEl = svg && [...svg.querySelectorAll('text.callout-name.is-focus')]
+      .find((el) => el.textContent === rec.name);
+    if (focusEl) {
+      try {
+        const b = focusEl.getBBox();
+        return labelRectOffscreen(b.x, b.y, b.x + b.width, b.y + b.height, width, height);
+      } catch {
+        // SVG not ready; fall through to laid layout.
+      }
+    }
+    const item = lastLaidCallouts.find((it) => (
+      it.rec
+      && it.rec.code === rec.code
+      && it.rec.meridianId === rec.meridianId
+      && it.rec.side === rec.side
+    ));
+    if (!item) return lastLaidCallouts.length > 0;
+    const box = focusLabelBounds(item);
+    return labelRectOffscreen(box.left, box.top, box.right, box.bot, width, height);
+  }
+
+  function cursorMatchesSelection() {
+    const list = selectedMeridians();
+    if (!autoCursor || !list.length) return false;
+    if (autoCursor.mIndex < 0 || autoCursor.mIndex >= list.length) return false;
+    if (autoCursor.meridianId && autoCursor.meridianId !== list[autoCursor.mIndex].id) return false;
+    return true;
+  }
+
   function isCavityPoint(rec) {
     const seq = Number(rec && rec.sequence) || 0;
     return !!(rec && rec.meridianId === 'HT' && seq <= 1);
@@ -1245,10 +1301,18 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (!force && !needsReframe(rec)) return;
-    const shot = planShot((upcoming && upcoming.length) ? upcoming : [rec], force ? null : autoViewDir);
+    let labelFix = false;
+    if (!force) {
+      if (!orbiting && performance.now() >= movingUntil) updateCallouts();
+      labelFix = focusLabelOffscreen(rec);
+      if (!needsReframe(rec) && !labelFix) return;
+    }
+    const shotList = (labelFix || force)
+      ? [rec]
+      : ((upcoming && upcoming.length) ? upcoming : [rec]);
+    const shot = planShot(shotList, (force || !autoViewDir) ? null : autoViewDir);
     if (shot && shot.dir) autoViewDir = shot.dir.clone();
-    if (!force && shot && shot.pose && camera && controls) {
+    if (!force && !labelFix && shot && shot.pose && camera && controls) {
       const samePos = camera.position.distanceTo(shot.pose.pos) < Math.max(bodyHeight * 0.02, 0.01);
       const sameTgt = controls.target.distanceTo(shot.pose.target) < Math.max(bodyHeight * 0.02, 0.01);
       if (samePos && sameTgt) return;
@@ -2217,10 +2281,15 @@ const Meridian3D = (() => {
         const y = Math.max(pad, Math.min(bot, item.py));
         if (y < lastY + slotH) {
           const nudged = lastY + slotH;
-          if (nudged <= bot && nudged - item.py <= Math.max(6, item.textH * 0.28)) {
-            item.slotY = nudged;
+          const focus = isFocusRec(item.rec);
+          if (nudged <= bot && (focus || nudged - item.py <= Math.max(6, item.textH * 0.28))) {
+            item.slotY = Math.min(bot, nudged);
             kept.push(item);
-            lastY = nudged;
+            lastY = item.slotY;
+          } else if (focus) {
+            item.slotY = Math.max(pad, Math.min(bot, y));
+            kept.push(item);
+            lastY = item.slotY;
           }
           return;
         }
@@ -2246,8 +2315,8 @@ const Meridian3D = (() => {
       let y = Math.max(next, item.py);
       y = Math.max(pad, Math.min(bot, y));
       if (y < next) y = next;
-      item.slotY = y;
-      next = y + slotH;
+      item.slotY = Math.max(pad, Math.min(bot, y));
+      next = item.slotY + slotH;
     });
   }
 
@@ -2425,6 +2494,22 @@ const Meridian3D = (() => {
     }
   }
 
+  function pinAutoFocusCallout(laid) {
+    if (!playingAuto || !laid.length) return;
+    const focus = laid.find((it) => isFocusRec(it.rec));
+    if (!focus) return;
+    if (focus.dogleg || focus.liao) return;
+    if (blCalloutBand(focus.rec)) return;
+    focus.slotY = focus.py;
+    const slotH = Math.max(18, (focus.textH || 24) * 0.9);
+    for (let i = laid.length - 1; i >= 0; i--) {
+      const it = laid[i];
+      if (it === focus) continue;
+      if (it.park !== focus.park) continue;
+      if (Math.abs(it.slotY - focus.slotY) < slotH) laid.splice(i, 1);
+    }
+  }
+
   function applyBlParallelDoglegs(laid) {
     BL_PARALLEL_PAIRS.forEach(([medial, lateral]) => {
       const mei = laid.find((it) => it.rec && it.rec.name === medial);
@@ -2509,8 +2594,16 @@ const Meridian3D = (() => {
       const raw = dedupeParkItems(buckets[park], park);
       const hasBlPair = raw.some((it) => blCalloutBand(it.rec) === 'inner')
         && raw.some((it) => blCalloutBand(it.rec) === 'outer');
-      const next = hasBlPair ? focusTorsoItems(raw) : raw;
-      return ensureFocusItem(next, visible, park, sides);
+      let next = hasBlPair ? focusTorsoItems(raw) : raw;
+      next = ensureFocusItem(next, visible, park, sides);
+      if (playingAuto && next.length > 12) {
+        const focus = next.filter((it) => isFocusRec(it.rec));
+        const fy = focus[0] ? focus[0].py : 0;
+        const rest = next.filter((it) => !isFocusRec(it.rec))
+          .sort((a, b) => Math.abs(a.py - fy) - Math.abs(b.py - fy));
+        next = focus.concat(rest.slice(0, 10));
+      }
+      return next;
     };
     buckets.right = preparePark('right');
     buckets.left = preparePark('left');
@@ -2578,9 +2671,11 @@ const Meridian3D = (() => {
       });
     });
     applyBlParallelDoglegs(laid);
+    pinAutoFocusCallout(laid);
 
     svg.innerHTML = '';
     calloutRecByKey.clear();
+    lastLaidCallouts = laid.slice();
     if (!laid.length) {
       setCalloutsVisible(false);
       return;
@@ -3138,6 +3233,7 @@ const Meridian3D = (() => {
     const work = ++annotWork;
     playingAuto = true;
     autoAbort = false;
+    autoStartedAt = performance.now();
     lastReframeName = '';
     reframeLog = [];
     autoViewDir = null;
@@ -3177,9 +3273,9 @@ const Meridian3D = (() => {
         rebuildAnnotations({ ids: rest, reset: false, work }).catch(() => {});
       }
 
-      let mIndex = resume && autoCursor ? autoCursor.mIndex : 0;
-      let pIndex = resume && autoCursor ? autoCursor.pIndex : -1;
-      let phase = resume && autoCursor ? autoCursor.phase : 'name';
+      let mIndex = resume && cursorMatchesSelection() ? autoCursor.mIndex : 0;
+      let pIndex = resume && cursorMatchesSelection() ? autoCursor.pIndex : -1;
+      let phase = resume && cursorMatchesSelection() ? autoCursor.phase : 'name';
 
       for (; mIndex < list.length; mIndex++) {
         if (autoAbort || gen !== playGeneration) return;
@@ -3191,7 +3287,7 @@ const Meridian3D = (() => {
         const pts = tourPoints(mer.id);
         if (!pts.length) continue;
         setTitle(mer.name);
-        autoCursor = { mIndex, pIndex: -1, phase: 'name' };
+        autoCursor = { mIndex, pIndex: -1, phase: 'name', meridianId: mer.id };
         autoViewDir = null;
         if (pts[0]) {
           highlightPoint(pts[0]);
@@ -3217,7 +3313,7 @@ const Meridian3D = (() => {
           if (autoAbort || gen !== playGeneration) return;
           const rec = pts[i];
           currentPoint = rec;
-          autoCursor = { mIndex, pIndex: i, phase: 'point' };
+          autoCursor = { mIndex, pIndex: i, phase: 'point', meridianId: mer.id };
           highlightPoint(rec);
           if (window.__m3dTest) {
             if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
@@ -3260,9 +3356,13 @@ const Meridian3D = (() => {
   }
 
   async function onPlayClick() {
+    const now = performance.now();
+    if (now - lastPlayTapAt < 450) return;
+    lastPlayTapAt = now;
     autoPaused = false;
     closeOverlay();
     if (playingAuto) {
+      if (performance.now() - autoStartedAt < 1200) return;
       stopAuto({ keepCursor: true });
       return;
     }
@@ -3270,7 +3370,7 @@ const Meridian3D = (() => {
     unlockSpeech();
     setModal(false);
     if (opts.mode === 'auto') {
-      playAuto(!!autoCursor).catch((err) => console.warn(err));
+      playAuto(cursorMatchesSelection()).catch((err) => console.warn(err));
     } else {
       await playManual();
     }
@@ -3286,9 +3386,10 @@ const Meridian3D = (() => {
       if (ev && ev.type === 'pointerup') {
         if ((ev.button ?? 0) !== 0) return;
         if (ev.pointerType === 'mouse') return;
+        if (ev.cancelable) ev.preventDefault();
       }
       const now = performance.now();
-      if (now - last < 80) return;
+      if (now - last < 700) return;
       last = now;
       handler(ev);
     };
@@ -3521,6 +3622,33 @@ const Meridian3D = (() => {
       cameraMoving: () => orbiting || performance.now() < movingUntil,
       lastReframe: () => lastReframeName,
       reframeLog: () => reframeLog.slice(),
+      focusLabelOffscreen: (name) => {
+        const rec = testRecord(name);
+        if (!rec) return null;
+        updateCallouts();
+        return focusLabelOffscreen(rec);
+      },
+      laidFocus(name) {
+        const rec = testRecord(name);
+        if (!rec) return null;
+        updateCallouts();
+        const item = lastLaidCallouts.find((it) => (
+          it.rec
+          && it.rec.code === rec.code
+          && it.rec.meridianId === rec.meridianId
+          && it.rec.side === rec.side
+        ));
+        if (!item) return { missing: true, n: lastLaidCallouts.length };
+        return {
+          name: item.rec.name,
+          x: item.textX,
+          y: item.slotY,
+          w: item.textW,
+          h: item.textH,
+          px: item.px,
+          py: item.py,
+        };
+      },
       autoView: () => (autoViewDir ? autoViewDir.toArray() : null),
       camDiag(name) {
         const rec = testRecord(name);
