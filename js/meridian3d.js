@@ -874,7 +874,7 @@ const Meridian3D = (() => {
     return false;
   }
 
-  function focusLabelBounds(item, width, height) {
+  function focusLabelBounds(item) {
     const textH = item.textH || 24;
     const textW = item.textW || 48;
     const left = item.textX || 0;
@@ -883,12 +883,12 @@ const Meridian3D = (() => {
       right: left + textW,
       top: (item.slotY || 0) - textH * 0.55,
       bot: (item.slotY || 0) + textH * 0.55,
-      m: Math.max(4, Math.min(width, height) * 0.02),
     };
   }
 
-  function labelRectOffscreen(left, top, right, bot, width, height, m) {
-    return left < m || right > width - m || top < m || bot > height - m;
+  function labelRectOffscreen(left, top, right, bot, width, height) {
+    const clip = 2;
+    return left < -clip || right > width + clip || top < clip || bot > height - clip;
   }
 
   function focusLabelOffscreen(rec) {
@@ -897,13 +897,12 @@ const Meridian3D = (() => {
     const svg = $('m3d-callouts');
     if (svg && svg.hasAttribute('hidden')) return false;
     const { width, height } = viewportSize();
-    const m = Math.max(4, Math.min(width, height) * 0.02);
     const focusEl = svg && [...svg.querySelectorAll('text.callout-name.is-focus')]
       .find((el) => el.textContent === rec.name);
     if (focusEl) {
       try {
         const b = focusEl.getBBox();
-        return labelRectOffscreen(b.x, b.y, b.x + b.width, b.y + b.height, width, height, m);
+        return labelRectOffscreen(b.x, b.y, b.x + b.width, b.y + b.height, width, height);
       } catch {
         // SVG not ready; fall through to laid layout.
       }
@@ -915,8 +914,8 @@ const Meridian3D = (() => {
       && it.rec.side === rec.side
     ));
     if (!item) return lastLaidCallouts.length > 0;
-    const box = focusLabelBounds(item, width, height);
-    return labelRectOffscreen(box.left, box.top, box.right, box.bot, width, height, box.m);
+    const box = focusLabelBounds(item);
+    return labelRectOffscreen(box.left, box.top, box.right, box.bot, width, height);
   }
 
   function cursorMatchesSelection() {
