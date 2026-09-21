@@ -1077,11 +1077,12 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const target = new THREE.Vector3().fromArray(rec.position);
     const box = paddedBodyBox();
+    const id = rec && rec.meridianId;
     const skipLos = rec && (
-      rec.meridianId === 'SP'
-      || rec.meridianId === 'KI'
-      || rec.meridianId === 'LR'
-      || rec.meridianId === 'HT'
+      id === 'SP'
+      || id === 'KI'
+      || id === 'LR'
+      || id === 'HT'
     );
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
@@ -1093,7 +1094,6 @@ const Meridian3D = (() => {
     const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
     if (ok(n)) return n;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
-    const id = rec && rec.meridianId;
     const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE';
     const candidates = [
       fallbackViewDir(rec),
