@@ -868,7 +868,7 @@ const Meridian3D = (() => {
     if (!rec) return false;
     const seq = Number(rec.sequence) || 0;
     if (rec.meridianId === 'LU') return isInnerLimb(rec);
-    if (rec.meridianId === 'HT') return seq >= 1;
+    if (rec.meridianId === 'HT') return seq >= 4;
     if (rec.meridianId === 'PC') return seq >= 3;
     return false;
   }
@@ -976,21 +976,10 @@ const Meridian3D = (() => {
     }
     if (id === 'HT') {
       const seq = Number(rec && rec.sequence) || 0;
-      // Palmar-inner arm: look into the axilla gap from in front, not through the chest.
-      // Distal holes stay on the palmar forearm/hand (靈道→少府).
-      const towardPalm = seq >= 4
-        ? new THREE.Vector3(medial * 0.18, 0.16, 0.97)
-        : new THREE.Vector3(medial * 0.22, 0.10, 0.97);
-      const src = rec && rec.normal;
-      const n = src
-        ? new THREE.Vector3().fromArray(src)
-        : towardPalm.clone();
-      if (n.lengthSq() < 1e-8) n.copy(towardPalm);
-      else n.normalize();
-      n.x = medial * Math.min(0.42, Math.max(Math.abs(n.x), 0.16));
-      n.y = Math.min(Math.max(n.y, 0.06), 0.22);
-      n.z = Math.max(n.z, 0.82);
-      return n.normalize();
+      // Palmar inner-arm: 極泉–少海 like the axilla-to-elbow inner view;
+      // 靈道–少府 like the palmar forearm/hand. Never take the dorsal side.
+      if (seq >= 4) return new THREE.Vector3(medial * 0.12, 0.18, 0.98).normalize();
+      return new THREE.Vector3(medial * 0.20, 0.08, 0.98).normalize();
     }
     if (id === 'PC') {
       return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
@@ -1088,11 +1077,17 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const target = new THREE.Vector3().fromArray(rec.position);
     const box = paddedBodyBox();
-    const skipLos = rec && (rec.meridianId === 'SP' || rec.meridianId === 'KI' || rec.meridianId === 'LR');
+    const skipLos = rec && (
+      rec.meridianId === 'SP'
+      || rec.meridianId === 'KI'
+      || rec.meridianId === 'LR'
+      || rec.meridianId === 'HT'
+    );
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
       if (!box.isEmpty() && box.containsPoint(p)) return false;
+      if (id === 'HT' && d.z < 0.5) return false;
       return skipLos || poseSeesPoint(p, target);
     };
     const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
