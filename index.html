@@ -40,14 +40,15 @@
   <!-- ════════════════════════════════════════
        PAGE: 主頁 (Home)
   ═════════════════════════════════════════ -->
-  <div class="page active" id="page-home">
+  <div class="page active" id="page-home" aria-label="針灸助理主選單">
     <div class="home-image-wrap">
 
       <!-- 主選單背景圖（四功能版；query 避免舊圖快取） -->
-      <img src="assets/main-menu.webp?v=2"
-           alt="針灸助理主選單"
+      <img src="assets/main-menu.webp?v=3"
+           alt=""
            class="home-bg-img"
-           draggable="false" />
+           draggable="false"
+           onerror="this.onerror=null;this.removeAttribute('alt');this.style.display='none';" />
 
       <!-- 靈龜八法：距頂 28% -->
       <button class="home-hit-area" id="btn-lingui"

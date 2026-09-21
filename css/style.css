@@ -737,8 +737,12 @@ body::before {
   min-height: 100dvh;
   min-height: 100svh;
   overflow: hidden;
-  /* 與主選單圖上方底色一致，避免未覆蓋區域露白 */
-  background: #eef4f7;
+  /* CSS 底圖後援：img 載入失敗時（iOS SW 更新）仍顯示主選單，不露白 */
+  background-color: #eef4f7;
+  background-image: url('../assets/main-menu.webp');
+  background-position: center center;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
 }
 .home-bg-img {
   position: absolute;

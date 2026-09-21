@@ -855,8 +855,7 @@ const Meridian3D = (() => {
     const id = rec.meridianId;
     const seq = Number(rec.sequence) || 0;
     if (id === 'LU') return seq >= 8;
-    // 極泉 sits in the axilla; a medial camera goes through the chest.
-    if (id === 'HT') return seq >= 2;
+    if (id === 'HT') return true;
     if (id === 'PC') return seq >= 2;
     if (id === 'SP' || id === 'KI' || id === 'LR') {
       const y = Number(rec.position && rec.position[1]);
@@ -869,7 +868,7 @@ const Meridian3D = (() => {
     if (!rec) return false;
     const seq = Number(rec.sequence) || 0;
     if (rec.meridianId === 'LU') return isInnerLimb(rec);
-    if (rec.meridianId === 'HT') return seq >= 3;
+    if (rec.meridianId === 'HT') return seq >= 1;
     if (rec.meridianId === 'PC') return seq >= 3;
     return false;
   }
@@ -949,7 +948,6 @@ const Meridian3D = (() => {
   function fallbackViewDir(rec) {
     const { THREE } = three;
     const id = rec && rec.meridianId;
-    const seq = Number(rec && rec.sequence) || 0;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
     if (id === 'GV' || id === 'BL') return new THREE.Vector3(0, 0, -1);
     if (id === 'GB') return new THREE.Vector3(lateral, 0, 0.18).normalize();
@@ -957,10 +955,8 @@ const Meridian3D = (() => {
       return new THREE.Vector3(lateral * 0.62, 0.04, -0.78).normalize();
     }
     if (id === 'LI') return new THREE.Vector3(lateral, 0, 0.55).normalize();
-    if (id === 'HT' && seq <= 1) {
-      return new THREE.Vector3(lateral * 0.18, 0.08, 0.98).normalize();
-    }
-    if (id === 'HT' || id === 'PC') return innerLimbViewNormal(rec);
+    if (id === 'HT') return innerLimbViewNormal(rec);
+    if (id === 'PC') return innerLimbViewNormal(rec);
     return new THREE.Vector3(0, 0, 1);
   }
 
@@ -979,15 +975,11 @@ const Meridian3D = (() => {
       return n.normalize();
     }
     if (id === 'HT') {
-      const src = rec && rec.normal;
-      const n = new THREE.Vector3().fromArray(src || [medial, 0.12, 0.42]);
-      if (n.lengthSq() < 1e-8) n.set(medial, 0.12, 0.42);
-      else n.normalize();
-      n.x = medial * Math.max(Math.abs(n.x), 0.58);
-      n.y = Math.min(Math.max(n.y, 0.04), 0.28);
-      if (n.z >= 0) n.z = Math.max(n.z, 0.32);
-      else n.z = Math.min(n.z, -0.32);
-      return n.normalize();
+      const seq = Number(rec && rec.sequence) || 0;
+      // Palmar inner-arm: 極泉–少海 like the axilla-to-elbow inner view;
+      // 靈道–少府 like the palmar forearm/hand. Never take the dorsal side.
+      if (seq >= 4) return new THREE.Vector3(medial * 0.10, 0.22, 0.97).normalize();
+      return new THREE.Vector3(medial * 0.40, 0.06, 0.91).normalize();
     }
     if (id === 'PC') {
       return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
@@ -1020,7 +1012,6 @@ const Meridian3D = (() => {
   function viewNormal(normal, rec) {
     const id = rec && rec.meridianId;
     const seq = Number(rec && rec.sequence) || 0;
-    if (id === 'HT' && seq <= 1) return fallbackViewDir(rec);
     if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
     const n = flattenHorizontal(normal);
     if (n.lengthSq() < 0.05) return fallbackViewDir(rec);
@@ -1086,26 +1077,34 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const target = new THREE.Vector3().fromArray(rec.position);
     const box = paddedBodyBox();
-    const skipLos = rec && (rec.meridianId === 'SP' || rec.meridianId === 'KI' || rec.meridianId === 'LR');
+    const id = rec && rec.meridianId;
+    const skipLos = rec && (
+      id === 'SP'
+      || id === 'KI'
+      || id === 'LR'
+      || id === 'HT'
+    );
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
       if (!box.isEmpty() && box.containsPoint(p)) return false;
+      if (id === 'HT' && d.z < 0.5) return false;
       return skipLos || poseSeesPoint(p, target);
     };
     const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
     if (ok(n)) return n;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
-    const id = rec && rec.meridianId;
     const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE';
     const candidates = [
       fallbackViewDir(rec),
+      id === 'HT' ? new THREE.Vector3(lateral * 0.42, 0.12, 0.90).normalize() : null,
+      id === 'HT' ? new THREE.Vector3(lateral * 0.18, 0.14, 0.97).normalize() : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
       new THREE.Vector3(lateral * 0.35, 0.08, preferBack ? -0.93 : 0.93).normalize(),
       new THREE.Vector3(lateral, 0.06, 0.2).normalize(),
       new THREE.Vector3(n.x, 0.08, preferBack ? -1 : 1).normalize(),
-    ];
+    ].filter(Boolean);
     for (let i = 0; i < candidates.length; i++) {
       if (ok(candidates[i])) return candidates[i].normalize();
     }
@@ -1114,7 +1113,9 @@ const Meridian3D = (() => {
 
   function poseLookingAt(rec, dir) {
     const { THREE } = three;
-    const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
+    const dist = rec && rec.meridianId === 'HT'
+      ? framingDistance() * ((Number(rec.sequence) || 0) >= 4 ? 0.62 : 0.78)
+      : (usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance());
     const n = ensureOutsideDir(
       rec,
       dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec),
@@ -2281,15 +2282,10 @@ const Meridian3D = (() => {
         const y = Math.max(pad, Math.min(bot, item.py));
         if (y < lastY + slotH) {
           const nudged = lastY + slotH;
-          const focus = isFocusRec(item.rec);
-          if (nudged <= bot && (focus || nudged - item.py <= Math.max(6, item.textH * 0.28))) {
-            item.slotY = Math.min(bot, nudged);
+          if (nudged <= bot && nudged - item.py <= Math.max(6, item.textH * 0.28)) {
+            item.slotY = nudged;
             kept.push(item);
-            lastY = item.slotY;
-          } else if (focus) {
-            item.slotY = Math.max(pad, Math.min(bot, y));
-            kept.push(item);
-            lastY = item.slotY;
+            lastY = nudged;
           }
           return;
         }
@@ -2315,8 +2311,8 @@ const Meridian3D = (() => {
       let y = Math.max(next, item.py);
       y = Math.max(pad, Math.min(bot, y));
       if (y < next) y = next;
-      item.slotY = Math.max(pad, Math.min(bot, y));
-      next = item.slotY + slotH;
+      item.slotY = y;
+      next = y + slotH;
     });
   }
 
@@ -2494,22 +2490,6 @@ const Meridian3D = (() => {
     }
   }
 
-  function pinAutoFocusCallout(laid) {
-    if (!playingAuto || !laid.length) return;
-    const focus = laid.find((it) => isFocusRec(it.rec));
-    if (!focus) return;
-    if (focus.dogleg || focus.liao) return;
-    if (blCalloutBand(focus.rec)) return;
-    focus.slotY = focus.py;
-    const slotH = Math.max(18, (focus.textH || 24) * 0.9);
-    for (let i = laid.length - 1; i >= 0; i--) {
-      const it = laid[i];
-      if (it === focus) continue;
-      if (it.park !== focus.park) continue;
-      if (Math.abs(it.slotY - focus.slotY) < slotH) laid.splice(i, 1);
-    }
-  }
-
   function applyBlParallelDoglegs(laid) {
     BL_PARALLEL_PAIRS.forEach(([medial, lateral]) => {
       const mei = laid.find((it) => it.rec && it.rec.name === medial);
@@ -2596,13 +2576,6 @@ const Meridian3D = (() => {
         && raw.some((it) => blCalloutBand(it.rec) === 'outer');
       let next = hasBlPair ? focusTorsoItems(raw) : raw;
       next = ensureFocusItem(next, visible, park, sides);
-      if (playingAuto && next.length > 12) {
-        const focus = next.filter((it) => isFocusRec(it.rec));
-        const fy = focus[0] ? focus[0].py : 0;
-        const rest = next.filter((it) => !isFocusRec(it.rec))
-          .sort((a, b) => Math.abs(a.py - fy) - Math.abs(b.py - fy));
-        next = focus.concat(rest.slice(0, 10));
-      }
       return next;
     };
     buckets.right = preparePark('right');
@@ -2671,7 +2644,6 @@ const Meridian3D = (() => {
       });
     });
     applyBlParallelDoglegs(laid);
-    pinAutoFocusCallout(laid);
 
     svg.innerHTML = '';
     calloutRecByKey.clear();
