@@ -874,12 +874,40 @@ const Meridian3D = (() => {
     return false;
   }
 
+  function focusLabelBounds(item, width, height) {
+    const textH = item.textH || 24;
+    const textW = item.textW || 48;
+    const left = item.textX || 0;
+    return {
+      left,
+      right: left + textW,
+      top: (item.slotY || 0) - textH * 0.55,
+      bot: (item.slotY || 0) + textH * 0.55,
+      m: Math.max(4, Math.min(width, height) * 0.02),
+    };
+  }
+
+  function labelRectOffscreen(left, top, right, bot, width, height, m) {
+    return left < m || right > width - m || top < m || bot > height - m;
+  }
+
   function focusLabelOffscreen(rec) {
     if (!rec) return false;
     if (orbiting || performance.now() < movingUntil) return false;
     const svg = $('m3d-callouts');
     if (svg && svg.hasAttribute('hidden')) return false;
     const { width, height } = viewportSize();
+    const m = Math.max(4, Math.min(width, height) * 0.02);
+    const focusEl = svg && [...svg.querySelectorAll('text.callout-name.is-focus')]
+      .find((el) => el.textContent === rec.name);
+    if (focusEl) {
+      try {
+        const b = focusEl.getBBox();
+        return labelRectOffscreen(b.x, b.y, b.x + b.width, b.y + b.height, width, height, m);
+      } catch {
+        // SVG not ready; fall through to laid layout.
+      }
+    }
     const item = lastLaidCallouts.find((it) => (
       it.rec
       && it.rec.code === rec.code
@@ -887,14 +915,8 @@ const Meridian3D = (() => {
       && it.rec.side === rec.side
     ));
     if (!item) return lastLaidCallouts.length > 0;
-    const textH = item.textH || 24;
-    const textW = item.textW || 48;
-    const top = (item.slotY || 0) - textH * 0.8;
-    const bot = (item.slotY || 0) + textH * 0.35;
-    const left = item.textX || 0;
-    const right = left + textW;
-    const m = Math.max(4, Math.min(width, height) * 0.02);
-    return left < m || right > width - m || top < m || bot > height - m;
+    const box = focusLabelBounds(item, width, height);
+    return labelRectOffscreen(box.left, box.top, box.right, box.bot, width, height, box.m);
   }
 
   function cursorMatchesSelection() {
@@ -1286,10 +1308,10 @@ const Meridian3D = (() => {
       labelFix = focusLabelOffscreen(rec);
       if (!needsReframe(rec) && !labelFix) return;
     }
-    const shot = planShot(
-      (upcoming && upcoming.length) ? upcoming : [rec],
-      (force || labelFix) ? null : autoViewDir,
-    );
+    const shotList = (labelFix || force)
+      ? [rec]
+      : ((upcoming && upcoming.length) ? upcoming : [rec]);
+    const shot = planShot(shotList, (force || !autoViewDir) ? null : autoViewDir);
     if (shot && shot.dir) autoViewDir = shot.dir.clone();
     if (!force && !labelFix && shot && shot.pose && camera && controls) {
       const samePos = camera.position.distanceTo(shot.pose.pos) < Math.max(bodyHeight * 0.02, 0.01);
@@ -2473,6 +2495,22 @@ const Meridian3D = (() => {
     }
   }
 
+  function pinAutoFocusCallout(laid) {
+    if (!playingAuto || !laid.length) return;
+    const focus = laid.find((it) => isFocusRec(it.rec));
+    if (!focus) return;
+    if (focus.dogleg || focus.liao) return;
+    if (blCalloutBand(focus.rec)) return;
+    focus.slotY = focus.py;
+    const slotH = Math.max(18, (focus.textH || 24) * 0.9);
+    for (let i = laid.length - 1; i >= 0; i--) {
+      const it = laid[i];
+      if (it === focus) continue;
+      if (it.park !== focus.park) continue;
+      if (Math.abs(it.slotY - focus.slotY) < slotH) laid.splice(i, 1);
+    }
+  }
+
   function applyBlParallelDoglegs(laid) {
     BL_PARALLEL_PAIRS.forEach(([medial, lateral]) => {
       const mei = laid.find((it) => it.rec && it.rec.name === medial);
@@ -2634,6 +2672,7 @@ const Meridian3D = (() => {
       });
     });
     applyBlParallelDoglegs(laid);
+    pinAutoFocusCallout(laid);
 
     svg.innerHTML = '';
     calloutRecByKey.clear();
