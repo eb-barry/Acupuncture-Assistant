@@ -868,7 +868,7 @@ const Meridian3D = (() => {
     if (!rec) return false;
     const seq = Number(rec.sequence) || 0;
     if (rec.meridianId === 'LU') return isInnerLimb(rec);
-    if (rec.meridianId === 'HT') return seq >= 4;
+    if (rec.meridianId === 'HT') return seq >= 1;
     if (rec.meridianId === 'PC') return seq >= 3;
     return false;
   }
@@ -978,8 +978,8 @@ const Meridian3D = (() => {
       const seq = Number(rec && rec.sequence) || 0;
       // Palmar inner-arm: 極泉–少海 like the axilla-to-elbow inner view;
       // 靈道–少府 like the palmar forearm/hand. Never take the dorsal side.
-      if (seq >= 4) return new THREE.Vector3(medial * 0.12, 0.18, 0.98).normalize();
-      return new THREE.Vector3(medial * 0.20, 0.08, 0.98).normalize();
+      if (seq >= 4) return new THREE.Vector3(medial * 0.10, 0.22, 0.97).normalize();
+      return new THREE.Vector3(medial * 0.40, 0.06, 0.91).normalize();
     }
     if (id === 'PC') {
       return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
@@ -1113,7 +1113,9 @@ const Meridian3D = (() => {
 
   function poseLookingAt(rec, dir) {
     const { THREE } = three;
-    const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
+    const dist = rec && rec.meridianId === 'HT'
+      ? framingDistance() * ((Number(rec.sequence) || 0) >= 4 ? 0.62 : 0.78)
+      : (usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance());
     const n = ensureOutsideDir(
       rec,
       dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec),
