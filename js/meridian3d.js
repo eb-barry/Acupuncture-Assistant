@@ -49,7 +49,7 @@ const Meridian3D = (() => {
   const FACE_DOT_MIN = 0.45;
   const INNER_ARM_FACE_DOT_MIN = 0.85;
   const INNER_ARM_DIST_SCALE = 0.50;
-  const VIEW_CARDINAL_COS = 0.92;
+  const VIEW_CARDINAL_COS = 0.985;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -851,13 +851,18 @@ const Meridian3D = (() => {
     const id = rec.meridianId;
     const seq = Number(rec.sequence) || 0;
     if (id === 'LU') return seq >= 8;
-    if (id === 'HT') return true;
+    // 極泉 sits in the axilla; a medial camera goes through the chest.
+    if (id === 'HT') return seq >= 2;
     if (id === 'PC') return seq >= 2;
     if (id === 'SP' || id === 'KI' || id === 'LR') {
       const y = Number(rec.position && rec.position[1]);
       return Number.isFinite(y) && y < bodyHeight * 0.62;
     }
     return false;
+  }
+
+  function usesInnerCloseup(rec) {
+    return !!(rec && rec.meridianId === 'LU' && isInnerLimb(rec));
   }
 
   function isInnerForearmLu(rec) {
@@ -878,12 +883,17 @@ const Meridian3D = (() => {
   function fallbackViewDir(rec) {
     const { THREE } = three;
     const id = rec && rec.meridianId;
+    const seq = Number(rec && rec.sequence) || 0;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
     if (id === 'GV' || id === 'BL') return new THREE.Vector3(0, 0, -1);
-    if (id === 'GB' || id === 'TE' || id === 'SI') {
-      return new THREE.Vector3(lateral, 0, 0.22).normalize();
+    if (id === 'GB') return new THREE.Vector3(lateral, 0, 0.18).normalize();
+    if (id === 'TE' || id === 'SI') {
+      return new THREE.Vector3(lateral * 0.62, 0.04, -0.78).normalize();
     }
     if (id === 'LI') return new THREE.Vector3(lateral, 0, 0.55).normalize();
+    if (id === 'HT' && seq <= 1) {
+      return new THREE.Vector3(lateral * 0.18, 0.08, 0.98).normalize();
+    }
     if (id === 'HT' || id === 'PC') return innerLimbViewNormal(rec);
     return new THREE.Vector3(0, 0, 1);
   }
@@ -891,7 +901,21 @@ const Meridian3D = (() => {
   function innerLimbViewNormal(rec) {
     const { THREE } = three;
     const medial = rec && rec.side === 'left' ? 1 : -1;
-    const src = rec && rec.meridianId === 'LU' ? innerArmSourceNormal(rec) : (rec && rec.normal);
+    const id = rec && rec.meridianId;
+    if (id === 'LU') {
+      const src = innerArmSourceNormal(rec);
+      const n = new THREE.Vector3().fromArray(src || [medial, 0.16, 0.5]);
+      if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
+      else n.normalize();
+      n.x = medial * Math.max(Math.abs(n.x), 0.72);
+      n.y = Math.min(Math.max(n.y, 0.08), 0.32);
+      n.z = Math.max(n.z, 0.38);
+      return n.normalize();
+    }
+    if (id === 'HT' || id === 'PC') {
+      return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
+    }
+    const src = rec && rec.normal;
     const n = new THREE.Vector3().fromArray(src || [medial, 0.16, 0.5]);
     if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
     else n.normalize();
@@ -918,10 +942,21 @@ const Meridian3D = (() => {
 
   function viewNormal(normal, rec) {
     const { THREE } = three;
+    const id = rec && rec.meridianId;
+    const seq = Number(rec && rec.sequence) || 0;
+    if (id === 'HT' && seq <= 1) return fallbackViewDir(rec);
     if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
     const n = flattenHorizontal(normal);
     if (n.lengthSq() < 0.05) return fallbackViewDir(rec);
     n.normalize();
+    if (id === 'PC' && seq <= 1) {
+      n.z = Math.max(n.z, 0.62);
+      return n.normalize();
+    }
+    if (id === 'ST') {
+      n.z = Math.max(n.z, 0.55);
+      return n.normalize();
+    }
     return snapNearCardinal(n);
   }
 
@@ -943,10 +978,54 @@ const Meridian3D = (() => {
     return snapNearCardinal(acc.normalize());
   }
 
+  function paddedBodyBox() {
+    const { THREE } = three;
+    const box = new THREE.Box3();
+    bodyMeshes.forEach((mesh) => {
+      mesh.updateWorldMatrix(true, false);
+      box.expandByObject(mesh);
+    });
+    if (box.isEmpty()) return box;
+    box.expandByScalar(Math.max(bodyHeight * 0.03, 0.02));
+    return box;
+  }
+
+  function ensureOutsideDir(rec, dir, dist) {
+    const { THREE } = three;
+    const target = new THREE.Vector3().fromArray(rec.position);
+    const box = paddedBodyBox();
+    const ok = (d) => {
+      if (!d || d.lengthSq() < 1e-8) return false;
+      const p = target.clone().addScaledVector(d, dist);
+      return box.isEmpty() || !box.containsPoint(p);
+    };
+    const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
+    if (ok(n)) return n;
+    const lateral = rec && rec.side === 'left' ? -1 : 1;
+    const id = rec && rec.meridianId;
+    const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE';
+    const candidates = [
+      fallbackViewDir(rec),
+      new THREE.Vector3(0, 0, preferBack ? -1 : 1),
+      new THREE.Vector3(0, 0, preferBack ? 1 : -1),
+      new THREE.Vector3(lateral * 0.35, 0.08, preferBack ? -0.93 : 0.93).normalize(),
+      new THREE.Vector3(lateral, 0.06, 0.2).normalize(),
+      new THREE.Vector3(n.x, 0.08, preferBack ? -1 : 1).normalize(),
+    ];
+    for (let i = 0; i < candidates.length; i++) {
+      if (ok(candidates[i])) return candidates[i].normalize();
+    }
+    return new THREE.Vector3(0, 0, preferBack ? -1 : 1);
+  }
+
   function poseLookingAt(rec, dir) {
     const { THREE } = three;
-    const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
-    const dist = isInnerLimb(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
+    const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
+    const n = ensureOutsideDir(
+      rec,
+      dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec),
+      dist,
+    );
     const target = new THREE.Vector3().fromArray(rec.position);
     const pos = target.clone().addScaledVector(n, dist);
     return { pos, target, dir: n };
@@ -1001,7 +1080,7 @@ const Meridian3D = (() => {
     if (toCam.lengthSq() < 1e-8) return false;
     toCam.normalize();
     const n = viewNormal(rec.normal, rec);
-    const minDot = isInnerLimb(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
+    const minDot = usesInnerCloseup(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
     return n.dot(toCam) >= minDot;
   }
 
@@ -1049,7 +1128,7 @@ const Meridian3D = (() => {
     if (toCam.lengthSq() < 1e-8) return true;
     toCam.normalize();
     const n = viewNormal(rec.normal, rec);
-    const minDot = isInnerLimb(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
+    const minDot = usesInnerCloseup(rec) ? INNER_ARM_FACE_DOT_MIN : FACE_DOT_MIN;
     return n.dot(toCam) < minDot;
   }
 
@@ -3387,6 +3466,37 @@ const Meridian3D = (() => {
       lastReframe: () => lastReframeName,
       reframeLog: () => reframeLog.slice(),
       autoView: () => (autoViewDir ? autoViewDir.toArray() : null),
+      camDiag(name) {
+        const rec = testRecord(name);
+        if (!rec || !camera || !controls || !three) return null;
+        const { THREE } = three;
+        const box = paddedBodyBox();
+        const pos = camera.position.clone();
+        const tgt = controls.target.clone();
+        const inside = !box.isEmpty() && box.containsPoint(pos);
+        return {
+          name: rec.name,
+          seq: rec.sequence,
+          side: rec.side,
+          mid: rec.meridianId,
+          recPos: rec.position,
+          recN: rec.normal,
+          view: viewNormal(rec.normal, rec).toArray(),
+          autoView: autoViewDir ? autoViewDir.toArray() : null,
+          cam: pos.toArray(),
+          target: tgt.toArray(),
+          dist: pos.distanceTo(tgt),
+          frameDist: framingDistance(),
+          bodyH: bodyHeight,
+          inside,
+          ndc: window.__m3dTest.ndcOf(name),
+          face: window.__m3dTest.facingDot(name),
+          vis: window.__m3dTest.visibility(name),
+          labels: window.__m3dTest.callouts().slice(0, 8),
+          reframe: lastReframeName,
+          log: reframeLog.slice(),
+        };
+      },
       stopAfter: '',
       trace: [],
       callouts() {
