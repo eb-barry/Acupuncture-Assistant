@@ -101,6 +101,8 @@ const Meridian3D = (() => {
   let annotPlaced = new Set();
   let annotWork = 0;
   let skinAccel = null;
+  let lastPlayTapAt = 0;
+  let lastLaidCallouts = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -870,6 +872,37 @@ const Meridian3D = (() => {
     return false;
   }
 
+  function focusLabelOffscreen(rec) {
+    if (!rec) return false;
+    if (orbiting || performance.now() < movingUntil) return false;
+    const svg = $('m3d-callouts');
+    if (svg && svg.hasAttribute('hidden')) return false;
+    const { width, height } = viewportSize();
+    const item = lastLaidCallouts.find((it) => (
+      it.rec
+      && it.rec.code === rec.code
+      && it.rec.meridianId === rec.meridianId
+      && it.rec.side === rec.side
+    ));
+    if (!item) return lastLaidCallouts.length > 0;
+    const textH = item.textH || 24;
+    const textW = item.textW || 48;
+    const top = (item.slotY || 0) - textH * 0.8;
+    const bot = (item.slotY || 0) + textH * 0.35;
+    const left = item.textX || 0;
+    const right = left + textW;
+    const m = Math.max(4, Math.min(width, height) * 0.02);
+    return left < m || right > width - m || top < m || bot > height - m;
+  }
+
+  function cursorMatchesSelection() {
+    const list = selectedMeridians();
+    if (!autoCursor || !list.length) return false;
+    if (autoCursor.mIndex < 0 || autoCursor.mIndex >= list.length) return false;
+    if (autoCursor.meridianId && autoCursor.meridianId !== list[autoCursor.mIndex].id) return false;
+    return true;
+  }
+
   function isCavityPoint(rec) {
     const seq = Number(rec && rec.sequence) || 0;
     return !!(rec && rec.meridianId === 'HT' && seq <= 1);
@@ -1245,10 +1278,18 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (!force && !needsReframe(rec)) return;
-    const shot = planShot((upcoming && upcoming.length) ? upcoming : [rec], force ? null : autoViewDir);
+    let labelFix = false;
+    if (!force) {
+      if (!orbiting && performance.now() >= movingUntil) updateCallouts();
+      labelFix = focusLabelOffscreen(rec);
+      if (!needsReframe(rec) && !labelFix) return;
+    }
+    const shot = planShot(
+      (upcoming && upcoming.length) ? upcoming : [rec],
+      (force || labelFix) ? null : autoViewDir,
+    );
     if (shot && shot.dir) autoViewDir = shot.dir.clone();
-    if (!force && shot && shot.pose && camera && controls) {
+    if (!force && !labelFix && shot && shot.pose && camera && controls) {
       const samePos = camera.position.distanceTo(shot.pose.pos) < Math.max(bodyHeight * 0.02, 0.01);
       const sameTgt = controls.target.distanceTo(shot.pose.target) < Math.max(bodyHeight * 0.02, 0.01);
       if (samePos && sameTgt) return;
@@ -2217,10 +2258,15 @@ const Meridian3D = (() => {
         const y = Math.max(pad, Math.min(bot, item.py));
         if (y < lastY + slotH) {
           const nudged = lastY + slotH;
-          if (nudged <= bot && nudged - item.py <= Math.max(6, item.textH * 0.28)) {
-            item.slotY = nudged;
+          const focus = isFocusRec(item.rec);
+          if (nudged <= bot && (focus || nudged - item.py <= Math.max(6, item.textH * 0.28))) {
+            item.slotY = Math.min(bot, nudged);
             kept.push(item);
-            lastY = nudged;
+            lastY = item.slotY;
+          } else if (focus) {
+            item.slotY = Math.max(pad, Math.min(bot, y));
+            kept.push(item);
+            lastY = item.slotY;
           }
           return;
         }
@@ -2246,8 +2292,8 @@ const Meridian3D = (() => {
       let y = Math.max(next, item.py);
       y = Math.max(pad, Math.min(bot, y));
       if (y < next) y = next;
-      item.slotY = y;
-      next = y + slotH;
+      item.slotY = Math.max(pad, Math.min(bot, y));
+      next = item.slotY + slotH;
     });
   }
 
@@ -2581,6 +2627,7 @@ const Meridian3D = (() => {
 
     svg.innerHTML = '';
     calloutRecByKey.clear();
+    lastLaidCallouts = laid.slice();
     if (!laid.length) {
       setCalloutsVisible(false);
       return;
@@ -3177,9 +3224,9 @@ const Meridian3D = (() => {
         rebuildAnnotations({ ids: rest, reset: false, work }).catch(() => {});
       }
 
-      let mIndex = resume && autoCursor ? autoCursor.mIndex : 0;
-      let pIndex = resume && autoCursor ? autoCursor.pIndex : -1;
-      let phase = resume && autoCursor ? autoCursor.phase : 'name';
+      let mIndex = resume && cursorMatchesSelection() ? autoCursor.mIndex : 0;
+      let pIndex = resume && cursorMatchesSelection() ? autoCursor.pIndex : -1;
+      let phase = resume && cursorMatchesSelection() ? autoCursor.phase : 'name';
 
       for (; mIndex < list.length; mIndex++) {
         if (autoAbort || gen !== playGeneration) return;
@@ -3191,7 +3238,7 @@ const Meridian3D = (() => {
         const pts = tourPoints(mer.id);
         if (!pts.length) continue;
         setTitle(mer.name);
-        autoCursor = { mIndex, pIndex: -1, phase: 'name' };
+        autoCursor = { mIndex, pIndex: -1, phase: 'name', meridianId: mer.id };
         autoViewDir = null;
         if (pts[0]) {
           highlightPoint(pts[0]);
@@ -3217,7 +3264,7 @@ const Meridian3D = (() => {
           if (autoAbort || gen !== playGeneration) return;
           const rec = pts[i];
           currentPoint = rec;
-          autoCursor = { mIndex, pIndex: i, phase: 'point' };
+          autoCursor = { mIndex, pIndex: i, phase: 'point', meridianId: mer.id };
           highlightPoint(rec);
           if (window.__m3dTest) {
             if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
@@ -3260,6 +3307,9 @@ const Meridian3D = (() => {
   }
 
   async function onPlayClick() {
+    const now = performance.now();
+    if (now - lastPlayTapAt < 450) return;
+    lastPlayTapAt = now;
     autoPaused = false;
     closeOverlay();
     if (playingAuto) {
@@ -3270,7 +3320,7 @@ const Meridian3D = (() => {
     unlockSpeech();
     setModal(false);
     if (opts.mode === 'auto') {
-      playAuto(!!autoCursor).catch((err) => console.warn(err));
+      playAuto(cursorMatchesSelection()).catch((err) => console.warn(err));
     } else {
       await playManual();
     }
@@ -3286,9 +3336,10 @@ const Meridian3D = (() => {
       if (ev && ev.type === 'pointerup') {
         if ((ev.button ?? 0) !== 0) return;
         if (ev.pointerType === 'mouse') return;
+        if (ev.cancelable) ev.preventDefault();
       }
       const now = performance.now();
-      if (now - last < 80) return;
+      if (now - last < 400) return;
       last = now;
       handler(ev);
     };
@@ -3521,6 +3572,33 @@ const Meridian3D = (() => {
       cameraMoving: () => orbiting || performance.now() < movingUntil,
       lastReframe: () => lastReframeName,
       reframeLog: () => reframeLog.slice(),
+      focusLabelOffscreen: (name) => {
+        const rec = testRecord(name);
+        if (!rec) return null;
+        updateCallouts();
+        return focusLabelOffscreen(rec);
+      },
+      laidFocus(name) {
+        const rec = testRecord(name);
+        if (!rec) return null;
+        updateCallouts();
+        const item = lastLaidCallouts.find((it) => (
+          it.rec
+          && it.rec.code === rec.code
+          && it.rec.meridianId === rec.meridianId
+          && it.rec.side === rec.side
+        ));
+        if (!item) return { missing: true, n: lastLaidCallouts.length };
+        return {
+          name: item.rec.name,
+          x: item.textX,
+          y: item.slotY,
+          w: item.textW,
+          h: item.textH,
+          px: item.px,
+          py: item.py,
+        };
+      },
       autoView: () => (autoViewDir ? autoViewDir.toArray() : null),
       camDiag(name) {
         const rec = testRecord(name);
