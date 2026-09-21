@@ -6,7 +6,7 @@
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v62';
+const SHELL_CACHE   = 'acupuncture-shell-v63';
 const ASSET_CACHE   = 'acupuncture-assets-v3';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 
@@ -23,6 +23,7 @@ const SHELL_FILES = [
   './js/meridian.js',
   './js/rhymes.js',
   './js/meridian3d.js',
+  './assets/main-menu.webp',
   './assets/icons/play-3d.png',
   './assets/icons/stop-3d.png',
   './assets/icons/menu-3d.png',
@@ -84,12 +85,31 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+function isShellRequest(url) {
+  return SHELL_FILES.some((file) => {
+    if (file.startsWith('http')) {
+      return url.href === file || url.href.startsWith(file.split('?')[0]);
+    }
+    const abs = new URL(file, self.registration.scope);
+    return url.origin === abs.origin && url.pathname === abs.pathname;
+  });
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  if (SHELL_FILES.includes(e.request.url) || SHELL_FILES.includes(url.pathname)) {
+  if (isShellRequest(url)) {
     e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request)),
+      caches.match(e.request, { ignoreSearch: true }).then((cached) => {
+        if (cached) return cached;
+        return fetch(e.request).then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(e.request, clone));
+          }
+          return res;
+        }).catch(() => cached);
+      }),
     );
     return;
   }
