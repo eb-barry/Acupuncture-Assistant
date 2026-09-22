@@ -990,7 +990,7 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
     // 3/4 right-anterior-lateral torso: 衝門–周榮–血海 share this angle.
-    return new THREE.Vector3(lateral * 0.50, 0.08, 0.86).normalize();
+    return new THREE.Vector3(lateral * 0.66, 0.05, 0.75).normalize();
   }
 
   function spTorsoDirOk(dir, rec) {
@@ -1015,19 +1015,12 @@ const Meridian3D = (() => {
     const nWant = spTorsoDirOk(dir, rec) ? dir.clone().normalize() : spTorsoViewDir(rec);
     const cluster = spTorsoClusterRecs(rec);
     const pts = cluster.length ? cluster : [rec];
-    const target = new THREE.Vector3();
-    let minY = Infinity;
-    let maxY = -Infinity;
-    pts.forEach((p) => {
-      const v = new THREE.Vector3().fromArray(p.position);
-      target.add(v);
-      minY = Math.min(minY, v.y);
-      maxY = Math.max(maxY, v.y);
-    });
-    target.multiplyScalar(1 / pts.length);
-    const spanY = Math.max(maxY - minY, bodyHeight * 0.18);
+    const box = new THREE.Box3();
+    pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
+    const target = box.getCenter(new THREE.Vector3());
+    const spanY = Math.max(box.getSize(new THREE.Vector3()).y, bodyHeight * 0.18);
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const distFit = (spanY * 0.62) / Math.max(Math.tan(fov / 2), 1e-4);
+    const distFit = (spanY * 0.66) / Math.max(Math.tan(fov / 2), 1e-4);
     const dist = Math.max(framingDistance(), Math.min(distFit, framingDistance() * 1.85));
     const probe = {
       meridianId: 'SP',
