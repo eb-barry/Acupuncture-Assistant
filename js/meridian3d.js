@@ -1080,8 +1080,8 @@ const Meridian3D = (() => {
       // Palm facing the user: 少海–靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
-    // Inner-arm gap like the axilla–elbow reference: chest on the left, ribbon visible.
-    return new THREE.Vector3(medial * 0.76, 0.08, 0.64).normalize();
+    // 3/4 inner-arm, looking into the axilla so 極泉 sits at the crease.
+    return new THREE.Vector3(medial * 0.74, 0.12, 0.66).normalize();
   }
 
   function htDirOk(dir, rec) {
@@ -1091,7 +1091,7 @@ const Meridian3D = (() => {
     if (htSegment(rec) === 'distal') {
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
-    return (n.x * medial) >= 0.55 && n.z >= 0.48 && n.z <= 0.78 && Math.abs(n.y) < 0.32;
+    return (n.x * medial) >= 0.55 && n.z >= 0.48 && n.z <= 0.82 && Math.abs(n.y) < 0.35;
   }
 
   function htClusterRecs(rec) {
@@ -1099,7 +1099,7 @@ const Meridian3D = (() => {
     const side = rec && rec.side;
     const distal = htSegment(rec) === 'distal';
     const lo = distal ? 3 : 1;
-    const hi = distal ? 8 : 3;
+    const hi = distal ? 8 : 7;
     return ((doc && doc.acupoints) || []).filter((p) => (
       p.meridianId === 'HT'
       && p.side === side
@@ -1116,24 +1116,25 @@ const Meridian3D = (() => {
     const distal = htSegment(rec) === 'distal';
     const box = new THREE.Box3();
     pts.forEach((p) => {
-      const pt = new THREE.Vector3().fromArray(p.position);
-      box.expandByPoint(pt);
-      // Keep the look-at on the inner arm, not the pec/breast beside 極泉.
-      if (!distal && (Number(p.sequence) || 0) >= 2) box.expandByPoint(pt);
+      box.expandByPoint(new THREE.Vector3().fromArray(p.position));
     });
     const target = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const span = Math.max(size.y, size.length() * 0.55, bodyHeight * 0.12);
+    const span = Math.max(size.y, size.length() * 0.62, bodyHeight * (distal ? 0.12 : 0.28));
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const pad = distal ? 0.90 : 0.80;
+    const pad = distal ? 0.90 : 1.08;
     const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
     const dist = distal
       ? Math.max(base * 0.52, Math.min(distFit, base * 0.92))
-      : Math.max(base * 0.40, Math.min(distFit, base * 0.64));
+      : Math.max(base * 1.15, Math.min(distFit, base * 2.20));
     const medial = rec && rec.side === 'left' ? 1 : -1;
-    target.x -= medial * bodyHeight * (distal ? 0.004 : 0.016);
-    if (!distal) target.y -= bodyHeight * 0.008;
+    if (distal) {
+      target.x -= medial * bodyHeight * 0.004;
+    } else {
+      target.x += medial * bodyHeight * 0.004;
+      target.y += bodyHeight * 0.02;
+    }
     const probe = {
       meridianId: 'HT',
       side: rec && rec.side,
@@ -1255,7 +1256,7 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
-      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.76, 0.08, 0.64).normalize() : null,
+      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.74, 0.12, 0.66).normalize() : null,
       isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
@@ -1462,7 +1463,7 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (isSpChongmen(rec) || isHtLingdao(rec)) force = true;
+    if (isSpChongmen(rec) || isHtLingdao(rec) || (rec && rec.meridianId === 'HT' && rec.name === '極泉')) force = true;
     let labelFix = false;
     if (!force) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
