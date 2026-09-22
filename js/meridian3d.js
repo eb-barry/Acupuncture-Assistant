@@ -1080,8 +1080,8 @@ const Meridian3D = (() => {
       // Palm facing the user: 少海–靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
-    // 3/4 inner-arm: chest on the left, 極泉 at the axilla crease, ribbon down the arm.
-    return new THREE.Vector3(medial * 0.52, 0.10, 0.85).normalize();
+    // 3/4 inner-arm: peek into the axilla crease so 極泉 sits on the ribbon, not the pec.
+    return new THREE.Vector3(medial * 0.66, 0.08, 0.75).normalize();
   }
 
   function htDirOk(dir, rec) {
@@ -1091,7 +1091,7 @@ const Meridian3D = (() => {
     if (htSegment(rec) === 'distal') {
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
-    return (n.x * medial) >= 0.32 && n.z >= 0.62 && n.z <= 0.95 && Math.abs(n.y) < 0.35;
+    return (n.x * medial) >= 0.48 && n.z >= 0.58 && n.z <= 0.88 && Math.abs(n.y) < 0.35;
   }
 
   function htClusterRecs(rec) {
@@ -1132,9 +1132,8 @@ const Meridian3D = (() => {
     if (distal) {
       target.x -= medial * bodyHeight * 0.004;
     } else {
-      // Pull the look-at toward the chest so the 3/4 torso sits on the left, like the reference.
-      target.x += medial * bodyHeight * 0.018;
-      target.y -= bodyHeight * 0.03;
+      target.x += medial * bodyHeight * 0.006;
+      target.y -= bodyHeight * 0.012;
     }
     const probe = {
       meridianId: 'HT',
@@ -1257,7 +1256,7 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
-      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.52, 0.10, 0.85).normalize() : null,
+      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.66, 0.08, 0.75).normalize() : null,
       isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
