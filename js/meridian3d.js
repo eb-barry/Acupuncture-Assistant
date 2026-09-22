@@ -1080,8 +1080,8 @@ const Meridian3D = (() => {
       // Palm facing the user: 少海–靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
-    // Inner-arm gap like the axilla–elbow reference: chest on the left, ribbon visible.
-    return new THREE.Vector3(medial * 0.78, 0.08, 0.62).normalize();
+    // Inner-arm gap like the axilla–elbow reference: peek past the pec into the crease.
+    return new THREE.Vector3(medial * 0.90, 0.08, 0.42).normalize();
   }
 
   function htDirOk(dir, rec) {
@@ -1091,7 +1091,7 @@ const Meridian3D = (() => {
     if (htSegment(rec) === 'distal') {
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
-    return (n.x * medial) >= 0.62 && n.z >= 0.42 && n.z <= 0.75 && Math.abs(n.y) < 0.32;
+    return (n.x * medial) >= 0.72 && n.z >= 0.28 && n.z <= 0.62 && Math.abs(n.y) < 0.32;
   }
 
   function htClusterRecs(rec) {
@@ -1130,10 +1130,10 @@ const Meridian3D = (() => {
     const base = framingDistance();
     const dist = distal
       ? Math.max(base * 0.52, Math.min(distFit, base * 0.92))
-      : Math.max(base * 0.34, Math.min(distFit, base * 0.56));
+      : Math.max(base * 0.30, Math.min(distFit, base * 0.50));
     const medial = rec && rec.side === 'left' ? 1 : -1;
-    target.x -= medial * bodyHeight * (distal ? 0.004 : 0.012);
-    if (!distal) target.y -= bodyHeight * 0.012;
+    target.x -= medial * bodyHeight * (distal ? 0.004 : 0.018);
+    if (!distal) target.y -= bodyHeight * 0.016;
     const probe = {
       meridianId: 'HT',
       side: rec && rec.side,
@@ -1255,7 +1255,7 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
-      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.78, 0.10, 0.62).normalize() : null,
+      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.90, 0.08, 0.42).normalize() : null,
       isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
