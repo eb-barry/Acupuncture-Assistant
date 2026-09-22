@@ -161,6 +161,7 @@ const Meridian3D = (() => {
   }
 
   const BL_LIAO_NAMES = new Set(['上髎', '次髎', '中髎', '下髎']);
+  const BL_LUMBAR_NAMES = new Set(['氣海俞', '大腸俞', '關元俞', '小腸俞', '膀胱俞', '中膂俞', '白環俞']);
   const BL_FOOT_NAMES = new Set(['僕參', '申脈', '金門', '京骨', '束骨', '足通谷', '至陰']);
   const BL_PARALLEL_PAIRS = [
     ['眉衝', '曲差'],
@@ -284,7 +285,7 @@ const Meridian3D = (() => {
     kept.forEach((cluster) => out.push(...cluster));
     items.forEach((it) => {
       const name = it.rec && it.rec.name;
-      if (isFocusRec(it.rec) || name === '會陽' || (name && name.endsWith('髎'))) {
+      if (isFocusRec(it.rec) || name === '會陽' || BL_LUMBAR_NAMES.has(name) || (name && name.endsWith('髎'))) {
         if (!out.includes(it)) out.push(it);
       }
     });
@@ -298,8 +299,7 @@ const Meridian3D = (() => {
     const span = Math.max(1, ys[ys.length - 1] - y0);
     const lo = y0 + span * 0.1;
     const hi = y0 + span * 0.92;
-    const keepLumbar = new Set(['氣海俞', '大腸俞', '關元俞', '小腸俞', '膀胱俞', '中膂俞', '白環俞']);
-    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || name === '委中' || name === '委陽' || keepLumbar.has(name) || BL_FOOT_NAMES.has(name) || (name && name.endsWith('髎'));
+    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || name === '委中' || name === '委陽' || BL_LUMBAR_NAMES.has(name) || BL_FOOT_NAMES.has(name) || (name && name.endsWith('髎'));
     const core = items.filter((it) => isFocusRec(it.rec) || keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
     return core.length >= 8 ? core : items;
   }
@@ -1078,10 +1078,10 @@ const Meridian3D = (() => {
     const medial = rec && rec.side === 'left' ? 1 : -1;
     if (htSegment(rec) === 'distal') {
       // Palm facing the user: 少海–靈道–少府, never the dorsal hand.
-      return new THREE.Vector3(medial * 0.86, 0.18, 0.48).normalize();
+      return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
-    // Inner-arm gap: 極泉–青靈–少海, peek around the pec into the axilla.
-    return new THREE.Vector3(medial * 0.72, 0.06, 0.69).normalize();
+    // Inner-arm gap like the axilla–elbow reference: chest on the left, ribbon visible.
+    return new THREE.Vector3(medial * 0.78, 0.08, 0.62).normalize();
   }
 
   function htDirOk(dir, rec) {
@@ -1089,9 +1089,9 @@ const Meridian3D = (() => {
     const medial = rec && rec.side === 'left' ? 1 : -1;
     const n = dir.clone().normalize();
     if (htSegment(rec) === 'distal') {
-      return (n.x * medial) >= 0.62 && n.z >= 0.18 && n.z <= 0.72 && Math.abs(n.y) < 0.4;
+      return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
-    return (n.x * medial) >= 0.45 && n.z >= 0.42 && Math.abs(n.y) < 0.35;
+    return (n.x * medial) >= 0.62 && n.z >= 0.42 && n.z <= 0.75 && Math.abs(n.y) < 0.32;
   }
 
   function htClusterRecs(rec) {
@@ -1113,15 +1113,27 @@ const Meridian3D = (() => {
     const nWant = htDirOk(dir, rec) ? dir.clone().normalize() : htViewDir(rec);
     const cluster = htClusterRecs(rec);
     const pts = cluster.length ? cluster : [rec];
+    const distal = htSegment(rec) === 'distal';
     const box = new THREE.Box3();
-    pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
+    pts.forEach((p) => {
+      const pt = new THREE.Vector3().fromArray(p.position);
+      box.expandByPoint(pt);
+      // Keep the look-at on the inner arm, not the pec/breast beside 極泉.
+      if (!distal && (Number(p.sequence) || 0) >= 2) box.expandByPoint(pt);
+    });
     const target = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const span = Math.max(size.y, size.length() * 0.55, bodyHeight * 0.12);
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const distFit = (span * 0.68) / Math.max(Math.tan(fov / 2), 1e-4);
+    const pad = distal ? 0.90 : 0.80;
+    const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
-    const dist = Math.max(base * 0.58, Math.min(distFit, base * 1.15));
+    const dist = distal
+      ? Math.max(base * 0.52, Math.min(distFit, base * 0.92))
+      : Math.max(base * 0.34, Math.min(distFit, base * 0.56));
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    target.x -= medial * bodyHeight * (distal ? 0.004 : 0.012);
+    if (!distal) target.y -= bodyHeight * 0.012;
     const probe = {
       meridianId: 'HT',
       side: rec && rec.side,
@@ -2737,6 +2749,7 @@ const Meridian3D = (() => {
       const columns = splitCalloutColumns(buckets[park], park, width);
       splitOverflowColumns(columns, height);
       const outerW = Math.max(0, ...columns.filter((col) => !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
+      const innerW = Math.max(0, ...columns.filter((col) => col.stick && col.indent).flatMap((col) => col.items.map((it) => it.textW)));
       const innerStick = columns.find((col) => col.stick && col.indent);
       const outerStick = columns.find((col) => col.stick && !col.indent);
       if (innerStick && outerStick) {
@@ -2758,6 +2771,7 @@ const Meridian3D = (() => {
       });
       liftKunlunAboveFoot(columns, pad + 6);
       columns.forEach((col) => {
+        const colMaxW = Math.max(0, ...col.items.map((it) => it.textW));
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
@@ -2765,16 +2779,16 @@ const Meridian3D = (() => {
             const fs = (item.textH || 32) / 1.35;
             const band = fs * 2;
             const gap = 12;
-            const innerW = Math.max(0, ...columns.filter((c) => c.stick && c.indent).flatMap((c) => c.items.map((it) => it.textW)));
             const inset = col.liao
-              ? Math.max(outerW + 32, 72) + Math.max(innerW + 20, 52)
+              ? Math.max(outerW + 24, 56) + Math.max(innerW + 14, 40)
               : col.indent
-                ? (gutterCol ? band + gap : Math.max(outerW + 32, 72))
+                ? (gutterCol ? band + gap : Math.max(outerW + 24, 56))
                 : 0;
-            let textX = width - pad - item.textW - inset;
+            const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
+            let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
-            } else if (!col.stick && !col.foot && !item.dogleg) {
+            } else if (!col.stick && !col.foot && !col.liao && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
