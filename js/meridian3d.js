@@ -1081,7 +1081,7 @@ const Meridian3D = (() => {
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
     // Inner-arm gap like the axilla–elbow reference: chest on the left, ribbon visible.
-    return new THREE.Vector3(medial * 0.76, 0.08, 0.64).normalize();
+    return new THREE.Vector3(medial * 0.80, 0.12, 0.59).normalize();
   }
 
   function htDirOk(dir, rec) {
@@ -1255,7 +1255,7 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
-      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.76, 0.08, 0.64).normalize() : null,
+      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.80, 0.12, 0.59).normalize() : null,
       isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
@@ -2788,7 +2788,9 @@ const Meridian3D = (() => {
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
-            } else if (!col.stick && !col.foot && !col.liao && !item.dogleg) {
+            } else if (col.stick || col.liao) {
+              if (textX + 6 < item.px) textX = Math.min(width - nameW - 2, item.px + 6);
+            } else if (!col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
