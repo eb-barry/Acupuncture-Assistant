@@ -17,6 +17,7 @@ const Settings = (() => {
     fontSize:    'medium',
     descSize:    'normal',
     voiceGender: 'female',
+    autoPauseSec: 1.5,
     termsAcceptedAt: null,
   };
 
