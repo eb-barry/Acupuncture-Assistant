@@ -1081,7 +1081,7 @@ const Meridian3D = (() => {
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
     // Low camera looking up the inner arm: 極泉 at the axilla crease, ribbon unobstructed.
-    return new THREE.Vector3(medial * 0.48, -0.62, 0.62).normalize();
+    return new THREE.Vector3(medial * 0.46, -0.68, 0.57).normalize();
   }
 
   function htDirOk(dir, rec) {
@@ -1091,7 +1091,7 @@ const Meridian3D = (() => {
     if (htSegment(rec) === 'distal') {
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
-    return (n.x * medial) >= 0.28 && n.y <= -0.40 && n.z >= 0.38 && n.z <= 0.82;
+    return (n.x * medial) >= 0.28 && n.y <= -0.45 && n.z >= 0.35 && n.z <= 0.78;
   }
 
   function htClusterRecs(rec) {
@@ -1134,8 +1134,8 @@ const Meridian3D = (() => {
     if (distal) {
       target.x -= medial * bodyHeight * 0.004;
     } else {
-      target.x -= medial * bodyHeight * 0.008;
-      target.y -= bodyHeight * 0.02;
+      target.x += medial * bodyHeight * 0.016;
+      target.y -= bodyHeight * 0.01;
     }
     const probe = {
       meridianId: 'HT',
@@ -1258,7 +1258,7 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
-      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.48, -0.62, 0.62).normalize() : null,
+      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.46, -0.68, 0.57).normalize() : null,
       isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
