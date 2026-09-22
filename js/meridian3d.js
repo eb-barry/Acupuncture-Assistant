@@ -1080,8 +1080,8 @@ const Meridian3D = (() => {
       // Palm facing the user: 少海–靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
-    // Inner-arm gap like the axilla–elbow reference: peek past the pec into the crease.
-    return new THREE.Vector3(medial * 0.90, 0.08, 0.42).normalize();
+    // Inner-arm gap like the axilla–elbow reference: chest on the left, ribbon visible.
+    return new THREE.Vector3(medial * 0.76, 0.08, 0.64).normalize();
   }
 
   function htDirOk(dir, rec) {
@@ -1091,7 +1091,7 @@ const Meridian3D = (() => {
     if (htSegment(rec) === 'distal') {
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
-    return (n.x * medial) >= 0.72 && n.z >= 0.28 && n.z <= 0.62 && Math.abs(n.y) < 0.32;
+    return (n.x * medial) >= 0.55 && n.z >= 0.48 && n.z <= 0.78 && Math.abs(n.y) < 0.32;
   }
 
   function htClusterRecs(rec) {
@@ -1130,10 +1130,10 @@ const Meridian3D = (() => {
     const base = framingDistance();
     const dist = distal
       ? Math.max(base * 0.52, Math.min(distFit, base * 0.92))
-      : Math.max(base * 0.30, Math.min(distFit, base * 0.50));
+      : Math.max(base * 0.40, Math.min(distFit, base * 0.64));
     const medial = rec && rec.side === 'left' ? 1 : -1;
-    target.x -= medial * bodyHeight * (distal ? 0.004 : 0.018);
-    if (!distal) target.y -= bodyHeight * 0.016;
+    target.x -= medial * bodyHeight * (distal ? 0.004 : 0.008);
+    if (!distal) target.y -= bodyHeight * 0.008;
     const probe = {
       meridianId: 'HT',
       side: rec && rec.side,
@@ -1255,7 +1255,7 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
-      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.90, 0.08, 0.42).normalize() : null,
+      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.76, 0.08, 0.64).normalize() : null,
       isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
@@ -2749,7 +2749,7 @@ const Meridian3D = (() => {
       const columns = splitCalloutColumns(buckets[park], park, width);
       splitOverflowColumns(columns, height);
       const outerW = Math.max(0, ...columns.filter((col) => !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
-      const innerW = Math.max(0, ...columns.filter((col) => col.stick && col.indent).flatMap((col) => col.items.map((it) => it.textW)));
+      const liaoW = Math.max(0, ...columns.filter((col) => col.liao).flatMap((col) => col.items.map((it) => it.textW)));
       const innerStick = columns.find((col) => col.stick && col.indent);
       const outerStick = columns.find((col) => col.stick && !col.indent);
       if (innerStick && outerStick) {
@@ -2780,9 +2780,9 @@ const Meridian3D = (() => {
             const band = fs * 2;
             const gap = 12;
             const inset = col.liao
-              ? Math.max(outerW + 24, 56) + Math.max(innerW + 14, 40)
+              ? Math.max(outerW + 10, 36)
               : col.indent
-                ? (gutterCol ? band + gap : Math.max(outerW + 24, 56))
+                ? (gutterCol ? band + gap : Math.max(outerW + 24, 56) + (liaoW ? Math.max(liaoW + 10, 36) : 0))
                 : 0;
             const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
             let textX = width - pad - nameW - inset;
