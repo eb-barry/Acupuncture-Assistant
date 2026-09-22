@@ -50,6 +50,10 @@ const Meridian3D = (() => {
   const INNER_ARM_FACE_DOT_MIN = 0.85;
   const INNER_ARM_DIST_SCALE = 0.50;
   const VIEW_CARDINAL_COS = 0.985;
+  const PAUSE_SEC_MIN = 0.5;
+  const PAUSE_SEC_MAX = 3;
+  const PAUSE_SEC_STEP = 0.5;
+  const PAUSE_SEC_DEFAULT = 1.5;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
@@ -60,6 +64,7 @@ const Meridian3D = (() => {
     gender: 'male',
     mode: 'manual',
     scale: 1,
+    pauseSec: PAUSE_SEC_DEFAULT,
     meridians: new Set(),
   };
 
@@ -661,6 +666,17 @@ const Meridian3D = (() => {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  function clampPauseSec(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return PAUSE_SEC_DEFAULT;
+    const stepped = Math.round(n / PAUSE_SEC_STEP) * PAUSE_SEC_STEP;
+    return Math.min(PAUSE_SEC_MAX, Math.max(PAUSE_SEC_MIN, stepped));
+  }
+
+  function tourPauseMs() {
+    return Math.round(clampPauseSec(opts.pauseSec) * 1000);
+  }
+
   async function loadThree() {
     if (three) return three;
     const THREE = await import('three');
@@ -850,6 +866,14 @@ const Meridian3D = (() => {
     controls.maxDistance = Math.max(bodyHeight * 12, want * 8);
   }
 
+  function isSpTorso(rec) {
+    return !!(rec && rec.meridianId === 'SP' && (Number(rec.sequence) || 0) >= 12);
+  }
+
+  function isSpChongmen(rec) {
+    return !!(rec && rec.meridianId === 'SP' && rec.name === '衝門');
+  }
+
   function isInnerLimb(rec) {
     if (!rec || rec.side === 'midline') return false;
     const id = rec.meridianId;
@@ -857,6 +881,7 @@ const Meridian3D = (() => {
     if (id === 'LU') return seq >= 8;
     if (id === 'HT') return true;
     if (id === 'PC') return seq >= 2;
+    if (id === 'SP' && seq >= 12) return false;
     if (id === 'SP' || id === 'KI' || id === 'LR') {
       const y = Number(rec.position && rec.position[1]);
       return Number.isFinite(y) && y < bodyHeight * 0.62;
@@ -957,7 +982,55 @@ const Meridian3D = (() => {
     if (id === 'LI') return new THREE.Vector3(lateral, 0, 0.55).normalize();
     if (id === 'HT') return innerLimbViewNormal(rec);
     if (id === 'PC') return innerLimbViewNormal(rec);
+    if (id === 'SP') return isSpTorso(rec) ? spTorsoViewDir(rec) : new THREE.Vector3(0, 0, 1);
     return new THREE.Vector3(0, 0, 1);
+  }
+
+  function spTorsoViewDir(rec) {
+    const { THREE } = three;
+    const lateral = rec && rec.side === 'left' ? -1 : 1;
+    // 3/4 right-anterior-lateral torso: 衝門–周榮–血海 share this angle.
+    return new THREE.Vector3(lateral * 0.66, 0.05, 0.75).normalize();
+  }
+
+  function spTorsoDirOk(dir, rec) {
+    if (!dir || dir.lengthSq() < 1e-8) return false;
+    const lateral = rec && rec.side === 'left' ? -1 : 1;
+    const n = dir.clone().normalize();
+    return n.z >= 0.55 && (n.x * lateral) >= 0.28 && Math.abs(n.y) < 0.35;
+  }
+
+  function spTorsoClusterRecs(rec) {
+    const doc = currentMap();
+    const side = rec && rec.side;
+    return ((doc && doc.acupoints) || []).filter((p) => (
+      p.meridianId === 'SP'
+      && p.side === side
+      && (Number(p.sequence) || 0) >= 10
+    ));
+  }
+
+  function poseForSpTorso(rec, dir) {
+    const { THREE } = three;
+    const nWant = spTorsoDirOk(dir, rec) ? dir.clone().normalize() : spTorsoViewDir(rec);
+    const cluster = spTorsoClusterRecs(rec);
+    const pts = cluster.length ? cluster : [rec];
+    const box = new THREE.Box3();
+    pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
+    const target = box.getCenter(new THREE.Vector3());
+    const spanY = Math.max(box.getSize(new THREE.Vector3()).y, bodyHeight * 0.18);
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const distFit = (spanY * 0.66) / Math.max(Math.tan(fov / 2), 1e-4);
+    const dist = Math.max(framingDistance(), Math.min(distFit, framingDistance() * 1.85));
+    const probe = {
+      meridianId: 'SP',
+      side: rec && rec.side,
+      sequence: rec && rec.sequence,
+      position: [target.x, target.y, target.z],
+      normal: rec && rec.normal,
+    };
+    const n = ensureOutsideDir(probe, nWant, dist);
+    return { pos: target.clone().addScaledVector(n, dist), target, dir: n };
   }
 
   function innerLimbViewNormal(rec) {
@@ -1012,6 +1085,7 @@ const Meridian3D = (() => {
   function viewNormal(normal, rec) {
     const id = rec && rec.meridianId;
     const seq = Number(rec && rec.sequence) || 0;
+    if (isSpTorso(rec)) return spTorsoViewDir(rec);
     if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
     const n = flattenHorizontal(normal);
     if (n.lengthSq() < 0.05) return fallbackViewDir(rec);
@@ -1034,6 +1108,10 @@ const Meridian3D = (() => {
     const inner = list.filter(isInnerLimb);
     if (inner.length && inner.length * 2 >= list.length) {
       return innerLimbViewNormal(inner[0]);
+    }
+    const torso = list.filter(isSpTorso);
+    if (torso.length && torso.length * 2 >= list.length) {
+      return spTorsoViewDir(torso[0]);
     }
     const acc = new THREE.Vector3();
     list.forEach((rec) => {
@@ -1089,6 +1167,7 @@ const Meridian3D = (() => {
       const p = target.clone().addScaledVector(d, dist);
       if (!box.isEmpty() && box.containsPoint(p)) return false;
       if (id === 'HT' && d.z < 0.5) return false;
+      if (id === 'SP' && (Number(rec.sequence) || 0) >= 12 && d.z < 0.55) return false;
       return skipLos || poseSeesPoint(p, target);
     };
     const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
@@ -1099,6 +1178,7 @@ const Meridian3D = (() => {
       fallbackViewDir(rec),
       id === 'HT' ? new THREE.Vector3(lateral * 0.42, 0.12, 0.90).normalize() : null,
       id === 'HT' ? new THREE.Vector3(lateral * 0.18, 0.14, 0.97).normalize() : null,
+      isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
       new THREE.Vector3(lateral * 0.35, 0.08, preferBack ? -0.93 : 0.93).normalize(),
@@ -1113,6 +1193,7 @@ const Meridian3D = (() => {
 
   function poseLookingAt(rec, dir) {
     const { THREE } = three;
+    if (isSpTorso(rec)) return poseForSpTorso(rec, dir);
     const dist = rec && rec.meridianId === 'HT'
       ? framingDistance() * ((Number(rec.sequence) || 0) >= 4 ? 0.62 : 0.78)
       : (usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance());
@@ -1199,6 +1280,7 @@ const Meridian3D = (() => {
       if (!recFitsInPose(anchor, pose, width, height)) return null;
       const recs = [anchor];
       for (let i = 0; i < rest.length; i++) {
+        if (isInnerLimb(anchor) && isSpTorso(rest[i])) break;
         if (!recFitsInPose(rest[i], pose, width, height)) break;
         recs.push(rest[i]);
       }
@@ -1302,6 +1384,7 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
+    if (isSpChongmen(rec)) force = true;
     let labelFix = false;
     if (!force) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
@@ -3274,7 +3357,7 @@ const Meridian3D = (() => {
           }
           await speak(`共${chineseNum(pts.length)}穴`, opts.gender);
           if (autoAbort || gen !== playGeneration) return;
-          await sleep(2000);
+          await sleep(tourPauseMs());
           if (autoAbort || gen !== playGeneration) return;
           phase = 'point';
           pIndex = -1;
@@ -3297,7 +3380,7 @@ const Meridian3D = (() => {
           if (autoAbort || gen !== playGeneration) return;
           await speak(rec.name, opts.gender);
           if (autoAbort || gen !== playGeneration) return;
-          await sleep(2000);
+          await sleep(tourPauseMs());
           if (autoAbort || gen !== playGeneration) return;
         }
         phase = 'name';
@@ -3437,6 +3520,21 @@ const Meridian3D = (() => {
       scaleVal.textContent = opts.scale.toFixed(1) + '×';
       applyScale();
     };
+
+    const pause = $('m3d-pause');
+    const pauseVal = $('m3d-pause-val');
+    const savedPause = clampPauseSec(typeof Settings !== 'undefined' ? Settings.get('autoPauseSec') : PAUSE_SEC_DEFAULT);
+    opts.pauseSec = savedPause;
+    if (pause) {
+      pause.value = String(savedPause);
+      if (pauseVal) pauseVal.textContent = savedPause.toFixed(1) + ' 秒';
+      pause.oninput = () => {
+        opts.pauseSec = clampPauseSec(pause.value);
+        pause.value = String(opts.pauseSec);
+        if (pauseVal) pauseVal.textContent = opts.pauseSec.toFixed(1) + ' 秒';
+        if (typeof Settings !== 'undefined') Settings.set('autoPauseSec', opts.pauseSec);
+      };
+    }
 
     bindTap('m3d-menu-btn', () => {
       if (playingAuto || autoPaused) stopAuto({ keepCursor: true });
@@ -3905,6 +4003,7 @@ const Meridian3D = (() => {
         gender: opts.gender,
         mode: opts.mode,
         meridians: [...opts.meridians],
+        pauseSec: opts.pauseSec,
       }),
       meshStats() {
         let verts = 0;

@@ -942,7 +942,8 @@ body::before {
   font-size: var(--fs-md);
   font-family: var(--font-sans);
 }
-#m3d-scale {
+#m3d-scale,
+#m3d-pause {
   width: 100%; accent-color: var(--clr-teal); height: 28px;
 }
 .m3d-field-hint {
