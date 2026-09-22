@@ -193,7 +193,7 @@ const Meridian3D = (() => {
   }
 
   function calloutParkFor(rec, fallback = 'right') {
-    return blCalloutBand(rec) === 'liao' ? 'left' : fallback;
+    return fallback;
   }
 
   function clusterByX(items, width) {
@@ -297,20 +297,23 @@ const Meridian3D = (() => {
     const y0 = ys[0];
     const span = Math.max(1, ys[ys.length - 1] - y0);
     const lo = y0 + span * 0.1;
-    const hi = y0 + span * 0.72;
-    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || name === '委中' || name === '委陽' || BL_FOOT_NAMES.has(name) || (name && name.endsWith('髎'));
+    const hi = y0 + span * 0.92;
+    const keepLumbar = new Set(['氣海俞', '大腸俞', '關元俞', '小腸俞', '膀胱俞', '中膂俞', '白環俞']);
+    const keepName = (name) => name === '會陽' || name === '承扶' || name === '胞肓' || name === '秩邊' || name === '委中' || name === '委陽' || keepLumbar.has(name) || BL_FOOT_NAMES.has(name) || (name && name.endsWith('髎'));
     const core = items.filter((it) => isFocusRec(it.rec) || keepName(it.rec && it.rec.name) || (it.py >= lo && it.py <= hi));
     return core.length >= 8 ? core : items;
   }
 
   function splitCalloutColumns(items, park, width) {
     if (!items.length) return [];
-    if (items.every((it) => blCalloutBand(it.rec) === 'liao')) {
-      return [{ items: [...items], indent: 0, liao: true }];
-    }
+    const liao = items.filter((it) => blCalloutBand(it.rec) === 'liao');
     const foot = items.filter((it) => isBlFootLateral(it.rec));
-    const rest = items.filter((it) => !isBlFootLateral(it.rec));
+    const rest = items.filter((it) => blCalloutBand(it.rec) !== 'liao' && !isBlFootLateral(it.rec));
+    if (!rest.length && liao.length && !foot.length) {
+      return [{ items: [...liao], indent: 0, liao: true }];
+    }
     const cols = rest.length ? splitCalloutColumnsRest(rest, park, width) : [];
+    if (liao.length) cols.push({ items: liao, indent: 1, liao: true });
     if (foot.length >= 2) {
       const bySeq = (a, b) => (Number(a.rec.sequence) || 0) - (Number(b.rec.sequence) || 0);
       const outerFoot = foot.filter((it) => (Number(it.rec.sequence) || 0) % 2 === 0).sort(bySeq);
@@ -1047,13 +1050,7 @@ const Meridian3D = (() => {
       n.z = Math.max(n.z, 0.38);
       return n.normalize();
     }
-    if (id === 'HT') {
-      const seq = Number(rec && rec.sequence) || 0;
-      // Palmar inner-arm: 極泉–少海 like the axilla-to-elbow inner view;
-      // 靈道–少府 like the palmar forearm/hand. Never take the dorsal side.
-      if (seq >= 4) return new THREE.Vector3(medial * 0.10, 0.22, 0.97).normalize();
-      return new THREE.Vector3(medial * 0.40, 0.06, 0.91).normalize();
-    }
+    if (id === 'HT') return htViewDir(rec);
     if (id === 'PC') {
       return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
     }
@@ -1065,6 +1062,75 @@ const Meridian3D = (() => {
     n.y = Math.min(Math.max(n.y, 0.08), 0.32);
     n.z = Math.max(n.z, 0.38);
     return n.normalize();
+  }
+
+  function htSegment(rec) {
+    if (!rec || rec.meridianId !== 'HT') return '';
+    return (Number(rec.sequence) || 0) >= 4 ? 'distal' : 'proximal';
+  }
+
+  function isHtLingdao(rec) {
+    return !!(rec && rec.meridianId === 'HT' && rec.name === '靈道');
+  }
+
+  function htViewDir(rec) {
+    const { THREE } = three;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    if (htSegment(rec) === 'distal') {
+      // Palm facing the user: 少海–靈道–少府, never the dorsal hand.
+      return new THREE.Vector3(medial * 0.86, 0.18, 0.48).normalize();
+    }
+    // Inner-arm gap: 極泉–青靈–少海, peek around the pec into the axilla.
+    return new THREE.Vector3(medial * 0.72, 0.06, 0.69).normalize();
+  }
+
+  function htDirOk(dir, rec) {
+    if (!dir || dir.lengthSq() < 1e-8) return false;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    const n = dir.clone().normalize();
+    if (htSegment(rec) === 'distal') {
+      return (n.x * medial) >= 0.62 && n.z >= 0.18 && n.z <= 0.72 && Math.abs(n.y) < 0.4;
+    }
+    return (n.x * medial) >= 0.45 && n.z >= 0.42 && Math.abs(n.y) < 0.35;
+  }
+
+  function htClusterRecs(rec) {
+    const doc = currentMap();
+    const side = rec && rec.side;
+    const distal = htSegment(rec) === 'distal';
+    const lo = distal ? 3 : 1;
+    const hi = distal ? 8 : 3;
+    return ((doc && doc.acupoints) || []).filter((p) => (
+      p.meridianId === 'HT'
+      && p.side === side
+      && (Number(p.sequence) || 0) >= lo
+      && (Number(p.sequence) || 0) <= hi
+    ));
+  }
+
+  function poseForHt(rec, dir) {
+    const { THREE } = three;
+    const nWant = htDirOk(dir, rec) ? dir.clone().normalize() : htViewDir(rec);
+    const cluster = htClusterRecs(rec);
+    const pts = cluster.length ? cluster : [rec];
+    const box = new THREE.Box3();
+    pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
+    const target = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const span = Math.max(size.y, size.length() * 0.55, bodyHeight * 0.12);
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const distFit = (span * 0.68) / Math.max(Math.tan(fov / 2), 1e-4);
+    const base = framingDistance();
+    const dist = Math.max(base * 0.58, Math.min(distFit, base * 1.15));
+    const probe = {
+      meridianId: 'HT',
+      side: rec && rec.side,
+      sequence: rec && rec.sequence,
+      position: [target.x, target.y, target.z],
+      normal: rec && rec.normal,
+    };
+    const n = ensureOutsideDir(probe, nWant, dist);
+    return { pos: target.clone().addScaledVector(n, dist), target, dir: n };
   }
 
   function flattenHorizontal(normal) {
@@ -1165,8 +1231,8 @@ const Meridian3D = (() => {
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
-      if (!box.isEmpty() && box.containsPoint(p)) return false;
-      if (id === 'HT' && d.z < 0.5) return false;
+      if (id !== 'HT' && !box.isEmpty() && box.containsPoint(p)) return false;
+      if (id === 'HT' && !htDirOk(d, rec)) return false;
       if (id === 'SP' && (Number(rec.sequence) || 0) >= 12 && d.z < 0.55) return false;
       return skipLos || poseSeesPoint(p, target);
     };
@@ -1176,8 +1242,8 @@ const Meridian3D = (() => {
     const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE';
     const candidates = [
       fallbackViewDir(rec),
-      id === 'HT' ? new THREE.Vector3(lateral * 0.42, 0.12, 0.90).normalize() : null,
-      id === 'HT' ? new THREE.Vector3(lateral * 0.18, 0.14, 0.97).normalize() : null,
+      id === 'HT' ? htViewDir(rec) : null,
+      id === 'HT' ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.78, 0.10, 0.62).normalize() : null,
       isSpTorso(rec) ? spTorsoViewDir(rec) : null,
       new THREE.Vector3(0, 0, preferBack ? -1 : 1),
       new THREE.Vector3(0, 0, preferBack ? 1 : -1),
@@ -1194,9 +1260,8 @@ const Meridian3D = (() => {
   function poseLookingAt(rec, dir) {
     const { THREE } = three;
     if (isSpTorso(rec)) return poseForSpTorso(rec, dir);
-    const dist = rec && rec.meridianId === 'HT'
-      ? framingDistance() * ((Number(rec.sequence) || 0) >= 4 ? 0.62 : 0.78)
-      : (usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance());
+    if (rec && rec.meridianId === 'HT') return poseForHt(rec, dir);
+    const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
     const n = ensureOutsideDir(
       rec,
       dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec),
@@ -1281,6 +1346,7 @@ const Meridian3D = (() => {
       const recs = [anchor];
       for (let i = 0; i < rest.length; i++) {
         if (isInnerLimb(anchor) && isSpTorso(rest[i])) break;
+        if (htSegment(anchor) && htSegment(rest[i]) && htSegment(anchor) !== htSegment(rest[i])) break;
         if (!recFitsInPose(rest[i], pose, width, height)) break;
         recs.push(rest[i]);
       }
@@ -1384,7 +1450,7 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (isSpChongmen(rec)) force = true;
+    if (isSpChongmen(rec) || isHtLingdao(rec)) force = true;
     let labelFix = false;
     if (!force) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
@@ -2364,12 +2430,14 @@ const Meridian3D = (() => {
       items.forEach((item) => {
         const y = Math.max(pad, Math.min(bot, item.py));
         if (y < lastY + slotH) {
-          const nudged = lastY + slotH;
-          if (nudged <= bot && nudged - item.py <= Math.max(6, item.textH * 0.28)) {
-            item.slotY = nudged;
-            kept.push(item);
-            lastY = nudged;
+          const nudged = Math.min(bot, lastY + slotH);
+          item.slotY = nudged;
+          if (Math.abs(nudged - item.py) >= 6) {
+            item.dogleg = true;
+            item.elbowX = item.px + Math.abs(nudged - item.py);
           }
+          kept.push(item);
+          lastY = nudged;
           return;
         }
         item.slotY = y;
@@ -2697,9 +2765,12 @@ const Meridian3D = (() => {
             const fs = (item.textH || 32) / 1.35;
             const band = fs * 2;
             const gap = 12;
-            const inset = col.indent
-              ? (gutterCol ? band + gap : Math.max(outerW + 32, 72))
-              : 0;
+            const innerW = Math.max(0, ...columns.filter((c) => c.stick && c.indent).flatMap((c) => c.items.map((it) => it.textW)));
+            const inset = col.liao
+              ? Math.max(outerW + 32, 72) + Math.max(innerW + 20, 52)
+              : col.indent
+                ? (gutterCol ? band + gap : Math.max(outerW + 32, 72))
+                : 0;
             let textX = width - pad - item.textW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
