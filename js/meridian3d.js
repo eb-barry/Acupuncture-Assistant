@@ -1091,7 +1091,7 @@ const Meridian3D = (() => {
     const seg = htSegment(rec);
     if (seg === 'dorsal') {
       // Side of the body so the dorsum of the little finger (少衝) faces the user.
-      return new THREE.Vector3(lateral * 0.94, 0.06, -0.33).normalize();
+      return new THREE.Vector3(lateral * 0.98, 0.08, -0.18).normalize();
     }
     if (seg === 'distal') {
       // Palm facing the user: 靈道–少府, never the dorsal hand.
@@ -1108,7 +1108,7 @@ const Meridian3D = (() => {
     const n = dir.clone().normalize();
     const seg = htSegment(rec);
     if (seg === 'dorsal') {
-      return (n.x * lateral) >= 0.75 && n.z <= 0.12 && n.z >= -0.55 && Math.abs(n.y) < 0.32;
+      return (n.x * lateral) >= 0.82 && n.z <= 0.12 && n.z >= -0.42 && Math.abs(n.y) < 0.28;
     }
     if (seg === 'distal') {
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
@@ -1146,23 +1146,23 @@ const Meridian3D = (() => {
     });
     const target = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const spanFloor = dorsal ? 0.22 : (distal ? 0.12 : 0.10);
+    const spanFloor = dorsal ? 0.30 : (distal ? 0.12 : 0.10);
     const span = Math.max(size.y, size.length() * 0.62, bodyHeight * spanFloor);
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const pad = dorsal ? 0.88 : (distal ? 0.90 : 0.82);
+    const pad = dorsal ? 0.92 : (distal ? 0.90 : 0.82);
     const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
     const dist = dorsal
-      ? Math.max(base * 0.88, Math.min(distFit, base * 1.35))
+      ? Math.max(base * 1.05, Math.min(distFit, base * 1.55))
       : distal
         ? Math.max(base * 0.52, Math.min(distFit, base * 0.92))
         : Math.max(base * 0.40, Math.min(distFit, base * 0.70));
     const medial = rec && rec.side === 'left' ? 1 : -1;
     const lateral = -medial;
     if (dorsal) {
-      target.x -= lateral * bodyHeight * 0.028;
-      target.y += bodyHeight * 0.07;
-      target.z += bodyHeight * 0.006;
+      target.x -= lateral * bodyHeight * 0.035;
+      target.y += bodyHeight * 0.10;
+      target.z += bodyHeight * 0.004;
     } else if (distal) {
       target.x -= medial * bodyHeight * 0.004;
     } else {
@@ -1292,7 +1292,7 @@ const Meridian3D = (() => {
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
       id === 'HT' && htSegment(rec) === 'dorsal'
-        ? new THREE.Vector3(lateral * 0.94, 0.06, -0.33).normalize()
+        ? new THREE.Vector3(lateral * 0.98, 0.08, -0.18).normalize()
         : null,
       id === 'HT' && htSegment(rec) !== 'dorsal'
         ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.62, -0.74, 0.26).normalize()
@@ -2459,6 +2459,10 @@ const Meridian3D = (() => {
       return false;
     }
     if (isFocusRec(rec)) return true;
+    if (currentPoint && htSegment(currentPoint) === 'dorsal'
+      && rec.meridianId === 'HT' && htSegment(rec) !== 'dorsal') {
+      return false;
+    }
     const { THREE } = three;
     const world = new THREE.Vector3().fromArray(rec.position);
     const cam = camera.position;
