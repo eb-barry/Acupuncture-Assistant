@@ -1291,9 +1291,6 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
-      id === 'HT' && htSegment(rec) === 'dorsal'
-        ? new THREE.Vector3(lateral * 0.98, 0.08, -0.18).normalize()
-        : null,
       id === 'HT' && htSegment(rec) !== 'dorsal'
         ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.62, -0.74, 0.26).normalize()
         : null,
