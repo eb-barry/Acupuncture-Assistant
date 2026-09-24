@@ -892,7 +892,8 @@ const Meridian3D = (() => {
     if (id === 'HT') return true;
     if (id === 'PC') return seq >= 2;
     if (id === 'SP' && seq >= 12) return false;
-    if (id === 'SP' || id === 'KI' || id === 'LR') {
+    if (id === 'KI') return seq >= 1 && seq <= 10;
+    if (id === 'SP' || id === 'LR') {
       const y = Number(rec.position && rec.position[1]);
       return Number.isFinite(y) && y < bodyHeight * 0.62;
     }
@@ -969,6 +970,10 @@ const Meridian3D = (() => {
     return isHtProximalArm(rec);
   }
 
+  function skipFlatFacing(rec) {
+    return isCavityPoint(rec) || kiSegment(rec) === 'plantar';
+  }
+
   function isInnerForearmLu(rec) {
     return isInnerLimb(rec) && rec && rec.meridianId === 'LU';
   }
@@ -996,6 +1001,7 @@ const Meridian3D = (() => {
     if (id === 'LI') return new THREE.Vector3(lateral, 0, 0.55).normalize();
     if (id === 'HT') return innerLimbViewNormal(rec);
     if (id === 'PC') return innerLimbViewNormal(rec);
+    if (id === 'KI') return kiViewDir(rec);
     if (id === 'SP') return isSpTorso(rec) ? spTorsoViewDir(rec) : new THREE.Vector3(0, 0, 1);
     return new THREE.Vector3(0, 0, 1);
   }
@@ -1062,6 +1068,7 @@ const Meridian3D = (() => {
       return n.normalize();
     }
     if (id === 'HT') return htViewDir(rec);
+    if (id === 'KI') return kiViewDir(rec);
     if (id === 'PC') {
       return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
     }
@@ -1188,6 +1195,78 @@ const Meridian3D = (() => {
     return { pos: target.clone().addScaledVector(n, dist), target, dir: n };
   }
 
+  function kiSegment(rec) {
+    if (!rec || rec.meridianId !== 'KI') return '';
+    const seq = Number(rec.sequence) || 0;
+    if (seq <= 1) return 'plantar';
+    if (seq <= 10) return 'medial';
+    return 'torso';
+  }
+
+  function isKiSegmentStart(rec) {
+    if (!rec || rec.meridianId !== 'KI') return false;
+    const seq = Number(rec.sequence) || 0;
+    return seq === 1 || seq === 2 || seq === 11;
+  }
+
+  function kiViewDir(rec) {
+    const { THREE } = three;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    const lateral = -medial;
+    const seg = kiSegment(rec);
+    if (seg === 'plantar') {
+      // Under the sole, looking up so 湧泉 faces the user.
+      return new THREE.Vector3(medial * 0.08, -0.98, -0.18).normalize();
+    }
+    if (seg === 'medial') {
+      // Inner right/left leg: 然谷–陰谷 face the user from the medial side.
+      return new THREE.Vector3(medial * 0.90, -0.16, 0.40).normalize();
+    }
+    // Anterior torso: 橫骨–俞府.
+    return new THREE.Vector3(lateral * 0.10, 0.04, 0.99).normalize();
+  }
+
+  function kiDirOk(dir, rec) {
+    if (!dir || dir.lengthSq() < 1e-8) return false;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    const n = dir.clone().normalize();
+    const seg = kiSegment(rec);
+    if (seg === 'plantar') {
+      return n.y <= -0.82 && Math.abs(n.x) < 0.42 && n.z <= 0.12;
+    }
+    if (seg === 'medial') {
+      return (n.x * medial) >= 0.62 && n.z >= -0.12 && n.z <= 0.62
+        && n.y <= 0.22 && n.y >= -0.48;
+    }
+    return n.z >= 0.78 && Math.abs(n.y) < 0.32 && Math.abs(n.x) < 0.42;
+  }
+
+  function kiPoseUp(dir) {
+    const { THREE } = three;
+    const look = dir.clone().multiplyScalar(-1);
+    const up = new THREE.Vector3(0, 0, 1);
+    if (Math.abs(up.dot(look)) > 0.92) up.set(1, 0, 0);
+    return up;
+  }
+
+  function poseForKi(rec, dir) {
+    const { THREE } = three;
+    const nWant = kiDirOk(dir, rec) ? dir.clone().normalize() : kiViewDir(rec);
+    const dist = framingDistance();
+    const target = new THREE.Vector3().fromArray(rec.position);
+    const probe = {
+      meridianId: 'KI',
+      side: rec && rec.side,
+      sequence: rec && rec.sequence,
+      position: [target.x, target.y, target.z],
+      normal: rec && rec.normal,
+    };
+    const n = ensureOutsideDir(probe, nWant, dist);
+    const pose = { pos: target.clone().addScaledVector(n, dist), target, dir: n };
+    if (kiSegment(rec) === 'plantar') pose.up = kiPoseUp(n);
+    return pose;
+  }
+
   function flattenHorizontal(normal) {
     const { THREE } = three;
     const n = new THREE.Vector3().fromArray(normal || [0, 0, 1]);
@@ -1206,6 +1285,7 @@ const Meridian3D = (() => {
   function viewNormal(normal, rec) {
     const id = rec && rec.meridianId;
     const seq = Number(rec && rec.sequence) || 0;
+    if (id === 'KI') return kiViewDir(rec);
     if (isSpTorso(rec)) return spTorsoViewDir(rec);
     if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
     const n = flattenHorizontal(normal);
@@ -1226,6 +1306,10 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const list = (recs || []).filter(Boolean);
     if (!list.length) return new THREE.Vector3(0, 0, 1);
+    const ki = list.filter((rec) => kiSegment(rec));
+    if (ki.length && ki.length * 2 >= list.length) {
+      return kiViewDir(ki[0]);
+    }
     const inner = list.filter(isInnerLimb);
     if (inner.length && inner.length * 2 >= list.length) {
       return innerLimbViewNormal(inner[0]);
@@ -1286,8 +1370,10 @@ const Meridian3D = (() => {
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
-      if (id !== 'HT' && !box.isEmpty() && box.containsPoint(p)) return false;
+      const allowInside = id === 'HT' || kiSegment(rec) === 'plantar';
+      if (!allowInside && !box.isEmpty() && box.containsPoint(p)) return false;
       if (id === 'HT' && !htDirOk(d, rec)) return false;
+      if (id === 'KI' && !kiDirOk(d, rec)) return false;
       if (id === 'SP' && (Number(rec.sequence) || 0) >= 12 && d.z < 0.55) return false;
       return skipLos || poseSeesPoint(p, target);
     };
@@ -1298,6 +1384,7 @@ const Meridian3D = (() => {
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
+      id === 'KI' ? kiViewDir(rec) : null,
       id === 'HT' && htSegment(rec) !== 'dorsal'
         ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.62, -0.74, 0.26).normalize()
         : null,
@@ -1318,6 +1405,7 @@ const Meridian3D = (() => {
     const { THREE } = three;
     if (isSpTorso(rec)) return poseForSpTorso(rec, dir);
     if (rec && rec.meridianId === 'HT') return poseForHt(rec, dir);
+    if (rec && rec.meridianId === 'KI') return poseForKi(rec, dir);
     const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
     const n = ensureOutsideDir(
       rec,
@@ -1340,10 +1428,18 @@ const Meridian3D = (() => {
     return { width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
   }
 
+  function poseUpVec(pose) {
+    const { THREE } = three;
+    if (pose && pose.up && pose.up.lengthSq && pose.up.lengthSq() > 1e-8) {
+      return pose.up.clone().normalize();
+    }
+    return new THREE.Vector3(0, 1, 0);
+  }
+
   function poseProjectionCamera(pose, width, height) {
     const cam = camera.clone();
     cam.position.copy(pose.pos);
-    cam.up.set(0, 1, 0);
+    cam.up.copy(poseUpVec(pose));
     cam.lookAt(pose.target);
     cam.aspect = width / Math.max(height, 1);
     cam.near = Math.max(bodyHeight / 200, 0.01);
@@ -1382,7 +1478,7 @@ const Meridian3D = (() => {
       ? INNER_ARM_FACE_DOT_MIN
       : FACE_DOT_MIN;
     if (n.dot(toCam) < minDot) return false;
-    if (!isCavityPoint(rec)) {
+    if (!skipFlatFacing(rec)) {
       const { flat } = facingAmounts(rec, toCam);
       if (flat < 0.16) return false;
       if (!poseSeesPoint(pose.pos, world)) return false;
@@ -1406,6 +1502,7 @@ const Meridian3D = (() => {
       for (let i = 0; i < rest.length; i++) {
         if (isInnerLimb(anchor) && isSpTorso(rest[i])) break;
         if (htSegment(anchor) && htSegment(rest[i]) && htSegment(anchor) !== htSegment(rest[i])) break;
+        if (kiSegment(anchor) && kiSegment(rest[i]) && kiSegment(anchor) !== kiSegment(rest[i])) break;
         if (!recFitsInPose(rest[i], pose, width, height)) break;
         recs.push(rest[i]);
       }
@@ -1441,7 +1538,7 @@ const Meridian3D = (() => {
       ? INNER_ARM_FACE_DOT_MIN
       : FACE_DOT_MIN;
     if (n.dot(toCam) < minDot) return true;
-    if (!isCavityPoint(rec)) {
+    if (!skipFlatFacing(rec)) {
       const { flat } = facingAmounts(rec, toCam);
       if (flat < 0.16) return true;
       if (isPointOccluded(world, camera.position.distanceTo(world))) return true;
@@ -1471,6 +1568,8 @@ const Meridian3D = (() => {
       applyCameraLimits();
       const startPos = camera.position.clone();
       const startTarget = controls.target.clone();
+      const startUp = camera.up.clone();
+      const endUp = poseUpVec(pose);
       let dur = moveDuration(startPos, pose.pos, startTarget, pose.target);
       if (window.__m3dTest && window.__m3dTest.fastAuto) dur = 50;
       controls.enableDamping = false;
@@ -1486,7 +1585,9 @@ const Meridian3D = (() => {
         camera.position.lerpVectors(startPos, pose.pos, e);
         controls.target.lerpVectors(startTarget, pose.target, e);
         camera.zoom = 1;
-        camera.up.set(0, 1, 0);
+        camera.up.lerpVectors(startUp, endUp, e);
+        if (camera.up.lengthSq() < 1e-8) camera.up.copy(endUp);
+        else camera.up.normalize();
         camera.lookAt(controls.target);
         camera.near = Math.max(bodyHeight / 200, 0.01);
         camera.far = bodyHeight * 40;
@@ -1511,7 +1612,7 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec)) force = true;
+    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec)) force = true;
     let labelFix = false;
     if (!force) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
@@ -1543,7 +1644,7 @@ const Meridian3D = (() => {
     controls.enableDamping = false;
     camera.zoom = 1;
     camera.position.copy(pose.pos);
-    camera.up.set(0, 1, 0);
+    camera.up.copy(poseUpVec(pose));
     controls.target.copy(pose.target);
     camera.lookAt(pose.target);
     controls.update();
@@ -3940,6 +4041,7 @@ const Meridian3D = (() => {
           view: viewNormal(rec.normal, rec).toArray(),
           autoView: autoViewDir ? autoViewDir.toArray() : null,
           cam: pos.toArray(),
+          camUp: camera.up.toArray(),
           target: tgt.toArray(),
           dist: pos.distanceTo(tgt),
           frameDist: framingDistance(),
