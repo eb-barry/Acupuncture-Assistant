@@ -174,8 +174,6 @@ const Meridian3D = (() => {
 
   function isBlAnterior(rec) {
     if (!rec || rec.meridianId !== 'BL') return false;
-    const z = Number(rec.normal && rec.normal[2]);
-    if (Number.isFinite(z)) return z > 0.12;
     const seq = Number(rec.sequence) || 0;
     return seq <= 7 || seq >= 61;
   }
@@ -216,12 +214,13 @@ const Meridian3D = (() => {
 
   function calloutParkFor(rec, fallback = 'right', item, width) {
     if (isBlLiao(rec) && rec.side === 'left') return 'left';
-    if (rec && rec.meridianId === 'BL' && item && Number.isFinite(item.px) && width) {
-      return item.px < width * 0.45 ? 'left' : 'right';
+    if (rec && rec.meridianId === 'BL' && isBlAnterior(rec) && rec.side === 'left') {
+      if (item && Number.isFinite(item.px) && width) {
+        return item.px < width * 0.45 ? 'left' : 'right';
+      }
+      return 'left';
     }
-    if (rec && rec.meridianId === 'BL') {
-      return rec.side === 'left' ? 'left' : 'right';
-    }
+    if (rec && rec.meridianId === 'BL') return 'right';
     return fallback;
   }
 
@@ -3977,6 +3976,18 @@ const Meridian3D = (() => {
       },
       stopAfter: '',
       trace: [],
+      laidAll() {
+        updateCallouts();
+        return lastLaidCallouts.map((it) => ({
+          name: it.rec && it.rec.name,
+          side: it.rec && it.rec.side,
+          seq: it.rec && it.rec.sequence,
+          park: it.park,
+          x: it.textX,
+          px: it.px,
+          py: it.py,
+        }));
+      },
       callouts() {
         const svg = $('m3d-callouts');
         if (!svg || svg.hasAttribute('hidden')) return [];
