@@ -178,11 +178,16 @@ const Meridian3D = (() => {
     return seq <= 7 || seq >= 61;
   }
 
-  function blShouldLabel(rec) {
+  function blShouldLabel(rec, item, width) {
     if (!rec || rec.meridianId !== 'BL') return true;
     if (isFocusRec(rec)) return true;
-    if (isBlLiao(rec)) return rec.side === 'left';
-    if (isBlAnterior(rec)) return rec.side === 'left';
+    if (isBlLiao(rec)) return true;
+    const mid = width ? width * 0.5 : null;
+    if (isBlAnterior(rec)) {
+      if (item && Number.isFinite(item.px) && mid != null) return item.px >= mid;
+      return rec.side === 'left';
+    }
+    if (item && Number.isFinite(item.px) && mid != null) return item.px >= mid;
     return rec.side === 'right' || rec.side === 'midline';
   }
 
@@ -213,12 +218,12 @@ const Meridian3D = (() => {
   }
 
   function calloutParkFor(rec, fallback = 'right', item, width) {
-    if (isBlLiao(rec) && rec.side === 'left') return 'left';
-    if (rec && rec.meridianId === 'BL' && isBlAnterior(rec) && rec.side === 'left') {
+    if (isBlLiao(rec)) return 'left';
+    if (rec && rec.meridianId === 'BL' && isBlAnterior(rec)) {
       if (item && Number.isFinite(item.px) && width) {
         return item.px < width * 0.45 ? 'left' : 'right';
       }
-      return 'left';
+      return rec.side === 'left' ? 'left' : 'right';
     }
     if (rec && rec.meridianId === 'BL') return 'right';
     return fallback;
@@ -2818,7 +2823,7 @@ const Meridian3D = (() => {
     const pad = 8;
     const buckets = { left: [], right: [] };
     visible.forEach((it) => {
-      if (!blShouldLabel(it.rec)) return;
+      if (!blShouldLabel(it.rec, it, width)) return;
       const meridianPark = sides.get(it.rec.meridianId) || 'right';
       const park = calloutParkFor(it.rec, meridianPark, it, width);
       buckets[park].push({ ...it, park });
