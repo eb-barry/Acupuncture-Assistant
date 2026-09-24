@@ -182,12 +182,8 @@ const Meridian3D = (() => {
     if (!rec || rec.meridianId !== 'BL') return true;
     if (isFocusRec(rec)) return true;
     if (isBlLiao(rec)) return true;
-    const mid = width ? width * 0.5 : null;
-    if (isBlAnterior(rec)) {
-      if (item && Number.isFinite(item.px) && mid != null) return item.px >= mid;
-      return rec.side === 'left';
-    }
-    if (item && Number.isFinite(item.px) && mid != null) return item.px >= mid;
+    if (isBlAnterior(rec)) return rec.side === 'left';
+    if (item && Number.isFinite(item.px) && width) return item.px >= width * 0.5;
     return rec.side === 'right' || rec.side === 'midline';
   }
 
@@ -2883,6 +2879,8 @@ const Meridian3D = (() => {
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
+            } else if (col.stick && col.indent) {
+              textX = Math.max(textX, item.px + 8);
             } else if (col.stick && !col.indent) {
               if (textX + 6 < item.px) textX = Math.min(width - nameW - 2, item.px + 6);
             } else if (!col.stick && !col.liao && !col.foot && !item.dogleg) {
