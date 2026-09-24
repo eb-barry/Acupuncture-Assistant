@@ -2878,9 +2878,9 @@ const Meridian3D = (() => {
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
-            } else if (col.stick || col.liao) {
+            } else if (col.stick && !col.indent) {
               if (textX + 6 < item.px) textX = Math.min(width - nameW - 2, item.px + 6);
-            } else if (!col.foot && !item.dogleg) {
+            } else if (!col.stick && !col.liao && !col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
