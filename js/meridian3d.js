@@ -3114,7 +3114,7 @@ const Meridian3D = (() => {
             const band = fs * 2;
             const gap = 12;
             const inset = col.liao
-              ? Math.max(outerW + 10, 36)
+              ? 0
               : col.indent
                 ? (gutterCol ? band + gap : Math.max(outerW + 24, 56))
                 : 0;
@@ -3122,7 +3122,9 @@ const Meridian3D = (() => {
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
-            } else if (col.stick || col.liao) {
+            } else if (col.liao) {
+              textX = width - pad - nameW;
+            } else if (col.stick) {
               if (textX + 6 < item.px) textX = Math.min(width - nameW - 2, item.px + 6);
             } else if (!col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
