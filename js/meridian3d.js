@@ -168,13 +168,17 @@ const Meridian3D = (() => {
     ['委中', '委陽'],
   ];
 
+  function isBlLiao(rec) {
+    return !!(rec && rec.meridianId === 'BL' && BL_LIAO_NAMES.has(rec.name));
+  }
+
   function isBlFootLateral(rec) {
     return !!(rec && rec.meridianId === 'BL' && BL_FOOT_NAMES.has(rec.name));
   }
 
   function blCalloutBand(rec) {
     if (!rec || rec.meridianId !== 'BL') return '';
-    if (BL_LIAO_NAMES.has(rec.name)) return 'outer';
+    if (BL_LIAO_NAMES.has(rec.name)) return 'liao';
     if (rec.name === '委中') return 'inner';
     if (rec.name === '委陽') return 'outer';
     const seq = Number(rec.sequence) || 0;
@@ -185,15 +189,17 @@ const Meridian3D = (() => {
 
   function blPairedInner(rec) {
     const seq = Number(rec && rec.sequence) || 0;
-    return !!(rec && rec.meridianId === 'BL' && seq >= 12 && seq <= 23);
+    // 風門 (12) / 附分 (41) share a vertebral level but have no surface pathway.
+    return !!(rec && rec.meridianId === 'BL' && seq >= 13 && seq <= 23);
   }
 
   function blPairedOuter(rec) {
     const seq = Number(rec && rec.sequence) || 0;
-    return !!(rec && rec.meridianId === 'BL' && seq >= 41 && seq <= 52);
+    return !!(rec && rec.meridianId === 'BL' && seq >= 42 && seq <= 52);
   }
 
   function calloutParkFor(rec, fallback = 'right') {
+    if (isBlLiao(rec)) return 'left';
     return fallback;
   }
 
@@ -223,7 +229,8 @@ const Meridian3D = (() => {
         byName.set(key, it);
         return;
       }
-      const keep = park === 'right'
+      const liao = it.rec && BL_LIAO_NAMES.has(it.rec.name);
+      const keep = (liao || park === 'right')
         ? (it.px >= prev.px ? it : prev)
         : (it.px <= prev.px ? it : prev);
       byName.set(key, keep);
@@ -1896,7 +1903,7 @@ const Meridian3D = (() => {
       const a = toWorld(cur[cur.length - 1].position);
       const b = toWorld(node.position);
       const dist = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-      if (dist > maxJump) {
+      if (dist > maxJump || isBlFengmenFufenNodeJump(cur[cur.length - 1], node)) {
         if (cur.length >= 2) chunks.push(cur);
         cur = [node];
         return;
@@ -1936,6 +1943,17 @@ const Meridian3D = (() => {
     const doc = currentMap();
     if (!doc) return null;
     return (doc.acupoints || []).find((p) => p.id === pointId) || null;
+  }
+
+  function isBlFengmenFufenPair(aName, bName) {
+    const names = new Set([aName, bName]);
+    return names.has('風門') && names.has('附分');
+  }
+
+  function isBlFengmenFufenNodeJump(a, b) {
+    const pa = acupointByPointId(a && a.pointId);
+    const pb = acupointByPointId(b && b.pointId);
+    return isBlFengmenFufenPair(pa && pa.name, pb && pb.name);
   }
 
   function nearestAcupointMeta(worldPos, meridianId) {
@@ -2552,6 +2570,11 @@ const Meridian3D = (() => {
     y0 = Math.max(pad, Math.min(height - pad - span, y0));
     items.forEach((item, i) => {
       item.slotY = y0 + i * slotH;
+      if (Math.abs(item.slotY - item.py) >= 6) {
+        item.dogleg = true;
+        const toward = item.park === 'left' ? -1 : 1;
+        item.elbowX = item.px + toward * Math.abs(item.slotY - item.py);
+      }
     });
   }
 
@@ -2848,13 +2871,24 @@ const Meridian3D = (() => {
               : Math.max(item.px + 6, joinX - horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           } else {
+            const nameW = col.liao ? Math.max(colMaxW, item.textW) : item.textW;
             let textX = pad;
-            if (textX + item.textW + 10 > item.px) textX = Math.max(2, item.px - item.textW - 10);
+            if (col.liao) {
+              textX = pad;
+            } else if (textX + nameW + 10 > item.px) {
+              textX = Math.max(2, item.px - nameW - 10);
+            }
             if (textX < 2) textX = 2;
-            const joinX = textX + item.textW;
+            const joinX = textX + nameW;
+            if (col.liao && Math.abs(slotY - item.py) >= 6) {
+              item.dogleg = true;
+              item.elbowX = item.px - Math.abs(slotY - item.py);
+            }
             const horiz = Math.min(36, Math.max(10, Math.abs(item.px - joinX) * 0.22));
-            const elbowX = Math.min(item.px - 8, joinX + horiz);
-            laid.push({ ...item, textX, elbowX, slotY, park });
+            const elbowX = item.dogleg
+              ? item.elbowX
+              : Math.min(item.px - 8, joinX + horiz);
+            laid.push({ ...item, textX, elbowX, slotY, park, textW: nameW });
           }
         });
       });
@@ -3091,6 +3125,40 @@ const Meridian3D = (() => {
     return samples;
   }
 
+  function splitBlFengmenFufenRibbon(route, samples) {
+    if (!route || route.meridianId !== 'BL' || !samples || samples.length < 2) return [samples];
+    const doc = currentMap();
+    const side = route.side;
+    const pts = ((doc && doc.acupoints) || []).filter((p) => (
+      p.meridianId === 'BL' && p.side === side
+    ));
+    const fm = pts.find((p) => p.name === '風門');
+    const ff = pts.find((p) => p.name === '附分');
+    if (!fm || !ff) return [samples];
+    const fmW = toWorld(fm.position);
+    const ffW = toWorld(ff.position);
+    const near = Math.max(worldPerMm() * 16, 0.014);
+    const chunks = [[]];
+    samples.forEach((sample) => {
+      const cur = chunks[chunks.length - 1];
+      if (!cur.length) {
+        cur.push(sample);
+        return;
+      }
+      const prev = cur[cur.length - 1];
+      const prevFm = dist3(prev.position, fmW) <= near;
+      const prevFf = dist3(prev.position, ffW) <= near;
+      const nextFm = dist3(sample.position, fmW) <= near;
+      const nextFf = dist3(sample.position, ffW) <= near;
+      if ((prevFm && nextFf) || (prevFf && nextFm)) {
+        chunks.push([sample]);
+        return;
+      }
+      cur.push(sample);
+    });
+    return chunks.filter((chunk) => chunk.length >= 2);
+  }
+
   function resetAnnotScene() {
     if (annotRoot && three) {
       disposeObject(annotRoot, { keepShared: true });
@@ -3111,7 +3179,8 @@ const Meridian3D = (() => {
       const color = route.color || lineColorFor(route.meridianId);
       if (routeUsesBakedRibbons(route)) {
         route.ribbons.forEach((ribbon, ribbonIdx) => {
-          addRibbon(THREE, bakedRibbonSamples(route, ribbon, ribbonIdx), color);
+          splitBlFengmenFufenRibbon(route, bakedRibbonSamples(route, ribbon, ribbonIdx))
+            .forEach((chunk) => addRibbon(THREE, chunk, color));
         });
         return;
       }
