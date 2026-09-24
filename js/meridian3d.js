@@ -1219,8 +1219,9 @@ const Meridian3D = (() => {
       return new THREE.Vector3(medial * 0.08, -0.98, -0.18).normalize();
     }
     if (seg === 'medial') {
-      // Inner right/left leg: 然谷–陰谷 face the user from the medial side.
-      return new THREE.Vector3(medial * 0.90, -0.16, 0.40).normalize();
+      // Posterior-oblique inner leg: 然谷–復溜 black dots are not
+      // covered by the other foot's side wall.
+      return new THREE.Vector3(medial * 0.58, -0.10, -0.81).normalize();
     }
     // Anterior torso: 橫骨–俞府.
     return new THREE.Vector3(lateral * 0.10, 0.04, 0.99).normalize();
@@ -1235,8 +1236,8 @@ const Meridian3D = (() => {
       return n.y <= -0.82 && Math.abs(n.x) < 0.42 && n.z <= 0.12;
     }
     if (seg === 'medial') {
-      return (n.x * medial) >= 0.62 && n.z >= -0.12 && n.z <= 0.62
-        && n.y <= 0.22 && n.y >= -0.48;
+      return (n.x * medial) >= 0.32 && n.z <= -0.45 && n.z >= -0.95
+        && n.y <= 0.18 && n.y >= -0.40;
     }
     return n.z >= 0.78 && Math.abs(n.y) < 0.32 && Math.abs(n.x) < 0.42;
   }
@@ -1381,7 +1382,8 @@ const Meridian3D = (() => {
     const n = dir && dir.lengthSq() > 1e-8 ? dir.clone().normalize() : viewNormal(rec.normal, rec);
     if (ok(n)) return n;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
-    const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE';
+    const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE'
+      || kiSegment(rec) === 'medial';
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
@@ -1399,6 +1401,7 @@ const Meridian3D = (() => {
     for (let i = 0; i < candidates.length; i++) {
       if (ok(candidates[i])) return candidates[i].normalize();
     }
+    if (id === 'KI') return kiViewDir(rec);
     return new THREE.Vector3(0, 0, preferBack ? -1 : 1);
   }
 
