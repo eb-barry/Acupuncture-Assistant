@@ -163,6 +163,13 @@
       <svg class="m3d-callouts" id="m3d-callouts" hidden></svg>
       <p class="m3d-hint" id="m3d-hint">請先開啟右上選單，設定後按 Play</p>
       <div class="m3d-loading" id="m3d-loading" hidden>
+        <div class="m3d-load-meter" id="m3d-load-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="模型載入進度">
+          <svg class="m3d-load-pie" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="m3d-load-track" cx="60" cy="60" r="44"></circle>
+            <path id="m3d-load-fan" class="m3d-load-fan" d="M60 60L60 16"></path>
+          </svg>
+        </div>
+        <p class="m3d-load-pct" id="m3d-load-pct">0%</p>
         <p>模型載入中，請稍候</p>
       </div>
       <div class="m3d-modal" id="m3d-modal" hidden>

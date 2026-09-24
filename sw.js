@@ -6,7 +6,7 @@
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v75';
+const SHELL_CACHE   = 'acupuncture-shell-v76';
 const ASSET_CACHE   = 'acupuncture-assets-v3';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 
@@ -29,6 +29,10 @@ const SHELL_FILES = [
   './assets/icons/menu-3d.png',
   './manifest.json',
   'https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js',
+  'https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js',
+  'https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/controls/OrbitControls.js',
+  'https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/loaders/GLTFLoader.js',
+  'https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/libs/meshopt_decoder.module.js',
   'https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap',
 ];
 
