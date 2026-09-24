@@ -1563,10 +1563,11 @@ const Meridian3D = (() => {
     right.normalize();
     const dist = Math.max(pos.distanceTo(target), 1e-4);
     const fov = THREE.MathUtils.degToRad((camera && camera.fov) || 45);
-    const halfW = dist * Math.tan(fov / 2);
-    // Hole stays inside the 10% AUTO edge band (~screen x 0.71) while the
+    const aspect = (camera && camera.aspect) || 0.5;
+    const halfW = dist * Math.tan(fov / 2) * aspect;
+    // Hole stays inside the 10% AUTO edge band (~screen x 0.69) while the
     // back of the body sits toward the hamburger gutter.
-    const truck = right.multiplyScalar(-(halfW * 0.42));
+    const truck = right.multiplyScalar(-(halfW * 0.38));
     pos.add(truck);
     target.add(truck);
   }
@@ -1730,7 +1731,7 @@ const Meridian3D = (() => {
       const t0 = performance.now();
       noteCameraMoving(dur + 80);
       const step = () => {
-        if (autoAbort || (gen && gen !== playGeneration)) {
+        if (playingAuto && (autoAbort || (gen && gen !== playGeneration))) {
           resolve();
           return;
         }
@@ -3135,13 +3136,18 @@ const Meridian3D = (() => {
               : Math.max(item.px + 6, joinX - horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           } else {
-            const nameW = col.liao ? Math.max(colMaxW, item.textW) : item.textW;
-            let textX = pad;
-            if (col.liao) {
-              textX = pad;
-            } else if (textX + nameW + 10 > item.px) {
+            const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao);
+            const inset = col.liao
+              ? 0
+              : col.indent
+                ? (gutterCol ? Math.max(36, item.textW * 0.15) : Math.max(outerW + 12, 52))
+                : 0;
+            const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
+            let textX = pad + inset;
+            if (!col.stick && !col.liao && textX + nameW + 10 > item.px) {
               textX = Math.max(2, item.px - nameW - 10);
             }
+            if (textX + nameW > width - 2) textX = Math.max(2, width - nameW - 2);
             if (textX < 2) textX = 2;
             const joinX = textX + nameW;
             if (col.liao && Math.abs(slotY - item.py) >= 6) {
