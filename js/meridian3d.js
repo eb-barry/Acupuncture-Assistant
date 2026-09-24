@@ -1034,7 +1034,7 @@ const Meridian3D = (() => {
     const seq = Number(rec.sequence) || 0;
     if (rec.meridianId === 'LU') return isInnerLimb(rec);
     if (rec.meridianId === 'HT') return seq >= 1;
-    if (rec.meridianId === 'PC') return seq >= 3;
+    if (rec.meridianId === 'PC') return seq >= 3 && seq < 8;
     return false;
   }
 
@@ -1100,7 +1100,7 @@ const Meridian3D = (() => {
   }
 
   function skipFlatFacing(rec) {
-    return isCavityPoint(rec) || kiSegment(rec) === 'plantar';
+    return isCavityPoint(rec) || kiSegment(rec) === 'plantar' || isPcPalm(rec);
   }
 
   function isInnerForearmLu(rec) {
@@ -1198,9 +1198,7 @@ const Meridian3D = (() => {
     }
     if (id === 'HT') return htViewDir(rec);
     if (id === 'KI') return kiViewDir(rec);
-    if (id === 'PC') {
-      return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
-    }
+    if (id === 'PC') return pcViewDir(rec);
     const src = rec && rec.normal;
     const n = new THREE.Vector3().fromArray(src || [medial, 0.16, 0.5]);
     if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
@@ -1209,6 +1207,91 @@ const Meridian3D = (() => {
     n.y = Math.min(Math.max(n.y, 0.08), 0.32);
     n.z = Math.max(n.z, 0.38);
     return n.normalize();
+  }
+
+  function pcSegment(rec) {
+    if (!rec || rec.meridianId !== 'PC') return '';
+    const seq = Number(rec.sequence) || 0;
+    if (seq >= 8) return 'palm';
+    return 'arm';
+  }
+
+  function isPcPalm(rec) {
+    return pcSegment(rec) === 'palm';
+  }
+
+  function isPcPalmStart(rec) {
+    return !!(rec && rec.meridianId === 'PC' && rec.name === '勞宮');
+  }
+
+  function pcViewDir(rec) {
+    const { THREE } = three;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    if (isPcPalm(rec)) {
+      // From the feet / lower body, looking up into the palmar surface
+      // so 勞宮 and 中衝 face the user (not the dorsum of the hanging hand).
+      return new THREE.Vector3(medial * 0.36, -0.88, 0.12).normalize();
+    }
+    return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
+  }
+
+  function pcDirOk(dir, rec) {
+    if (!dir || dir.lengthSq() < 1e-8) return false;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    const n = dir.clone().normalize();
+    if (isPcPalm(rec)) {
+      return n.y <= -0.62 && (n.x * medial) >= 0.12 && Math.abs(n.z) < 0.55;
+    }
+    return n.z >= 0.72 && n.y >= -0.08 && n.y <= 0.42;
+  }
+
+  function pcPalmClusterRecs(rec) {
+    const doc = currentMap();
+    const side = rec && rec.side;
+    return ((doc && doc.acupoints) || []).filter((p) => (
+      p.meridianId === 'PC'
+      && p.side === side
+      && (Number(p.sequence) || 0) >= 8
+    ));
+  }
+
+  function pcPalmPoseUp(dir) {
+    const { THREE } = three;
+    const look = dir.clone().multiplyScalar(-1);
+    const up = new THREE.Vector3(0, 1, 0);
+    up.addScaledVector(look, -up.dot(look));
+    if (up.lengthSq() < 1e-6) up.set(0, 0, -1);
+    return up.normalize();
+  }
+
+  function poseForPcPalm(rec, dir) {
+    const { THREE } = three;
+    const nWant = pcDirOk(dir, rec) ? dir.clone().normalize() : pcViewDir(rec);
+    const cluster = pcPalmClusterRecs(rec);
+    const pts = cluster.length ? cluster : [rec];
+    const box = new THREE.Box3();
+    pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
+    const target = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const span = Math.max(size.y, size.length() * 0.72, bodyHeight * 0.10);
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const distFit = (span * 0.88) / Math.max(Math.tan(fov / 2), 1e-4);
+    const base = framingDistance();
+    const dist = Math.max(base * 0.48, Math.min(distFit, base * 0.92));
+    const probe = {
+      meridianId: 'PC',
+      side: rec && rec.side,
+      sequence: rec && rec.sequence,
+      position: [target.x, target.y, target.z],
+      normal: rec && rec.normal,
+    };
+    const n = ensureOutsideDir(probe, nWant, dist);
+    return {
+      pos: target.clone().addScaledVector(n, dist),
+      target,
+      dir: n,
+      up: pcPalmPoseUp(n),
+    };
   }
 
   function htSegment(rec) {
@@ -1441,6 +1524,10 @@ const Meridian3D = (() => {
     if (ki.length && ki.length * 2 >= list.length) {
       return kiViewDir(ki[0]);
     }
+    const palm = list.filter(isPcPalm);
+    if (palm.length && palm.length * 2 >= list.length) {
+      return pcViewDir(palm[0]);
+    }
     const inner = list.filter(isInnerLimb);
     if (inner.length && inner.length * 2 >= list.length) {
       return innerLimbViewNormal(inner[0]);
@@ -1497,14 +1584,16 @@ const Meridian3D = (() => {
       || id === 'KI'
       || id === 'LR'
       || id === 'HT'
+      || isPcPalm(rec)
     );
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
-      const allowInside = id === 'HT' || kiSegment(rec) === 'plantar';
+      const allowInside = id === 'HT' || kiSegment(rec) === 'plantar' || isPcPalm(rec);
       if (!allowInside && !box.isEmpty() && box.containsPoint(p)) return false;
       if (id === 'HT' && !htDirOk(d, rec)) return false;
       if (id === 'KI' && !kiDirOk(d, rec)) return false;
+      if (isPcPalm(rec) && !pcDirOk(d, rec)) return false;
       if (id === 'SP' && (Number(rec.sequence) || 0) >= 12 && d.z < 0.55) return false;
       return skipLos || poseSeesPoint(p, target);
     };
@@ -1517,6 +1606,7 @@ const Meridian3D = (() => {
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
       id === 'KI' ? kiViewDir(rec) : null,
+      isPcPalm(rec) ? pcViewDir(rec) : null,
       id === 'HT' && htSegment(rec) !== 'dorsal'
         ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.62, -0.74, 0.26).normalize()
         : null,
@@ -1539,6 +1629,7 @@ const Meridian3D = (() => {
     if (isSpTorso(rec)) return poseForSpTorso(rec, dir);
     if (rec && rec.meridianId === 'HT') return poseForHt(rec, dir);
     if (rec && rec.meridianId === 'KI') return poseForKi(rec, dir);
+    if (isPcPalm(rec)) return poseForPcPalm(rec, dir);
     const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
     const n = ensureOutsideDir(
       rec,
@@ -1658,6 +1749,7 @@ const Meridian3D = (() => {
         if (isInnerLimb(anchor) && isSpTorso(rest[i])) break;
         if (htSegment(anchor) && htSegment(rest[i]) && htSegment(anchor) !== htSegment(rest[i])) break;
         if (kiSegment(anchor) && kiSegment(rest[i]) && kiSegment(anchor) !== kiSegment(rest[i])) break;
+        if (pcSegment(anchor) && pcSegment(rest[i]) && pcSegment(anchor) !== pcSegment(rest[i])) break;
         if (!recFitsInPose(rest[i], pose, width, height)) break;
         recs.push(rest[i]);
       }
@@ -1767,7 +1859,7 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec)) force = true;
+    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec) || isPcPalmStart(rec)) force = true;
     let labelFix = false;
     if (!force) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
