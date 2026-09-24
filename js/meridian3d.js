@@ -2565,8 +2565,8 @@ const Meridian3D = (() => {
     const n = items.length;
     if (!n) return;
     const span = (n - 1) * slotH;
-    // Sit in the empty Home-side hip so leaders do not cross the 俞 names.
-    let y0 = height * 0.58;
+    const mid = items.reduce((sum, it) => sum + it.py, 0) / n;
+    let y0 = mid - span / 2;
     y0 = Math.max(pad, Math.min(height - pad - span, y0));
     items.forEach((item, i) => {
       item.slotY = y0 + i * slotH;
