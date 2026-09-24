@@ -172,6 +172,22 @@ const Meridian3D = (() => {
     return !!(rec && rec.meridianId === 'BL' && BL_LIAO_NAMES.has(rec.name));
   }
 
+  function isBlAnterior(rec) {
+    if (!rec || rec.meridianId !== 'BL') return false;
+    const z = Number(rec.normal && rec.normal[2]);
+    if (Number.isFinite(z)) return z > 0.12;
+    const seq = Number(rec.sequence) || 0;
+    return seq <= 7 || seq >= 61;
+  }
+
+  function blShouldLabel(rec) {
+    if (!rec || rec.meridianId !== 'BL') return true;
+    if (isFocusRec(rec)) return true;
+    if (isBlLiao(rec)) return rec.side === 'left';
+    if (isBlAnterior(rec)) return rec.side === 'left';
+    return rec.side === 'right' || rec.side === 'midline';
+  }
+
   function isBlFootLateral(rec) {
     return !!(rec && rec.meridianId === 'BL' && BL_FOOT_NAMES.has(rec.name));
   }
@@ -198,8 +214,14 @@ const Meridian3D = (() => {
     return !!(rec && rec.meridianId === 'BL' && seq >= 42 && seq <= 52);
   }
 
-  function calloutParkFor(rec, fallback = 'right') {
-    if (isBlLiao(rec)) return 'left';
+  function calloutParkFor(rec, fallback = 'right', item, width) {
+    if (isBlLiao(rec) && rec.side === 'left') return 'left';
+    if (rec && rec.meridianId === 'BL' && item && Number.isFinite(item.px) && width) {
+      return item.px < width * 0.45 ? 'left' : 'right';
+    }
+    if (rec && rec.meridianId === 'BL') {
+      return rec.side === 'left' ? 'left' : 'right';
+    }
     return fallback;
   }
 
@@ -229,8 +251,7 @@ const Meridian3D = (() => {
         byName.set(key, it);
         return;
       }
-      const liao = it.rec && BL_LIAO_NAMES.has(it.rec.name);
-      const keep = (liao || park === 'right')
+      const keep = park === 'right'
         ? (it.px >= prev.px ? it : prev)
         : (it.px <= prev.px ? it : prev);
       byName.set(key, keep);
@@ -253,11 +274,11 @@ const Meridian3D = (() => {
     return rec.code === focus.code && rec.meridianId === focus.meridianId && rec.side === focus.side;
   }
 
-  function ensureFocusItem(items, visible, park, sides) {
+  function ensureFocusItem(items, visible, park, sides, width) {
     const focusItem = visible.find((it) => isFocusRec(it.rec));
     if (!focusItem) return items;
     const meridianPark = (sides && sides.get(focusItem.rec.meridianId)) || 'right';
-    const want = calloutParkFor(focusItem.rec, meridianPark);
+    const want = calloutParkFor(focusItem.rec, meridianPark, focusItem, width);
     if (park !== want) return items;
     if (items.some((it) => isFocusRec(it.rec))) return items;
     return items.concat([{ ...focusItem, park }]);
@@ -2798,8 +2819,9 @@ const Meridian3D = (() => {
     const pad = 8;
     const buckets = { left: [], right: [] };
     visible.forEach((it) => {
+      if (!blShouldLabel(it.rec)) return;
       const meridianPark = sides.get(it.rec.meridianId) || 'right';
-      const park = calloutParkFor(it.rec, meridianPark);
+      const park = calloutParkFor(it.rec, meridianPark, it, width);
       buckets[park].push({ ...it, park });
     });
 
@@ -2808,7 +2830,7 @@ const Meridian3D = (() => {
       const hasBlPair = raw.some((it) => blCalloutBand(it.rec) === 'inner')
         && raw.some((it) => blCalloutBand(it.rec) === 'outer');
       let next = hasBlPair ? focusTorsoItems(raw) : raw;
-      next = ensureFocusItem(next, visible, park, sides);
+      next = ensureFocusItem(next, visible, park, sides, width);
       return next;
     };
     buckets.right = preparePark('right');
