@@ -1244,7 +1244,8 @@ const Meridian3D = (() => {
   function kiPoseUp(dir) {
     const { THREE } = three;
     const look = dir.clone().multiplyScalar(-1);
-    const up = new THREE.Vector3(0, 0, 1);
+    // Heel / body toward screen top so 湧泉 reads as 仰視, not an inverted sole.
+    const up = new THREE.Vector3(0, 0, -1);
     if (Math.abs(up.dot(look)) > 0.92) up.set(1, 0, 0);
     return up;
   }
@@ -2578,6 +2579,14 @@ const Meridian3D = (() => {
     if (currentPoint && htSegment(currentPoint) === 'dorsal'
       && rec.meridianId === 'HT' && htSegment(rec) !== 'dorsal') {
       return false;
+    }
+    const kiFocus = highlighted || currentPoint;
+    if (kiFocus && kiFocus.meridianId === 'KI' && rec.meridianId === 'KI') {
+      const curSeg = kiSegment(kiFocus);
+      const recSeg = kiSegment(rec);
+      const curTorso = curSeg === 'torso';
+      const recTorso = recSeg === 'torso';
+      if (curSeg && recSeg && curTorso !== recTorso) return false;
     }
     const { THREE } = three;
     const world = new THREE.Vector3().fromArray(rec.position);
