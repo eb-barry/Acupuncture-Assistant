@@ -2584,9 +2584,10 @@ const Meridian3D = (() => {
     if (kiFocus && kiFocus.meridianId === 'KI' && rec.meridianId === 'KI') {
       const curSeg = kiSegment(kiFocus);
       const recSeg = kiSegment(rec);
-      const curTorso = curSeg === 'torso';
-      const recTorso = recSeg === 'torso';
-      if (curSeg && recSeg && curTorso !== recTorso) return false;
+      if (curSeg && recSeg) {
+        if (curSeg === 'plantar' && recSeg !== 'plantar') return false;
+        if (curSeg === 'torso' && recSeg !== 'torso') return false;
+      }
     }
     const { THREE } = three;
     const world = new THREE.Vector3().fromArray(rec.position);
