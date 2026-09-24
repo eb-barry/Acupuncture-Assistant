@@ -892,7 +892,8 @@ body::before {
 }
 .m3d-loading {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px;
   background: rgba(238,244,247,0.82); z-index: 20;
 }
 .m3d-loading[hidden], .m3d-modal[hidden], .m3d-point-overlay[hidden], .m3d-hint[hidden] {
@@ -900,6 +901,28 @@ body::before {
 }
 .m3d-loading p {
   font-family: var(--font-serif); font-size: var(--fs-lg); color: var(--clr-ink);
+  margin: 0;
+}
+.m3d-load-meter {
+  width: 132px; height: 132px;
+}
+.m3d-load-pie {
+  width: 132px; height: 132px;
+  display: block;
+}
+.m3d-load-track {
+  fill: none;
+  stroke: rgba(44, 74, 82, 0.14);
+  stroke-width: 3;
+}
+.m3d-load-fan {
+  fill: #22c55e;
+  stroke: none;
+}
+.m3d-load-pct {
+  font-family: var(--font-sans); font-size: 22px; font-weight: 600;
+  color: var(--clr-ink);
+  margin: 0;
 }
 
 .m3d-modal {

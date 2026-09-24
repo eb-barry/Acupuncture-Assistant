@@ -75,6 +75,7 @@ const Meridian3D = (() => {
   let bodyMeshes = [];
   let bodyHeight = 1;
   let loadedGender = null;
+  let lastLoadProgress = 0;
   let raf = 0;
   let playingAuto = false;
   let autoPaused = false;
@@ -172,6 +173,15 @@ const Meridian3D = (() => {
     return !!(rec && rec.meridianId === 'BL' && BL_LIAO_NAMES.has(rec.name));
   }
 
+  function isBlBack(rec) {
+    if (!rec || rec.meridianId !== 'BL') return false;
+    if (isBlFootLateral(rec)) return false;
+    const seq = Number(rec.sequence) || 0;
+    if (seq >= 8 && seq <= 61) return true;
+    const z = Number(rec.normal && rec.normal[2]);
+    return Number.isFinite(z) && z < -0.35;
+  }
+
   function isBlFootLateral(rec) {
     return !!(rec && rec.meridianId === 'BL' && BL_FOOT_NAMES.has(rec.name));
   }
@@ -199,7 +209,8 @@ const Meridian3D = (() => {
   }
 
   function calloutParkFor(rec, fallback = 'right') {
-    if (isBlLiao(rec)) return 'left';
+    if (isBlLiao(rec)) return 'right';
+    if (isBlBack(rec)) return 'left';
     return fallback;
   }
 
@@ -419,6 +430,98 @@ const Meridian3D = (() => {
   function setLoading(on) {
     const el = $('m3d-loading');
     if (el) el.hidden = !on;
+    if (on) setLoadProgress(0);
+  }
+
+  function loadPiePath(t) {
+    const cx = 60;
+    const cy = 60;
+    const r = 44;
+    const p = Math.min(1, Math.max(0, Number(t) || 0));
+    if (p <= 0.001) return `M${cx} ${cy}L${cx} ${cy - r}`;
+    if (p >= 0.999) {
+      return `M${cx} ${cy - r}A${r} ${r} 0 1 1 ${cx} ${cy + r}A${r} ${r} 0 1 1 ${cx} ${cy - r}Z`;
+    }
+    const a = -Math.PI / 2 + p * Math.PI * 2;
+    const x = cx + r * Math.cos(a);
+    const y = cy + r * Math.sin(a);
+    const large = p > 0.5 ? 1 : 0;
+    return `M${cx} ${cy}L${cx} ${cy - r}A${r} ${r} 0 ${large} 1 ${x.toFixed(2)} ${y.toFixed(2)}Z`;
+  }
+
+  function setLoadProgress(t) {
+    const p = Math.min(1, Math.max(0, Number(t) || 0));
+    lastLoadProgress = p;
+    const fan = $('m3d-load-fan');
+    if (fan) fan.setAttribute('d', loadPiePath(p));
+    const pct = $('m3d-load-pct');
+    if (pct) pct.textContent = `${Math.round(p * 100)}%`;
+    const meter = $('m3d-load-meter');
+    if (meter) meter.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+  }
+
+  const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.185.1';
+  const THREE_LIB_URLS = [
+    `${THREE_CDN}/build/three.module.js`,
+    `${THREE_CDN}/examples/jsm/controls/OrbitControls.js`,
+    `${THREE_CDN}/examples/jsm/loaders/GLTFLoader.js`,
+    `${THREE_CDN}/examples/jsm/libs/meshopt_decoder.module.js`,
+  ];
+  const GLB_BYTES = { male: 611636, female: 717824 };
+  const glbBuffer = { male: null, female: null };
+
+  async function fetchBuffer(url, onProg, fallbackTotal) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`載入失敗（${url}）`);
+    const headerTotal = Number(res.headers.get('content-length')) || 0;
+    const totalHint = headerTotal || fallbackTotal || 0;
+    if (!res.body || !res.body.getReader) {
+      const buf = await res.arrayBuffer();
+      if (onProg) onProg(buf.byteLength, buf.byteLength);
+      return buf;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      if (onProg) onProg(loaded, totalHint || loaded);
+    }
+    const out = new Uint8Array(loaded);
+    let offset = 0;
+    chunks.forEach((chunk) => {
+      out.set(chunk, offset);
+      offset += chunk.byteLength;
+    });
+    if (onProg) onProg(loaded, loaded);
+    return out.buffer;
+  }
+
+  function makeLoadBudget(onUi) {
+    const items = [];
+    const report = () => {
+      let loaded = 0;
+      let total = 0;
+      items.forEach((item) => {
+        loaded += item.loaded;
+        total += Math.max(item.total, item.loaded, 1);
+      });
+      onUi(total > 0 ? loaded / total : 1);
+    };
+    return {
+      track(hint) {
+        const item = { loaded: 0, total: Math.max(1, hint || 1) };
+        items.push(item);
+        return (loaded, total) => {
+          item.loaded = Math.max(0, loaded);
+          if (total > 0) item.total = total;
+          report();
+        };
+      },
+    };
   }
 
   function setModal(on) {
@@ -695,6 +798,32 @@ const Meridian3D = (() => {
     const { MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js');
     three = { THREE, OrbitControls, GLTFLoader, MeshoptDecoder };
     return three;
+  }
+
+  async function ensurePlayAssets(onDownload) {
+    const budget = makeLoadBudget((p) => {
+      if (onDownload) onDownload(p);
+    });
+    const jobs = [];
+    if (!three) {
+      THREE_LIB_URLS.forEach((url) => {
+        const tick = budget.track(180000);
+        jobs.push(fetchBuffer(url, tick, 180000));
+      });
+    }
+    ['male', 'female'].forEach((key) => {
+      if (glbBuffer[key]) return;
+      const tick = budget.track(GLB_BYTES[key]);
+      jobs.push(
+        fetchBuffer(`assets/models/${key}.glb`, tick, GLB_BYTES[key])
+          .then((buf) => { glbBuffer[key] = buf; }),
+      );
+    });
+    if (!mapCache.male) jobs.push(loadMap('male'));
+    if (!mapCache.female) jobs.push(loadMap('female'));
+    if (jobs.length) await Promise.all(jobs);
+    else if (onDownload) onDownload(1);
+    await loadThree();
   }
 
   function isNailMesh(object) {
@@ -1418,7 +1547,29 @@ const Meridian3D = (() => {
     );
     const target = new THREE.Vector3().fromArray(rec.position);
     const pos = target.clone().addScaledVector(n, dist);
+    if (rec && isBlBack(rec)) {
+      offsetBlBackTowardHamburger(pos, target, n);
+    }
     return { pos, target, dir: n };
+  }
+
+  function offsetBlBackTowardHamburger(pos, target, camFromTarget) {
+    const { THREE } = three;
+    if (!pos || !target || !camFromTarget || camFromTarget.lengthSq() < 1e-10) return;
+    const look = camFromTarget.clone().normalize().multiplyScalar(-1);
+    const up = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(look, up);
+    if (right.lengthSq() < 1e-10) return;
+    right.normalize();
+    const dist = Math.max(pos.distanceTo(target), 1e-4);
+    const fov = THREE.MathUtils.degToRad((camera && camera.fov) || 45);
+    const aspect = (camera && camera.aspect) || 0.5;
+    const halfW = dist * Math.tan(fov / 2) * aspect;
+    // Hole stays inside the 10% AUTO edge band (~screen x 0.69) while the
+    // back of the body sits toward the hamburger gutter.
+    const truck = right.multiplyScalar(-(halfW * 0.38));
+    pos.add(truck);
+    target.add(truck);
   }
 
   function cameraPoseForPoint(position, normal, rec) {
@@ -1580,7 +1731,7 @@ const Meridian3D = (() => {
       const t0 = performance.now();
       noteCameraMoving(dur + 80);
       const step = () => {
-        if (autoAbort || (gen && gen !== playGeneration)) {
+        if (playingAuto && (autoAbort || (gen && gen !== playGeneration))) {
           resolve();
           return;
         }
@@ -2963,7 +3114,7 @@ const Meridian3D = (() => {
             const band = fs * 2;
             const gap = 12;
             const inset = col.liao
-              ? Math.max(outerW + 10, 36)
+              ? 0
               : col.indent
                 ? (gutterCol ? band + gap : Math.max(outerW + 24, 56))
                 : 0;
@@ -2971,7 +3122,9 @@ const Meridian3D = (() => {
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
-            } else if (col.stick || col.liao) {
+            } else if (col.liao) {
+              textX = width - pad - nameW;
+            } else if (col.stick) {
               if (textX + 6 < item.px) textX = Math.min(width - nameW - 2, item.px + 6);
             } else if (!col.foot && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
@@ -2985,13 +3138,18 @@ const Meridian3D = (() => {
               : Math.max(item.px + 6, joinX - horiz);
             laid.push({ ...item, textX, elbowX, slotY, park });
           } else {
-            const nameW = col.liao ? Math.max(colMaxW, item.textW) : item.textW;
-            let textX = pad;
-            if (col.liao) {
-              textX = pad;
-            } else if (textX + nameW + 10 > item.px) {
+            const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao);
+            const inset = col.liao
+              ? 0
+              : col.indent
+                ? (gutterCol ? Math.max(36, item.textW * 0.15) : Math.max(outerW + 12, 52))
+                : 0;
+            const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
+            let textX = pad + inset;
+            if (!col.stick && !col.liao && textX + nameW + 10 > item.px) {
               textX = Math.max(2, item.px - nameW - 10);
             }
+            if (textX + nameW > width - 2) textX = Math.max(2, width - nameW - 2);
             if (textX < 2) textX = 2;
             const joinX = textX + nameW;
             if (col.liao && Math.abs(slotY - item.py) >= 6) {
@@ -3500,10 +3658,14 @@ const Meridian3D = (() => {
     return doc;
   }
 
-  async function loadBody(gender) {
+  async function loadBody(gender, onProgress) {
+    const wanted = gender === 'female' ? 'female' : 'male';
+    const ui = (t) => { if (onProgress) onProgress(t); else setLoadProgress(t); };
+    ui(0);
+    await ensurePlayAssets((p) => ui(p * 0.88));
+    ui(0.90);
     const { THREE, GLTFLoader, MeshoptDecoder } = await loadThree();
     await ensureScene();
-    const wanted = gender === 'female' ? 'female' : 'male';
     const doc = await loadMap(wanted);
     if (loadedGender === wanted && modelRoot.children.length) {
       if (!skinAccel) buildSkinAccel();
@@ -3513,11 +3675,15 @@ const Meridian3D = (() => {
         faceFront();
         applyScale();
       }
+      ui(1);
       return;
     }
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
-    const gltf = await loader.loadAsync(`assets/models/${wanted}.glb`);
+    const data = glbBuffer[wanted];
+    if (!data) throw new Error(`模型尚未下載（${wanted}）`);
+    const gltf = await loader.parseAsync(data, 'assets/models/');
+    ui(0.96);
     disposeObject(modelRoot, { keepShared: true });
     modelRoot.clear();
     const root = gltf.scene;
@@ -3551,12 +3717,14 @@ const Meridian3D = (() => {
       faceFront();
       applyScale();
     }
+    ui(1);
   }
 
   async function playManual() {
     setLoading(true);
     $('m3d-hint').hidden = true;
     try {
+      await yieldPaint();
       await loadBody(opts.gender);
     } catch (err) {
       console.warn(err);
@@ -3622,7 +3790,8 @@ const Meridian3D = (() => {
         await yieldPaint();
       }
       try {
-        await Promise.all([loadBody(opts.gender), waitForVoices()]);
+        await loadBody(opts.gender);
+        waitForVoices().catch(() => {});
       } catch (err) {
         console.warn(err);
         UI.toast('模型或地圖載入失敗，請檢查網路後再試');
@@ -3931,6 +4100,16 @@ const Meridian3D = (() => {
     }
 
     window.__m3dTest = {
+      loadProgress: () => lastLoadProgress,
+      loadOverlay() {
+        const el = $('m3d-loading');
+        const pct = $('m3d-load-pct');
+        return {
+          hidden: !!(el && el.hidden),
+          pct: lastLoadProgress,
+          label: pct ? pct.textContent : '',
+        };
+      },
       faceFront: () => { faceFront(); calloutsDirty = true; },
       faceBack: () => { faceBack(); calloutsDirty = true; },
       dolly(factor) {
@@ -3958,6 +4137,14 @@ const Meridian3D = (() => {
         controls.update();
         noteCameraMoving(280);
         calloutsDirty = true;
+      },
+      async frameName(name) {
+        const rec = testRecord(name);
+        if (!rec) return false;
+        currentPoint = rec;
+        highlightPoint(rec);
+        await framePointIfNeeded(rec, true, playGeneration);
+        return true;
       },
       orbitYaw(deg) {
         if (!camera || !controls) return;
@@ -4033,6 +4220,7 @@ const Meridian3D = (() => {
           h: item.textH,
           px: item.px,
           py: item.py,
+          park: item.park,
         };
       },
       autoView: () => (autoViewDir ? autoViewDir.toArray() : null),
@@ -4091,6 +4279,7 @@ const Meridian3D = (() => {
             x: Number(el.getAttribute('x')),
             y: Number(el.getAttribute('y')),
             left: Number(el.getAttribute('x')) < width * 0.45,
+            park: Number(el.getAttribute('x')) < width * 0.45 ? 'left' : 'right',
             horizontal,
             dogleg,
             py0: ys[0] || 0,
