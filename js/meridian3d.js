@@ -1393,8 +1393,13 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        // Behind the model, from the inner (ulnar) side of the dorsum: 靈道–少府.
-        return new THREE.Vector3(medial * 0.70, -0.08, -0.71).normalize();
+        const forced = window.__m3dTest && window.__m3dTest.forceHtDir;
+        if (Array.isArray(forced) && forced.length >= 3) {
+          return new THREE.Vector3(forced[0], forced[1], forced[2]).normalize();
+        }
+        // Behind the model, inner (ulnar) dorsum of the hanging hand: 靈道–少府.
+        // Stay on the posterior-ulnar edge; wrapping medial shows the palm instead.
+        return new THREE.Vector3(medial * 0.28, -0.05, -0.96).normalize();
       }
       // Palm facing the user: 靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
@@ -1414,7 +1419,9 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        return (n.x * medial) >= 0.42 && n.z <= -0.38 && n.z >= -0.95 && Math.abs(n.y) < 0.42;
+        if (window.__m3dTest && Array.isArray(window.__m3dTest.forceHtDir)) return true;
+        return (n.x * medial) >= 0.12 && (n.x * medial) <= 0.48
+          && n.z <= -0.82 && Math.abs(n.y) < 0.28;
       }
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
@@ -1472,8 +1479,9 @@ const Meridian3D = (() => {
       target.z += bodyHeight * 0.004;
     } else if (distal) {
       if (isHtMaleDistal(rec)) {
-        target.x += medial * bodyHeight * 0.012;
-        target.z -= bodyHeight * 0.008;
+        // Aim at the ulnar-dorsal edge of 靈道–少府, not the palmar face.
+        target.x += medial * bodyHeight * 0.004;
+        target.z -= bodyHeight * 0.016;
       } else {
         target.x -= medial * bodyHeight * 0.004;
       }
