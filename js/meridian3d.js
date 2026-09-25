@@ -1393,8 +1393,8 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        // Behind-lateral hanging arm: 靈道–少府. Arm on Home, torso on hamburger.
-        return new THREE.Vector3(lateral * 0.48, 0.05, -0.88).normalize();
+        // Behind the hanging arm: 靈道–少府. Arm on Home, torso on hamburger.
+        return new THREE.Vector3(lateral * 0.32, 0.04, -0.95).normalize();
       }
       // Palm facing the user: 靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
@@ -1414,7 +1414,7 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        return n.z <= -0.55 && (n.x * lateral) >= 0.18 && (n.x * lateral) <= 0.72 && Math.abs(n.y) < 0.28;
+        return n.z <= -0.70 && (n.x * lateral) >= 0.08 && (n.x * lateral) <= 0.58 && Math.abs(n.y) < 0.28;
       }
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
@@ -1473,8 +1473,8 @@ const Meridian3D = (() => {
     } else if (distal) {
       if (isHtMaleDistal(rec)) {
         // Shift the arm toward the hamburger so Home-side names have a gutter.
-        target.x += lateral * bodyHeight * 0.06;
-        target.y += bodyHeight * 0.03;
+        target.x += lateral * bodyHeight * 0.08;
+        target.y += bodyHeight * 0.02;
       } else {
         target.x -= medial * bodyHeight * 0.004;
       }
