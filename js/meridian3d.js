@@ -1039,7 +1039,7 @@ const Meridian3D = (() => {
     const seq = Number(rec.sequence) || 0;
     if (rec.meridianId === 'LU') return isInnerLimb(rec);
     if (rec.meridianId === 'HT') return seq >= 1;
-    if (rec.meridianId === 'PC') return seq >= 3 && seq < 8;
+    if (rec.meridianId === 'PC') return seq >= 3 && !isPcPalm(rec);
     return false;
   }
 
@@ -1217,10 +1217,14 @@ const Meridian3D = (() => {
     return n.normalize();
   }
 
+  function pcPalmFromSeq() {
+    return loadedGender === 'male' ? 7 : 8;
+  }
+
   function pcSegment(rec) {
     if (!rec || rec.meridianId !== 'PC') return '';
     const seq = Number(rec.sequence) || 0;
-    if (seq >= 8) return 'palm';
+    if (seq >= pcPalmFromSeq()) return 'palm';
     return 'arm';
   }
 
@@ -1229,7 +1233,8 @@ const Meridian3D = (() => {
   }
 
   function isPcPalmStart(rec) {
-    return !!(rec && rec.meridianId === 'PC' && rec.name === '勞宮');
+    if (!rec || rec.meridianId !== 'PC') return false;
+    return rec.name === (loadedGender === 'male' ? '大陵' : '勞宮');
   }
 
   function pcViewDir(rec) {
@@ -1237,7 +1242,7 @@ const Meridian3D = (() => {
     const medial = rec && rec.side === 'left' ? 1 : -1;
     if (isPcPalm(rec)) {
       // From the feet / lower body, looking up into the palmar surface
-      // so 勞宮 and 中衝 face the user (not the dorsum of the hanging hand).
+      // so 大陵 (male), 勞宮 and 中衝 face the user.
       return new THREE.Vector3(medial * 0.36, -0.88, 0.12).normalize();
     }
     return new THREE.Vector3(medial * 0.28, 0.14, 0.95).normalize();
@@ -1259,7 +1264,7 @@ const Meridian3D = (() => {
     return ((doc && doc.acupoints) || []).filter((p) => (
       p.meridianId === 'PC'
       && p.side === side
-      && (Number(p.sequence) || 0) >= 8
+      && (Number(p.sequence) || 0) >= pcPalmFromSeq()
     ));
   }
 
