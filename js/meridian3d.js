@@ -1505,15 +1505,15 @@ const Meridian3D = (() => {
     const seg = lrSegment(rec);
     if (seg === 'dorsal') {
       // Above-front onto the dorsum: 大敦–太衝.
-      return new THREE.Vector3(lateral * 0.08, 0.78, 0.62).normalize();
+      return new THREE.Vector3(lateral * 0.05, 0.56, 0.83).normalize();
     }
     if (seg === 'medial') {
       // Inner-front of the calf: 中封–曲泉.
       return new THREE.Vector3(medial * 0.78, 0.05, 0.62).normalize();
     }
     if (seg === 'thigh') {
-      // Anterior groin / inner thigh: 陰包–急脈.
-      return new THREE.Vector3(lateral * 0.16, 0.03, 0.99).normalize();
+      // Anterior-medial groin / inner thigh: 陰包–急脈.
+      return new THREE.Vector3(medial * 0.40, 0.02, 0.92).normalize();
     }
     // 3/4 anterior-lateral flank: 章門–期門.
     return new THREE.Vector3(lateral * 0.70, 0.08, 0.71).normalize();
@@ -1526,13 +1526,13 @@ const Meridian3D = (() => {
     const n = dir.clone().normalize();
     const seg = lrSegment(rec);
     if (seg === 'dorsal') {
-      return n.y >= 0.55 && n.z >= 0.38 && Math.abs(n.x) < 0.42;
+      return n.y >= 0.38 && n.z >= 0.55 && Math.abs(n.x) < 0.42;
     }
     if (seg === 'medial') {
       return (n.x * medial) >= 0.55 && n.z >= 0.32 && n.z <= 0.82 && Math.abs(n.y) < 0.28;
     }
     if (seg === 'thigh') {
-      return n.z >= 0.82 && Math.abs(n.y) < 0.22;
+      return n.z >= 0.72 && (n.x * medial) >= 0.18 && Math.abs(n.y) < 0.22;
     }
     return (n.x * lateral) >= 0.42 && n.z >= 0.48 && Math.abs(n.y) < 0.28;
   }
@@ -1565,19 +1565,19 @@ const Meridian3D = (() => {
     pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
     const target = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const spanFloor = seg === 'dorsal' ? 0.08 : (seg === 'medial' ? 0.28 : (seg === 'thigh' ? 0.18 : 0.14));
+    const spanFloor = seg === 'dorsal' ? 0.14 : (seg === 'medial' ? 0.28 : (seg === 'thigh' ? 0.18 : 0.16));
     const span = Math.max(size.y, size.length() * 0.70, bodyHeight * spanFloor);
     const fov = THREE.MathUtils.degToRad(camera.fov);
     const pad = seg === 'dorsal' ? 0.92 : (seg === 'medial' ? 0.86 : 0.90);
     const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
     const dist = seg === 'dorsal'
-      ? Math.max(base * 0.42, Math.min(distFit, base * 0.82))
+      ? Math.max(base * 0.70, Math.min(distFit, base * 1.22))
       : seg === 'medial'
         ? Math.max(base * 0.95, Math.min(distFit, base * 1.70))
         : seg === 'thigh'
-          ? Math.max(base * 0.70, Math.min(distFit, base * 1.30))
-          : Math.max(base * 0.62, Math.min(distFit, base * 1.20));
+          ? Math.max(base * 0.78, Math.min(distFit, base * 1.40))
+          : Math.max(base * 0.82, Math.min(distFit, base * 1.50));
     const probe = {
       meridianId: 'LR',
       side: rec && rec.side,
@@ -1586,6 +1586,15 @@ const Meridian3D = (() => {
       normal: rec && rec.normal,
     };
     const n = ensureOutsideDir(probe, nWant, dist);
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    if (seg === 'dorsal') {
+      // Keep 大敦 at the bottom and let 中封 / the other foot stay in frame.
+      target.x += medial * bodyHeight * 0.03;
+      target.y += bodyHeight * 0.02;
+    } else if (seg === 'ribs') {
+      target.x += medial * bodyHeight * 0.05;
+      target.y += bodyHeight * 0.04;
+    }
     const pose = { pos: target.clone().addScaledVector(n, dist), target, dir: n };
     if (seg === 'dorsal') {
       const look = n.clone().multiplyScalar(-1);
