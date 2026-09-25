@@ -211,6 +211,11 @@ const Meridian3D = (() => {
   function calloutParkFor(rec, fallback = 'right') {
     if (isBlLiao(rec)) return 'right';
     if (isBlBack(rec)) return 'left';
+    if (loadedGender === 'male' && rec && rec.meridianId === 'HT') {
+      const seq = Number(rec.sequence) || 0;
+      if (seq >= 4) return 'left';
+      if (autoViewDir && autoViewDir.z < -0.4) return 'left';
+    }
     return fallback;
   }
 
@@ -1017,7 +1022,7 @@ const Meridian3D = (() => {
     if (!rec || rec.side === 'midline') return false;
     const id = rec.meridianId;
     const seq = Number(rec.sequence) || 0;
-    if (id === 'LU') return seq >= 8;
+    if (id === 'LU') return seq >= 8 || isLuMaleDistal(rec);
     if (id === 'HT') return true;
     if (id === 'PC') return seq >= 2;
     if (id === 'SP' && seq >= 12) return false;
@@ -1100,7 +1105,7 @@ const Meridian3D = (() => {
   }
 
   function skipFlatFacing(rec) {
-    return isCavityPoint(rec) || kiSegment(rec) === 'plantar' || isPcPalm(rec);
+    return isCavityPoint(rec) || kiSegment(rec) === 'plantar' || isPcPalm(rec) || isHtMaleDistal(rec);
   }
 
   function isInnerForearmLu(rec) {
@@ -1188,6 +1193,7 @@ const Meridian3D = (() => {
     const medial = rec && rec.side === 'left' ? 1 : -1;
     const id = rec && rec.meridianId;
     if (id === 'LU') {
+      if (isLuMaleDistal(rec)) return luViewDir(rec);
       const src = innerArmSourceNormal(rec);
       const n = new THREE.Vector3().fromArray(src || [medial, 0.16, 0.5]);
       if (n.lengthSq() < 1e-8) n.set(medial, 0.16, 0.5);
@@ -1312,6 +1318,70 @@ const Meridian3D = (() => {
     return !!(rec && rec.meridianId === 'HT' && rec.name === '少衝');
   }
 
+  function isHtMaleDistal(rec) {
+    return loadedGender === 'male' && htSegment(rec) === 'distal';
+  }
+
+  function isLuMaleDistal(rec) {
+    if (loadedGender !== 'male' || !rec || rec.meridianId !== 'LU') return false;
+    const seq = Number(rec.sequence) || 0;
+    return seq >= 7 && seq <= 11;
+  }
+
+  function isLuSegmentStart(rec) {
+    return isLuMaleDistal(rec) && (Number(rec.sequence) || 0) === 7;
+  }
+
+  function luViewDir(rec) {
+    const { THREE } = three;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    // Front-radial onto the hanging thumb side: 列缺–少商.
+    return new THREE.Vector3(medial * 0.68, 0.10, 0.72).normalize();
+  }
+
+  function luDirOk(dir, rec) {
+    if (!dir || dir.lengthSq() < 1e-8) return false;
+    const medial = rec && rec.side === 'left' ? 1 : -1;
+    const n = dir.clone().normalize();
+    return n.z >= 0.58 && (n.x * medial) >= 0.28 && (n.x * medial) <= 0.78 && Math.abs(n.y) < 0.32;
+  }
+
+  function luClusterRecs(rec) {
+    const doc = currentMap();
+    const side = rec && rec.side;
+    return ((doc && doc.acupoints) || []).filter((p) => (
+      p.meridianId === 'LU'
+      && p.side === side
+      && (Number(p.sequence) || 0) >= 6
+      && (Number(p.sequence) || 0) <= 11
+    ));
+  }
+
+  function poseForLuMaleDistal(rec, dir) {
+    const { THREE } = three;
+    const nWant = luDirOk(dir, rec) ? dir.clone().normalize() : luViewDir(rec);
+    const cluster = luClusterRecs(rec);
+    const pts = cluster.length ? cluster : [rec];
+    const box = new THREE.Box3();
+    pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
+    const target = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const span = Math.max(size.y, size.length() * 0.70, bodyHeight * 0.16);
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const distFit = (span * 0.90) / Math.max(Math.tan(fov / 2), 1e-4);
+    const base = framingDistance();
+    const dist = Math.max(base * 0.58, Math.min(distFit, base * 1.08));
+    const probe = {
+      meridianId: 'LU',
+      side: rec && rec.side,
+      sequence: rec && rec.sequence,
+      position: [target.x, target.y, target.z],
+      normal: rec && rec.normal,
+    };
+    const n = ensureOutsideDir(probe, nWant, dist);
+    return { pos: target.clone().addScaledVector(n, dist), target, dir: n };
+  }
+
   function htViewDir(rec) {
     const { THREE } = three;
     const medial = rec && rec.side === 'left' ? 1 : -1;
@@ -1322,6 +1392,10 @@ const Meridian3D = (() => {
       return new THREE.Vector3(lateral * 0.98, 0.08, -0.18).normalize();
     }
     if (seg === 'distal') {
+      if (isHtMaleDistal(rec)) {
+        // Behind the hanging arm: 靈道–少府. Arm on Home, torso on hamburger.
+        return new THREE.Vector3(lateral * 0.32, 0.04, -0.95).normalize();
+      }
       // Palm facing the user: 靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
     }
@@ -1339,6 +1413,9 @@ const Meridian3D = (() => {
       return (n.x * lateral) >= 0.82 && n.z <= 0.12 && n.z >= -0.42 && Math.abs(n.y) < 0.28;
     }
     if (seg === 'distal') {
+      if (isHtMaleDistal(rec)) {
+        return n.z <= -0.70 && (n.x * lateral) >= 0.08 && (n.x * lateral) <= 0.58 && Math.abs(n.y) < 0.28;
+      }
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
     return (n.x * medial) >= 0.42 && n.y <= -0.55 && n.z >= 0.08 && n.z <= 0.48;
@@ -1348,8 +1425,8 @@ const Meridian3D = (() => {
     const doc = currentMap();
     const side = rec && rec.side;
     const seg = htSegment(rec);
-    const lo = seg === 'dorsal' ? 9 : (seg === 'distal' ? 4 : 1);
-    const hi = seg === 'dorsal' ? 9 : (seg === 'distal' ? 8 : 3);
+    const lo = seg === 'dorsal' ? 9 : (seg === 'distal' ? (isHtMaleDistal(rec) ? 1 : 4) : 1);
+    const hi = seg === 'dorsal' ? 9 : (seg === 'distal' ? (isHtMaleDistal(rec) ? 9 : 8) : 3);
     return ((doc && doc.acupoints) || []).filter((p) => (
       p.meridianId === 'HT'
       && p.side === side
@@ -1374,16 +1451,18 @@ const Meridian3D = (() => {
     });
     const target = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const spanFloor = dorsal ? 0.30 : (distal ? 0.12 : 0.10);
+    const spanFloor = dorsal ? 0.30 : (distal ? (isHtMaleDistal(rec) ? 0.32 : 0.12) : 0.10);
     const span = Math.max(size.y, size.length() * 0.62, bodyHeight * spanFloor);
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const pad = dorsal ? 0.92 : (distal ? 0.90 : 0.82);
+    const pad = dorsal ? 0.92 : (distal ? (isHtMaleDistal(rec) ? 0.94 : 0.90) : 0.82);
     const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
     const dist = dorsal
       ? Math.max(base * 1.05, Math.min(distFit, base * 1.55))
       : distal
-        ? Math.max(base * 0.52, Math.min(distFit, base * 0.92))
+        ? (isHtMaleDistal(rec)
+          ? Math.max(base * 1.02, Math.min(distFit, base * 1.62))
+          : Math.max(base * 0.52, Math.min(distFit, base * 0.92)))
         : Math.max(base * 0.40, Math.min(distFit, base * 0.70));
     const medial = rec && rec.side === 'left' ? 1 : -1;
     const lateral = -medial;
@@ -1392,7 +1471,13 @@ const Meridian3D = (() => {
       target.y += bodyHeight * 0.10;
       target.z += bodyHeight * 0.004;
     } else if (distal) {
-      target.x -= medial * bodyHeight * 0.004;
+      if (isHtMaleDistal(rec)) {
+        // Shift the arm toward the hamburger so Home-side names have a gutter.
+        target.x += lateral * bodyHeight * 0.08;
+        target.y += bodyHeight * 0.02;
+      } else {
+        target.x -= medial * bodyHeight * 0.004;
+      }
     } else {
       target.x += medial * bodyHeight * 0.022;
       target.y -= bodyHeight * 0.012;
@@ -1623,6 +1708,7 @@ const Meridian3D = (() => {
     const seq = Number(rec && rec.sequence) || 0;
     if (id === 'KI') return kiViewDir(rec);
     if (id === 'LR') return lrViewDir(rec);
+    if (isLuMaleDistal(rec)) return luViewDir(rec);
     if (isSpTorso(rec)) return spTorsoViewDir(rec);
     if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
     const n = flattenHorizontal(normal);
@@ -1650,6 +1736,10 @@ const Meridian3D = (() => {
     const lr = list.filter((rec) => lrSegment(rec));
     if (lr.length && lr.length * 2 >= list.length) {
       return lrViewDir(lr[0]);
+    }
+    const luMale = list.filter(isLuMaleDistal);
+    if (luMale.length && luMale.length * 2 >= list.length) {
+      return luViewDir(luMale[0]);
     }
     const palm = list.filter(isPcPalm);
     if (palm.length && palm.length * 2 >= list.length) {
@@ -1721,6 +1811,7 @@ const Meridian3D = (() => {
       if (id === 'HT' && !htDirOk(d, rec)) return false;
       if (id === 'KI' && !kiDirOk(d, rec)) return false;
       if (id === 'LR' && !lrDirOk(d, rec)) return false;
+      if (isLuMaleDistal(rec) && !luDirOk(d, rec)) return false;
       if (isPcPalm(rec) && !pcDirOk(d, rec)) return false;
       if (id === 'SP' && (Number(rec.sequence) || 0) >= 12 && d.z < 0.55) return false;
       return skipLos || poseSeesPoint(p, target);
@@ -1729,12 +1820,14 @@ const Meridian3D = (() => {
     if (ok(n)) return n;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
     const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE'
-      || kiSegment(rec) === 'medial';
+      || kiSegment(rec) === 'medial'
+      || isHtMaleDistal(rec);
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
       id === 'KI' ? kiViewDir(rec) : null,
       id === 'LR' ? lrViewDir(rec) : null,
+      isLuMaleDistal(rec) ? luViewDir(rec) : null,
       isPcPalm(rec) ? pcViewDir(rec) : null,
       id === 'HT' && htSegment(rec) !== 'dorsal'
         ? new THREE.Vector3((rec && rec.side === 'left' ? 1 : -1) * 0.62, -0.74, 0.26).normalize()
@@ -1751,6 +1844,7 @@ const Meridian3D = (() => {
     }
     if (id === 'KI') return kiViewDir(rec);
     if (id === 'LR') return lrViewDir(rec);
+    if (isLuMaleDistal(rec)) return luViewDir(rec);
     return new THREE.Vector3(0, 0, preferBack ? -1 : 1);
   }
 
@@ -1760,6 +1854,7 @@ const Meridian3D = (() => {
     if (rec && rec.meridianId === 'HT') return poseForHt(rec, dir);
     if (rec && rec.meridianId === 'KI') return poseForKi(rec, dir);
     if (rec && rec.meridianId === 'LR') return poseForLr(rec, dir);
+    if (isLuMaleDistal(rec)) return poseForLuMaleDistal(rec, dir);
     if (isPcPalm(rec)) return poseForPcPalm(rec, dir);
     const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
     const n = ensureOutsideDir(
@@ -1881,6 +1976,7 @@ const Meridian3D = (() => {
         if (htSegment(anchor) && htSegment(rest[i]) && htSegment(anchor) !== htSegment(rest[i])) break;
         if (kiSegment(anchor) && kiSegment(rest[i]) && kiSegment(anchor) !== kiSegment(rest[i])) break;
         if (lrSegment(anchor) && lrSegment(rest[i]) && lrSegment(anchor) !== lrSegment(rest[i])) break;
+        if (isLuMaleDistal(anchor) !== isLuMaleDistal(rest[i])) break;
         if (pcSegment(anchor) && pcSegment(rest[i]) && pcSegment(anchor) !== pcSegment(rest[i])) break;
         if (!recFitsInPose(rest[i], pose, width, height)) break;
         recs.push(rest[i]);
@@ -1991,7 +2087,7 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec) || isPcPalmStart(rec) || isLrSegmentStart(rec)) force = true;
+    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec) || isPcPalmStart(rec) || isLrSegmentStart(rec) || isLuSegmentStart(rec)) force = true;
     let labelFix = false;
     if (!force) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
