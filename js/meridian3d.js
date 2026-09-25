@@ -1393,13 +1393,10 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        const forced = window.__m3dTest && window.__m3dTest.forceHtDir;
-        if (Array.isArray(forced) && forced.length >= 3) {
-          return new THREE.Vector3(forced[0], forced[1], forced[2]).normalize();
-        }
-        // Behind the model, inner (ulnar) dorsum of the hanging hand: 靈道–少府.
-        // Stay on the posterior-ulnar edge; wrapping medial shows the palm instead.
-        return new THREE.Vector3(medial * 0.28, -0.05, -0.96).normalize();
+        // Behind the model, inner (ulnar) side of the hanging hand: 靈道–少府.
+        // Stay on the posterior-ulnar edge so the points face us; more medial
+        // wraps onto the palm, more lateral hides 少府 on the far side.
+        return new THREE.Vector3(medial * 0.34, -0.08, -0.94).normalize();
       }
       // Palm facing the user: 靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
@@ -1419,9 +1416,8 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        if (window.__m3dTest && Array.isArray(window.__m3dTest.forceHtDir)) return true;
-        return (n.x * medial) >= 0.12 && (n.x * medial) <= 0.48
-          && n.z <= -0.82 && Math.abs(n.y) < 0.28;
+        return (n.x * medial) >= 0.18 && (n.x * medial) <= 0.48
+          && n.z <= -0.84 && Math.abs(n.y) < 0.28;
       }
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
@@ -1458,17 +1454,17 @@ const Meridian3D = (() => {
     });
     const target = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const spanFloor = dorsal ? 0.30 : (distal ? (isHtMaleDistal(rec) ? 0.14 : 0.12) : 0.10);
+    const spanFloor = dorsal ? 0.30 : (distal ? (isHtMaleDistal(rec) ? 0.11 : 0.12) : 0.10);
     const span = Math.max(size.y, size.length() * 0.62, bodyHeight * spanFloor);
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const pad = dorsal ? 0.92 : (distal ? (isHtMaleDistal(rec) ? 0.88 : 0.90) : 0.82);
+    const pad = dorsal ? 0.92 : (distal ? (isHtMaleDistal(rec) ? 0.80 : 0.90) : 0.82);
     const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
     const dist = dorsal
       ? Math.max(base * 1.05, Math.min(distFit, base * 1.55))
       : distal
         ? (isHtMaleDistal(rec)
-          ? Math.max(base * 0.55, Math.min(distFit, base * 1.05))
+          ? Math.max(base * 0.48, Math.min(distFit, base * 0.92))
           : Math.max(base * 0.52, Math.min(distFit, base * 0.92)))
         : Math.max(base * 0.40, Math.min(distFit, base * 0.70));
     const medial = rec && rec.side === 'left' ? 1 : -1;
@@ -1479,9 +1475,9 @@ const Meridian3D = (() => {
       target.z += bodyHeight * 0.004;
     } else if (distal) {
       if (isHtMaleDistal(rec)) {
-        // Aim at the ulnar-dorsal edge of 靈道–少府, not the palmar face.
-        target.x += medial * bodyHeight * 0.004;
-        target.z -= bodyHeight * 0.016;
+        target.x += medial * bodyHeight * 0.006;
+        target.y -= bodyHeight * 0.012;
+        target.z -= bodyHeight * 0.018;
       } else {
         target.x -= medial * bodyHeight * 0.004;
       }
