@@ -1505,7 +1505,7 @@ const Meridian3D = (() => {
     const seg = lrSegment(rec);
     if (seg === 'dorsal') {
       // Above-front onto the dorsum: 大敦–太衝.
-      return new THREE.Vector3(lateral * 0.04, 0.68, 0.73).normalize();
+      return new THREE.Vector3(lateral * 0.04, 0.72, 0.69).normalize();
     }
     if (seg === 'medial') {
       // Inner-front of the calf: 中封–曲泉.
@@ -1513,10 +1513,10 @@ const Meridian3D = (() => {
     }
     if (seg === 'thigh') {
       // Anterior-medial groin / inner thigh: 陰包–急脈.
-      return new THREE.Vector3(medial * 0.55, 0.00, 0.83).normalize();
+      return new THREE.Vector3(medial * 0.58, 0.00, 0.81).normalize();
     }
     // 3/4 anterior-lateral flank: 章門–期門.
-    return new THREE.Vector3(lateral * 0.58, 0.06, 0.81).normalize();
+    return new THREE.Vector3(lateral * 0.66, 0.07, 0.75).normalize();
   }
 
   function lrDirOk(dir, rec) {
@@ -1526,15 +1526,15 @@ const Meridian3D = (() => {
     const n = dir.clone().normalize();
     const seg = lrSegment(rec);
     if (seg === 'dorsal') {
-      return n.y >= 0.48 && n.z >= 0.48 && Math.abs(n.x) < 0.42;
+      return n.y >= 0.52 && n.z >= 0.45 && Math.abs(n.x) < 0.42;
     }
     if (seg === 'medial') {
       return (n.x * medial) >= 0.55 && n.z >= 0.32 && n.z <= 0.82 && Math.abs(n.y) < 0.28;
     }
     if (seg === 'thigh') {
-      return n.z >= 0.62 && (n.x * medial) >= 0.32 && Math.abs(n.y) < 0.22;
+      return n.z >= 0.58 && (n.x * medial) >= 0.36 && Math.abs(n.y) < 0.22;
     }
-    return (n.x * lateral) >= 0.32 && n.z >= 0.55 && Math.abs(n.y) < 0.28;
+    return (n.x * lateral) >= 0.40 && n.z >= 0.50 && Math.abs(n.y) < 0.28;
   }
 
   function lrClusterRecs(rec) {
@@ -1572,12 +1572,12 @@ const Meridian3D = (() => {
     const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
     const dist = seg === 'dorsal'
-      ? Math.max(base * 0.82, Math.min(distFit, base * 1.32))
+      ? Math.max(base * 0.90, Math.min(distFit, base * 1.40))
       : seg === 'medial'
         ? Math.max(base * 0.95, Math.min(distFit, base * 1.70))
         : seg === 'thigh'
           ? Math.max(base * 0.62, Math.min(distFit, base * 1.12))
-          : Math.max(base * 0.68, Math.min(distFit, base * 1.28));
+          : Math.max(base * 0.70, Math.min(distFit, base * 1.30));
     const probe = {
       meridianId: 'LR',
       side: rec && rec.side,
