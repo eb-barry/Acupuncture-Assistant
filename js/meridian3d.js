@@ -1393,8 +1393,8 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        // Behind the hanging arm: 靈道–少府. Arm on Home, torso on hamburger.
-        return new THREE.Vector3(lateral * 0.32, 0.04, -0.95).normalize();
+        // Behind the model, from the inner (ulnar) side of the dorsum: 靈道–少府.
+        return new THREE.Vector3(medial * 0.70, -0.08, -0.71).normalize();
       }
       // Palm facing the user: 靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
@@ -1414,7 +1414,7 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        return n.z <= -0.70 && (n.x * lateral) >= 0.08 && (n.x * lateral) <= 0.58 && Math.abs(n.y) < 0.28;
+        return (n.x * medial) >= 0.42 && n.z <= -0.38 && n.z >= -0.95 && Math.abs(n.y) < 0.42;
       }
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
@@ -1425,8 +1425,8 @@ const Meridian3D = (() => {
     const doc = currentMap();
     const side = rec && rec.side;
     const seg = htSegment(rec);
-    const lo = seg === 'dorsal' ? 9 : (seg === 'distal' ? (isHtMaleDistal(rec) ? 1 : 4) : 1);
-    const hi = seg === 'dorsal' ? 9 : (seg === 'distal' ? (isHtMaleDistal(rec) ? 9 : 8) : 3);
+    const lo = seg === 'dorsal' ? 9 : (seg === 'distal' ? 4 : 1);
+    const hi = seg === 'dorsal' ? 9 : (seg === 'distal' ? 8 : 3);
     return ((doc && doc.acupoints) || []).filter((p) => (
       p.meridianId === 'HT'
       && p.side === side
@@ -1451,17 +1451,17 @@ const Meridian3D = (() => {
     });
     const target = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const spanFloor = dorsal ? 0.30 : (distal ? (isHtMaleDistal(rec) ? 0.32 : 0.12) : 0.10);
+    const spanFloor = dorsal ? 0.30 : (distal ? (isHtMaleDistal(rec) ? 0.14 : 0.12) : 0.10);
     const span = Math.max(size.y, size.length() * 0.62, bodyHeight * spanFloor);
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    const pad = dorsal ? 0.92 : (distal ? (isHtMaleDistal(rec) ? 0.94 : 0.90) : 0.82);
+    const pad = dorsal ? 0.92 : (distal ? (isHtMaleDistal(rec) ? 0.88 : 0.90) : 0.82);
     const distFit = (span * pad) / Math.max(Math.tan(fov / 2), 1e-4);
     const base = framingDistance();
     const dist = dorsal
       ? Math.max(base * 1.05, Math.min(distFit, base * 1.55))
       : distal
         ? (isHtMaleDistal(rec)
-          ? Math.max(base * 1.02, Math.min(distFit, base * 1.62))
+          ? Math.max(base * 0.55, Math.min(distFit, base * 1.05))
           : Math.max(base * 0.52, Math.min(distFit, base * 0.92)))
         : Math.max(base * 0.40, Math.min(distFit, base * 0.70));
     const medial = rec && rec.side === 'left' ? 1 : -1;
@@ -1472,9 +1472,8 @@ const Meridian3D = (() => {
       target.z += bodyHeight * 0.004;
     } else if (distal) {
       if (isHtMaleDistal(rec)) {
-        // Shift the arm toward the hamburger so Home-side names have a gutter.
-        target.x += lateral * bodyHeight * 0.08;
-        target.y += bodyHeight * 0.02;
+        target.x += medial * bodyHeight * 0.012;
+        target.z -= bodyHeight * 0.008;
       } else {
         target.x -= medial * bodyHeight * 0.004;
       }
@@ -1844,6 +1843,7 @@ const Meridian3D = (() => {
     }
     if (id === 'KI') return kiViewDir(rec);
     if (id === 'LR') return lrViewDir(rec);
+    if (id === 'HT') return htViewDir(rec);
     if (isLuMaleDistal(rec)) return luViewDir(rec);
     return new THREE.Vector3(0, 0, preferBack ? -1 : 1);
   }
