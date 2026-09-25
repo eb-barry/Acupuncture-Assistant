@@ -1710,7 +1710,7 @@ const Meridian3D = (() => {
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
-      const allowInside = id === 'HT' || kiSegment(rec) === 'plantar' || isPcPalm(rec);
+      const allowInside = id === 'HT' || kiSegment(rec) === 'plantar' || isPcPalm(rec) || id === 'LR';
       if (!allowInside && !box.isEmpty() && box.containsPoint(p)) return false;
       if (id === 'HT' && !htDirOk(d, rec)) return false;
       if (id === 'KI' && !kiDirOk(d, rec)) return false;
