@@ -211,7 +211,11 @@ const Meridian3D = (() => {
   function calloutParkFor(rec, fallback = 'right') {
     if (isBlLiao(rec)) return 'right';
     if (isBlBack(rec)) return 'left';
-    if (isHtMaleDistal(rec)) return 'left';
+    if (loadedGender === 'male' && rec && rec.meridianId === 'HT') {
+      const seq = Number(rec.sequence) || 0;
+      if (seq >= 4) return 'left';
+      if (autoViewDir && autoViewDir.z < -0.4) return 'left';
+    }
     return fallback;
   }
 
@@ -1332,14 +1336,14 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const medial = rec && rec.side === 'left' ? 1 : -1;
     // Front-radial onto the hanging thumb side: 列缺–少商.
-    return new THREE.Vector3(medial * 0.38, 0.10, 0.92).normalize();
+    return new THREE.Vector3(medial * 0.58, 0.10, 0.81).normalize();
   }
 
   function luDirOk(dir, rec) {
     if (!dir || dir.lengthSq() < 1e-8) return false;
     const medial = rec && rec.side === 'left' ? 1 : -1;
     const n = dir.clone().normalize();
-    return n.z >= 0.72 && (n.x * medial) >= 0.12 && (n.x * medial) <= 0.62 && Math.abs(n.y) < 0.32;
+    return n.z >= 0.58 && (n.x * medial) >= 0.28 && (n.x * medial) <= 0.78 && Math.abs(n.y) < 0.32;
   }
 
   function luClusterRecs(rec) {
@@ -1389,8 +1393,8 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        // Behind the hanging arm: 靈道–少府. Arm on Home, torso on hamburger.
-        return new THREE.Vector3(lateral * 0.22, 0.05, -0.97).normalize();
+        // Behind-lateral hanging arm: 靈道–少府. Arm on Home, torso on hamburger.
+        return new THREE.Vector3(lateral * 0.48, 0.05, -0.88).normalize();
       }
       // Palm facing the user: 靈道–少府, never the dorsal hand.
       return new THREE.Vector3(medial * 0.84, 0.14, 0.52).normalize();
@@ -1410,7 +1414,7 @@ const Meridian3D = (() => {
     }
     if (seg === 'distal') {
       if (isHtMaleDistal(rec)) {
-        return n.z <= -0.72 && (n.x * lateral) >= -0.05 && (n.x * lateral) <= 0.55 && Math.abs(n.y) < 0.28;
+        return n.z <= -0.55 && (n.x * lateral) >= 0.18 && (n.x * lateral) <= 0.72 && Math.abs(n.y) < 0.28;
       }
       return (n.x * medial) >= 0.62 && n.z >= 0.22 && n.z <= 0.70 && Math.abs(n.y) < 0.4;
     }
@@ -1468,8 +1472,9 @@ const Meridian3D = (() => {
       target.z += bodyHeight * 0.004;
     } else if (distal) {
       if (isHtMaleDistal(rec)) {
-        target.x += medial * bodyHeight * 0.04;
-        target.y += bodyHeight * 0.04;
+        // Shift the arm toward the hamburger so Home-side names have a gutter.
+        target.x += lateral * bodyHeight * 0.06;
+        target.y += bodyHeight * 0.03;
       } else {
         target.x -= medial * bodyHeight * 0.004;
       }
