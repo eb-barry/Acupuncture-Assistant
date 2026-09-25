@@ -1336,7 +1336,7 @@ const Meridian3D = (() => {
     const { THREE } = three;
     const medial = rec && rec.side === 'left' ? 1 : -1;
     // Front-radial onto the hanging thumb side: 列缺–少商.
-    return new THREE.Vector3(medial * 0.58, 0.10, 0.81).normalize();
+    return new THREE.Vector3(medial * 0.68, 0.10, 0.72).normalize();
   }
 
   function luDirOk(dir, rec) {
