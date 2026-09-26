@@ -169,6 +169,25 @@ const Meridian3D = (() => {
     ['委中', '委陽'],
   ];
 
+  const GB_HEAD_HOME_NAMES = new Set([
+    '本神', '陽白', '頭臨泣', '目窗', '正營', '承靈',
+  ]);
+  const GB_HEAD_FACE_NAMES = new Set([
+    '瞳子髎', '聽會', '上關',
+  ]);
+
+  function isGbHead(rec) {
+    if (!rec || rec.meridianId !== 'GB') return false;
+    const seq = Number(rec.sequence) || 0;
+    return seq >= 1 && seq <= 20;
+  }
+
+  function gbHeadPark(rec) {
+    if (!isGbHead(rec)) return 'right';
+    if (GB_HEAD_HOME_NAMES.has(rec.name) || GB_HEAD_FACE_NAMES.has(rec.name)) return 'left';
+    return 'right';
+  }
+
   function isBlLiao(rec) {
     return !!(rec && rec.meridianId === 'BL' && BL_LIAO_NAMES.has(rec.name));
   }
@@ -209,6 +228,7 @@ const Meridian3D = (() => {
   }
 
   function calloutParkFor(rec, fallback = 'right') {
+    if (isGbHead(rec)) return gbHeadPark(rec);
     if (isBlLiao(rec)) return 'right';
     if (isBlBack(rec)) return 'left';
     if (loadedGender === 'male' && rec && rec.meridianId === 'HT') {
@@ -329,13 +349,19 @@ const Meridian3D = (() => {
 
   function splitCalloutColumns(items, park, width) {
     if (!items.length) return [];
+    const gbHead = items.filter((it) => isGbHead(it.rec));
     const liao = items.filter((it) => blCalloutBand(it.rec) === 'liao');
     const foot = items.filter((it) => isBlFootLateral(it.rec));
-    const rest = items.filter((it) => blCalloutBand(it.rec) !== 'liao' && !isBlFootLateral(it.rec));
-    if (!rest.length && liao.length && !foot.length) {
+    const rest = items.filter((it) => (
+      !isGbHead(it.rec)
+      && blCalloutBand(it.rec) !== 'liao'
+      && !isBlFootLateral(it.rec)
+    ));
+    if (!rest.length && liao.length && !foot.length && !gbHead.length) {
       return [{ items: [...liao], indent: 0, liao: true }];
     }
     const cols = rest.length ? splitCalloutColumnsRest(rest, park, width) : [];
+    if (gbHead.length) cols.push({ items: gbHead, indent: 0, gbHead: true });
     if (liao.length) cols.push({ items: liao, indent: 1, liao: true });
     if (foot.length >= 2) {
       const bySeq = (a, b) => (Number(a.rec.sequence) || 0) - (Number(b.rec.sequence) || 0);
@@ -3140,7 +3166,7 @@ const Meridian3D = (() => {
   function splitOverflowColumns(columns, height) {
     const extra = [];
     columns.forEach((col) => {
-      if (col.stick || col.foot || col.liao || col.indent) return;
+      if (col.stick || col.foot || col.liao || col.indent || col.gbHead) return;
       const textH = col.items[0]?.textH || 16;
       const maxN = Math.max(8, Math.floor((height - 24) / Math.max(18, textH * 0.78)));
       if (col.items.length <= maxN) return;
@@ -3152,6 +3178,38 @@ const Meridian3D = (() => {
       extra.push({ items: inner, indent: 1, overflow: true });
     });
     columns.push(...extra);
+  }
+
+  function packGbHeadColumn(items, height, slotH, pad) {
+    const face = items.filter((it) => GB_HEAD_FACE_NAMES.has(it.rec && it.rec.name));
+    const rest = items.filter((it) => !GB_HEAD_FACE_NAMES.has(it.rec && it.rec.name));
+    rest.sort((a, b) => a.py - b.py || a.px - b.px);
+    const n = rest.length;
+    const bot = height - pad;
+    const textH = (rest[0] || face[0])?.textH || 16;
+    let step = Math.max(slotH, textH * 1.05);
+    const top = pad + textH * 0.55;
+    if (n > 1 && top + (n - 1) * step > bot) {
+      step = Math.max(14, (bot - top) / (n - 1));
+    }
+    rest.forEach((item, i) => {
+      item.slotY = top + i * step;
+      item.dogleg = false;
+      item.gbHead = true;
+    });
+    face.sort((a, b) => a.py - b.py || a.px - b.px);
+    const restBot = rest.length ? rest[rest.length - 1].slotY + step : top;
+    let next = Math.max(restBot, pad);
+    face.forEach((item) => {
+      let y = Math.max(next, item.py);
+      y = Math.max(pad, Math.min(bot, y));
+      item.slotY = y;
+      item.dogleg = false;
+      item.gbHead = true;
+      next = y + step;
+    });
+    items.length = 0;
+    items.push(...rest, ...face);
   }
 
   function packLiaoColumn(items, height, slotH, pad) {
@@ -3422,7 +3480,9 @@ const Meridian3D = (() => {
       packBlFootColumns(columns, height, pad + 6);
       columns.forEach((col) => {
         const baseH = col.items[0]?.textH || 16;
-        if (col.liao) {
+        if (col.gbHead) {
+          packGbHeadColumn(col.items, height, Math.max(18, baseH * 0.92), pad + 6);
+        } else if (col.liao) {
           packLiaoColumn(col.items, height, Math.max(22, baseH * 1.08), pad + 6);
         } else if (col.foot) {
           return;
@@ -3447,15 +3507,15 @@ const Meridian3D = (() => {
               : col.indent
                 ? (gutterCol ? band + gap : Math.max(outerW + 24, 56))
                 : 0;
-            const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
+            const nameW = (col.stick || col.liao || col.gbHead) ? Math.max(colMaxW, item.textW) : item.textW;
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
-            } else if (col.liao) {
+            } else if (col.liao || col.gbHead) {
               textX = width - pad - nameW;
             } else if (col.stick) {
               if (textX + 6 < item.px) textX = Math.min(width - nameW - 2, item.px + 6);
-            } else if (!col.foot && !item.dogleg) {
+            } else if (!col.foot && !col.gbHead && !item.dogleg) {
               if (textX < item.px + 10) textX = item.px + 10;
             }
             if (textX + item.textW > width - 2) textX = width - item.textW - 2;
@@ -3473,9 +3533,9 @@ const Meridian3D = (() => {
               : col.indent
                 ? (gutterCol ? Math.max(36, item.textW * 0.15) : Math.max(outerW + 12, 52))
                 : 0;
-            const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
+            const nameW = (col.stick || col.liao || col.gbHead) ? Math.max(colMaxW, item.textW) : item.textW;
             let textX = pad + inset;
-            if (!col.stick && !col.liao && textX + nameW + 10 > item.px) {
+            if (!col.stick && !col.liao && !col.gbHead && textX + nameW + 10 > item.px) {
               textX = Math.max(2, item.px - nameW - 10);
             }
             if (textX + nameW > width - 2) textX = Math.max(2, width - nameW - 2);
@@ -3508,9 +3568,9 @@ const Meridian3D = (() => {
     laid.forEach((item) => {
       const focus = !!(playingAuto && isFocusRec(item.rec));
       const joinX = item.park === 'left' ? item.textX + item.textW : item.textX;
-      const aligned = !item.dogleg && Math.abs(item.slotY - item.py) < Math.max(6, item.textH * 0.35);
+      const aligned = !item.gbHead && !item.dogleg && Math.abs(item.slotY - item.py) < Math.max(6, item.textH * 0.35);
       let elbowX = item.elbowX;
-      if (item.dogleg) {
+      if (item.dogleg && !item.gbHead) {
         const drop = Math.abs(item.slotY - item.py);
         if (isBlFootLateral(item.rec)) {
           const toward = item.park === 'left' ? -1 : 1;
@@ -3523,9 +3583,21 @@ const Meridian3D = (() => {
           elbowX = item.px + sign * drop;
         }
       }
-      const d = aligned
-        ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
-        : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
+      let d;
+      if (item.gbHead) {
+        const gutterX = item.park === 'left'
+          ? joinX + 8
+          : joinX - 8;
+        if (Math.abs(item.slotY - item.py) < 4) {
+          d = `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`;
+        } else {
+          d = `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${gutterX.toFixed(1)} ${item.py.toFixed(1)} L ${gutterX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
+        }
+      } else {
+        d = aligned
+          ? `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`
+          : `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${elbowX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
+      }
       svg.appendChild(svgEl('path', { class: focus ? 'leader-halo is-focus' : 'leader-halo', d }));
       svg.appendChild(svgEl('path', { class: focus ? 'leader is-focus' : 'leader', d }));
       const key = calloutKey(item.rec);
