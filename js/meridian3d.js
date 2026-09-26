@@ -3187,7 +3187,7 @@ const Meridian3D = (() => {
     const n = rest.length;
     const bot = height - pad;
     const textH = (rest[0] || face[0])?.textH || 16;
-    let step = Math.max(16, Math.min(slotH, textH * 0.72));
+    let step = Math.max(slotH, textH * 1.05);
     const top = pad + textH * 0.55;
     if (n > 1 && top + (n - 1) * step > bot) {
       step = Math.max(14, (bot - top) / (n - 1));
