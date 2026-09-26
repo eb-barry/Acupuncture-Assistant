@@ -170,8 +170,10 @@ const Meridian3D = (() => {
   ];
 
   const GB_HEAD_HOME_NAMES = new Set([
-    '瞳子髎', '聽會', '上關',
     '本神', '陽白', '頭臨泣', '目窗', '正營', '承靈',
+  ]);
+  const GB_HEAD_FACE_NAMES = new Set([
+    '瞳子髎', '聽會', '上關',
   ]);
 
   function isGbHead(rec) {
@@ -182,7 +184,8 @@ const Meridian3D = (() => {
 
   function gbHeadPark(rec) {
     if (!isGbHead(rec)) return 'right';
-    return GB_HEAD_HOME_NAMES.has(rec.name) ? 'left' : 'right';
+    if (GB_HEAD_HOME_NAMES.has(rec.name) || GB_HEAD_FACE_NAMES.has(rec.name)) return 'left';
+    return 'right';
   }
 
   function isBlLiao(rec) {
@@ -3178,21 +3181,35 @@ const Meridian3D = (() => {
   }
 
   function packGbHeadColumn(items, height, slotH, pad) {
-    items.sort((a, b) => a.py - b.py || a.px - b.px);
-    const n = items.length;
-    if (!n) return;
+    const face = items.filter((it) => GB_HEAD_FACE_NAMES.has(it.rec && it.rec.name));
+    const rest = items.filter((it) => !GB_HEAD_FACE_NAMES.has(it.rec && it.rec.name));
+    rest.sort((a, b) => a.py - b.py || a.px - b.px);
+    const n = rest.length;
     const bot = height - pad;
-    const textH = items[0]?.textH || 16;
-    let step = Math.max(slotH, textH * 0.92);
+    const textH = (rest[0] || face[0])?.textH || 16;
+    let step = Math.max(16, Math.min(slotH, textH * 0.72));
     const top = pad + textH * 0.55;
     if (n > 1 && top + (n - 1) * step > bot) {
       step = Math.max(14, (bot - top) / (n - 1));
     }
-    items.forEach((item, i) => {
+    rest.forEach((item, i) => {
       item.slotY = top + i * step;
       item.dogleg = false;
       item.gbHead = true;
     });
+    face.sort((a, b) => a.py - b.py || a.px - b.px);
+    const restBot = rest.length ? rest[rest.length - 1].slotY + step : top;
+    let next = Math.max(restBot, pad);
+    face.forEach((item) => {
+      let y = Math.max(next, item.py);
+      y = Math.max(pad, Math.min(bot, y));
+      item.slotY = y;
+      item.dogleg = false;
+      item.gbHead = true;
+      next = y + step;
+    });
+    items.length = 0;
+    items.push(...rest, ...face);
   }
 
   function packLiaoColumn(items, height, slotH, pad) {
@@ -3490,7 +3507,7 @@ const Meridian3D = (() => {
               : col.indent
                 ? (gutterCol ? band + gap : Math.max(outerW + 24, 56))
                 : 0;
-            const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
+            const nameW = (col.stick || col.liao || col.gbHead) ? Math.max(colMaxW, item.textW) : item.textW;
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
@@ -3516,7 +3533,7 @@ const Meridian3D = (() => {
               : col.indent
                 ? (gutterCol ? Math.max(36, item.textW * 0.15) : Math.max(outerW + 12, 52))
                 : 0;
-            const nameW = (col.stick || col.liao) ? Math.max(colMaxW, item.textW) : item.textW;
+            const nameW = (col.stick || col.liao || col.gbHead) ? Math.max(colMaxW, item.textW) : item.textW;
             let textX = pad + inset;
             if (!col.stick && !col.liao && !col.gbHead && textX + nameW + 10 > item.px) {
               textX = Math.max(2, item.px - nameW - 10);
