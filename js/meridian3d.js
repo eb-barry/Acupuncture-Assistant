@@ -169,22 +169,25 @@ const Meridian3D = (() => {
     ['委中', '委陽'],
   ];
 
-  const GB_HEAD_HOME_NAMES = new Set([
-    '本神', '陽白', '頭臨泣', '目窗', '正營', '承靈',
-  ]);
-  const GB_HEAD_FACE_NAMES = new Set([
-    '瞳子髎', '聽會', '上關',
-  ]);
-
+  // GB 1–20 head fans: face+forehead Home/left; temple+occiput hamburger/right.
   function isGbHead(rec) {
     if (!rec || rec.meridianId !== 'GB') return false;
     const seq = Number(rec.sequence) || 0;
     return seq >= 1 && seq <= 20;
   }
 
+  function gbHeadBlock(rec) {
+    if (!isGbHead(rec)) return '';
+    const seq = Number(rec.sequence) || 0;
+    if (seq <= 3) return 'face';
+    if (seq <= 12) return 'temple';
+    if (seq <= 18) return 'forehead';
+    return 'occiput';
+  }
+
   function gbHeadPark(rec) {
-    if (!isGbHead(rec)) return 'right';
-    if (GB_HEAD_HOME_NAMES.has(rec.name) || GB_HEAD_FACE_NAMES.has(rec.name)) return 'left';
+    const block = gbHeadBlock(rec);
+    if (block === 'face' || block === 'forehead') return 'left';
     return 'right';
   }
 
@@ -361,7 +364,18 @@ const Meridian3D = (() => {
       return [{ items: [...liao], indent: 0, liao: true }];
     }
     const cols = rest.length ? splitCalloutColumnsRest(rest, park, width) : [];
-    if (gbHead.length) cols.push({ items: gbHead, indent: 0, gbHead: true });
+    if (gbHead.length) {
+      const byBlock = { face: [], temple: [], forehead: [], occiput: [] };
+      gbHead.forEach((it) => {
+        const block = gbHeadBlock(it.rec);
+        if (byBlock[block]) byBlock[block].push(it);
+      });
+      ['forehead', 'face', 'temple', 'occiput'].forEach((block) => {
+        if (byBlock[block].length) {
+          cols.push({ items: byBlock[block], indent: 0, gbHead: true, gbBlock: block });
+        }
+      });
+    }
     if (liao.length) cols.push({ items: liao, indent: 1, liao: true });
     if (foot.length >= 2) {
       const bySeq = (a, b) => (Number(a.rec.sequence) || 0) - (Number(b.rec.sequence) || 0);
@@ -3180,36 +3194,56 @@ const Meridian3D = (() => {
     columns.push(...extra);
   }
 
-  function packGbHeadColumn(items, height, slotH, pad) {
-    const face = items.filter((it) => GB_HEAD_FACE_NAMES.has(it.rec && it.rec.name));
-    const rest = items.filter((it) => !GB_HEAD_FACE_NAMES.has(it.rec && it.rec.name));
-    rest.sort((a, b) => a.py - b.py || a.px - b.px);
-    const n = rest.length;
-    const bot = height - pad;
-    const textH = (rest[0] || face[0])?.textH || 16;
+  function byGbSequence(a, b) {
+    return (Number(a.rec && a.rec.sequence) || 0) - (Number(b.rec && b.rec.sequence) || 0);
+  }
+
+  function markGbHeadSlot(item, y, block) {
+    item.slotY = y;
+    item.dogleg = false;
+    item.gbHead = true;
+    item.gbBlock = block;
+  }
+
+  function packGbHeadColumns(columns, height, slotH, pad) {
+    const gbCols = columns.filter((col) => col.gbHead);
+    if (!gbCols.length) return;
+    const sample = gbCols[0].items[0];
+    const textH = sample?.textH || 16;
     let step = Math.max(slotH, textH * 1.05);
     const top = pad + textH * 0.55;
-    if (n > 1 && top + (n - 1) * step > bot) {
-      step = Math.max(14, (bot - top) / (n - 1));
+    const bot = height - pad;
+    const upper = gbCols.find((col) => col.gbBlock === 'forehead' || col.gbBlock === 'temple');
+    const lower = gbCols.find((col) => col.gbBlock === 'face' || col.gbBlock === 'occiput');
+    let upperBot = top;
+
+    if (upper && upper.items.length) {
+      const items = upper.items;
+      items.sort(byGbSequence);
+      const n = items.length;
+      const reserve = (lower && lower.items.length)
+        ? Math.max(step, (lower.items.length - 1) * step + step * 1.15)
+        : 0;
+      const limit = Math.min(bot, height - pad - reserve);
+      if (n > 1 && top + (n - 1) * step > limit) {
+        step = Math.max(textH, (limit - top) / (n - 1));
+      }
+      items.forEach((item, i) => markGbHeadSlot(item, top + i * step, upper.gbBlock));
+      upperBot = items[n - 1].slotY + step;
     }
-    rest.forEach((item, i) => {
-      item.slotY = top + i * step;
-      item.dogleg = false;
-      item.gbHead = true;
-    });
-    face.sort((a, b) => a.py - b.py || a.px - b.px);
-    const restBot = rest.length ? rest[rest.length - 1].slotY + step : top;
-    let next = Math.max(restBot, pad);
-    face.forEach((item) => {
-      let y = Math.max(next, item.py);
-      y = Math.max(pad, Math.min(bot, y));
-      item.slotY = y;
-      item.dogleg = false;
-      item.gbHead = true;
-      next = y + step;
-    });
-    items.length = 0;
-    items.push(...rest, ...face);
+
+    if (lower && lower.items.length) {
+      const items = lower.items;
+      items.sort(byGbSequence);
+      const n = items.length;
+      const span = (n - 1) * step;
+      const meanPy = items.reduce((sum, it) => sum + it.py, 0) / n;
+      let y0 = meanPy - span / 2;
+      y0 = Math.max(upperBot, Math.min(bot - span, y0));
+      items.forEach((item, i) => {
+        markGbHeadSlot(item, Math.max(pad, Math.min(bot, y0 + i * step)), lower.gbBlock);
+      });
+    }
   }
 
   function packLiaoColumn(items, height, slotH, pad) {
@@ -3478,10 +3512,11 @@ const Meridian3D = (() => {
         packBlPairColumns(innerStick.items, outerStick.items, height, slotH, pad + 6);
       }
       packBlFootColumns(columns, height, pad + 6);
+      packGbHeadColumns(columns, height, Math.max(18, (columns.find((col) => col.gbHead)?.items[0]?.textH || 16) * 0.92), pad + 6);
       columns.forEach((col) => {
         const baseH = col.items[0]?.textH || 16;
         if (col.gbHead) {
-          packGbHeadColumn(col.items, height, Math.max(18, baseH * 0.92), pad + 6);
+          return;
         } else if (col.liao) {
           packLiaoColumn(col.items, height, Math.max(22, baseH * 1.08), pad + 6);
         } else if (col.foot) {
@@ -3493,8 +3528,11 @@ const Meridian3D = (() => {
         }
       });
       liftKunlunAboveFoot(columns, pad + 6);
+      const gbHeadMaxW = Math.max(0, ...columns.filter((col) => col.gbHead).flatMap((col) => col.items.map((it) => it.textW)));
       columns.forEach((col) => {
-        const colMaxW = Math.max(0, ...col.items.map((it) => it.textW));
+        const colMaxW = col.gbHead
+          ? Math.max(gbHeadMaxW, ...col.items.map((it) => it.textW))
+          : Math.max(0, ...col.items.map((it) => it.textW));
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
@@ -3585,13 +3623,17 @@ const Meridian3D = (() => {
       }
       let d;
       if (item.gbHead) {
-        const gutterX = item.park === 'left'
-          ? joinX + 8
-          : joinX - 8;
-        if (Math.abs(item.slotY - item.py) < 4) {
+        const stubLen = Math.min(12, Math.max(6, item.textH * 0.22));
+        const stubX = item.park === 'left' ? joinX + stubLen : joinX - stubLen;
+        const stubOk = item.park === 'left'
+          ? stubX < item.px - 4
+          : stubX > item.px + 4;
+        if (Math.abs(item.slotY - item.py) < 3) {
           d = `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.py.toFixed(1)}`;
+        } else if (stubOk) {
+          d = `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${stubX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
         } else {
-          d = `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${gutterX.toFixed(1)} ${item.py.toFixed(1)} L ${gutterX.toFixed(1)} ${item.slotY.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
+          d = `M ${item.px.toFixed(1)} ${item.py.toFixed(1)} L ${joinX.toFixed(1)} ${item.slotY.toFixed(1)}`;
         }
       } else {
         d = aligned
@@ -4622,6 +4664,7 @@ const Meridian3D = (() => {
           px: item.px,
           py: item.py,
           park: item.park,
+          gbBlock: item.gbBlock || '',
         };
       },
       autoView: () => (autoViewDir ? autoViewDir.toArray() : null),
@@ -4675,6 +4718,10 @@ const Meridian3D = (() => {
           const xs = [...d.matchAll(/[ML]\s*([\d.]+) /g)].map((m) => Number(m[1]));
           const horizontal = ys.length >= 2 && ys.every((y) => Math.abs(y - ys[0]) < 1.5);
           const dogleg = ys.length >= 3 && Math.abs(ys[0] - ys[1]) > 2 && Math.abs(ys[1] - ys[ys.length - 1]) < 1.5;
+          const bus = xs.length >= 4
+            && Math.abs((ys[0] || 0) - (ys[1] || 0)) < 1.5
+            && Math.abs((xs[1] || 0) - (xs[2] || 0)) < 1.5;
+          const fan = !bus && !horizontal && ys.length >= 2;
           return {
             name: el.textContent,
             x: Number(el.getAttribute('x')),
@@ -4683,6 +4730,8 @@ const Meridian3D = (() => {
             park: Number(el.getAttribute('x')) < width * 0.45 ? 'left' : 'right',
             horizontal,
             dogleg,
+            bus,
+            fan,
             py0: ys[0] || 0,
             elbowX: xs[1] || xs[0] || 0,
           };
