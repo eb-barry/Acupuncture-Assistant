@@ -3668,6 +3668,12 @@ const Meridian3D = (() => {
             } else if (col.gbHead && col.indent) {
               const innerInset = Math.max(outerW + 18, fs * 2.2, 52);
               textX = width - pad - nameW - innerInset;
+              // At 5× side close-ups the occiput dots sit in the hamburger
+              // gutter; keep those names in the outer column so they do not
+              // drag across the ear. The 45° back shot still has room to indent.
+              if (item.px > width * 0.55 && textX + Math.min(24, nameW * 0.4) < item.px) {
+                textX = width - pad - nameW;
+              }
             } else if (col.liao || col.gbHead) {
               textX = width - pad - nameW;
             } else if (col.stick) {
