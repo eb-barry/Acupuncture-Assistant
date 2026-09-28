@@ -185,6 +185,13 @@ const Meridian3D = (() => {
     return 'occiput';
   }
 
+  // 瞳子髎 + 本神–承靈 sit on the model's left; 聽會/上關 and the temple stay on the visible right.
+  function gbHeadUsesModelLeft(rec) {
+    if (!isGbHead(rec)) return false;
+    const seq = Number(rec.sequence) || 0;
+    return seq === 1 || (seq >= 13 && seq <= 18);
+  }
+
   function gbHeadPark(rec) {
     const block = gbHeadBlock(rec);
     if (block === 'face' || block === 'forehead') return 'left';
@@ -258,6 +265,16 @@ const Meridian3D = (() => {
     return clusters;
   }
 
+  function gbHeadPreferItem(a, b) {
+    const aLeft = a.rec && a.rec.side === 'left';
+    const bLeft = b.rec && b.rec.side === 'left';
+    if (aLeft !== bLeft) return aLeft ? a : b;
+    const ax = Number(a.rec && a.rec.position && a.rec.position[0]);
+    const bx = Number(b.rec && b.rec.position && b.rec.position[0]);
+    if (Number.isFinite(ax) && Number.isFinite(bx) && ax !== bx) return ax < bx ? a : b;
+    return a.px <= b.px ? a : b;
+  }
+
   function dedupeParkItems(items, park) {
     const byName = new Map();
     items.forEach((it) => {
@@ -266,6 +283,10 @@ const Meridian3D = (() => {
       const prev = byName.get(key);
       if (!prev) {
         byName.set(key, it);
+        return;
+      }
+      if (gbHeadUsesModelLeft(it.rec) || gbHeadUsesModelLeft(prev.rec)) {
+        byName.set(key, gbHeadPreferItem(it, prev));
         return;
       }
       const liao = it.rec && BL_LIAO_NAMES.has(it.rec.name);
@@ -289,7 +310,14 @@ const Meridian3D = (() => {
   function isFocusRec(rec) {
     const focus = highlighted || currentPoint;
     if (!rec || !focus) return false;
-    return rec.code === focus.code && rec.meridianId === focus.meridianId && rec.side === focus.side;
+    if (rec.code === focus.code && rec.meridianId === focus.meridianId && rec.side === focus.side) {
+      return true;
+    }
+    return !!(
+      gbHeadUsesModelLeft(rec)
+      && rec.meridianId === focus.meridianId
+      && rec.name === focus.name
+    );
   }
 
   function ensureFocusItem(items, visible, park, sides) {
@@ -3099,6 +3127,7 @@ const Meridian3D = (() => {
       return false;
     }
     if (isFocusRec(rec)) return true;
+    if (gbHeadUsesModelLeft(rec) && rec.side === 'left') return true;
     if (currentPoint && htSegment(currentPoint) === 'dorsal'
       && rec.meridianId === 'HT' && htSegment(rec) !== 'dorsal') {
       return false;
@@ -3904,7 +3933,8 @@ const Meridian3D = (() => {
       });
     });
     (doc.acupoints || []).forEach((p) => {
-      if (p.meridianId !== meridianId || !sideAllowed(p.side)) return;
+      if (p.meridianId !== meridianId) return;
+      if (!sideAllowed(p.side) && !(meridianId === 'GB' && gbHeadUsesModelLeft(p))) return;
       addMarker(THREE, placedPoint(p), markerColorFor());
     });
     annotPlaced.add(meridianId);
@@ -4657,6 +4687,7 @@ const Meridian3D = (() => {
         if (!item) return { missing: true, n: lastLaidCallouts.length };
         return {
           name: item.rec.name,
+          side: item.rec.side,
           x: item.textX,
           y: item.slotY,
           w: item.textW,
@@ -4734,6 +4765,7 @@ const Meridian3D = (() => {
             fan,
             py0: ys[0] || 0,
             elbowX: xs[1] || xs[0] || 0,
+            px: xs[0] || 0,
           };
         });
       },
