@@ -168,6 +168,9 @@ const Meridian3D = (() => {
     ['眉衝', '曲差'],
     ['委中', '委陽'],
   ];
+  const GB_PARALLEL_PAIRS = [
+    { up: '輒筋', down: '淵腋' },
+  ];
 
   // GB 1–20 head fans: face+forehead Home/left; temple+occiput hamburger/right.
   function isGbHead(rec) {
@@ -189,6 +192,21 @@ const Meridian3D = (() => {
     const block = gbHeadBlock(rec);
     if (block === 'face' || block === 'forehead') return 'left';
     return 'right';
+  }
+
+  function gbAutoSegment(rec) {
+    if (!rec || rec.meridianId !== 'GB') return '';
+    const seq = Number(rec.sequence) || 0;
+    if (seq >= 4 && seq <= 12) return 'temple';
+    if (seq >= 13 && seq <= 18) return 'forehead';
+    if (seq >= 19 && seq <= 20) return 'occiput';
+    return 'default';
+  }
+
+  function isGbSegmentStart(rec) {
+    if (!rec || rec.meridianId !== 'GB') return false;
+    const seq = Number(rec.sequence) || 0;
+    return seq === 4 || seq === 13 || seq === 19 || seq === 21;
   }
 
   function isBlLiao(rec) {
@@ -386,7 +404,12 @@ const Meridian3D = (() => {
       });
       ['forehead', 'face', 'temple', 'occiput'].forEach((block) => {
         if (byBlock[block].length) {
-          cols.push({ items: byBlock[block], indent: 0, gbHead: true, gbBlock: block });
+          cols.push({
+            items: byBlock[block],
+            indent: block === 'occiput' ? 1 : 0,
+            gbHead: true,
+            gbBlock: block,
+          });
         }
       });
     }
@@ -1182,7 +1205,7 @@ const Meridian3D = (() => {
     const id = rec && rec.meridianId;
     const lateral = rec && rec.side === 'left' ? -1 : 1;
     if (id === 'GV' || id === 'BL') return new THREE.Vector3(0, 0, -1);
-    if (id === 'GB') return new THREE.Vector3(lateral, 0, 0.18).normalize();
+    if (id === 'GB') return gbViewDir(rec);
     if (id === 'TE' || id === 'SI') {
       return new THREE.Vector3(lateral * 0.62, 0.04, -0.78).normalize();
     }
@@ -1630,6 +1653,36 @@ const Meridian3D = (() => {
     return pose;
   }
 
+  function gbViewDir(rec) {
+    const { THREE } = three;
+    const lateral = rec && rec.side === 'left' ? -1 : 1;
+    const seg = gbAutoSegment(rec);
+    if (seg === 'temple') {
+      // True profile for 頷厭–完骨: face left, ear center, hamburger right.
+      return new THREE.Vector3(lateral, 0, 0).normalize();
+    }
+    if (seg === 'occiput') {
+      // Posterior-oblique 45° so 腦空/風池 face the user.
+      return new THREE.Vector3(lateral * 0.71, 0, -0.71).normalize();
+    }
+    // 瞳子髎–上關, 本神–承靈, 肩井+: slightly anterior lateral.
+    return new THREE.Vector3(lateral, 0, 0.18).normalize();
+  }
+
+  function gbDirOk(dir, rec) {
+    if (!dir || dir.lengthSq() < 1e-8) return false;
+    const lateral = rec && rec.side === 'left' ? -1 : 1;
+    const n = dir.clone().normalize();
+    const seg = gbAutoSegment(rec);
+    if (seg === 'temple') {
+      return (n.x * lateral) >= 0.92 && Math.abs(n.z) <= 0.22 && Math.abs(n.y) < 0.20;
+    }
+    if (seg === 'occiput') {
+      return (n.x * lateral) >= 0.42 && n.z <= -0.42 && Math.abs(n.y) < 0.28;
+    }
+    return (n.x * lateral) >= 0.88 && n.z >= 0.05 && n.z <= 0.35 && Math.abs(n.y) < 0.22;
+  }
+
   function lrSegment(rec) {
     if (!rec || rec.meridianId !== 'LR') return '';
     const seq = Number(rec.sequence) || 0;
@@ -1770,6 +1823,7 @@ const Meridian3D = (() => {
     const seq = Number(rec && rec.sequence) || 0;
     if (id === 'KI') return kiViewDir(rec);
     if (id === 'LR') return lrViewDir(rec);
+    if (id === 'GB') return gbViewDir(rec);
     if (isLuMaleDistal(rec)) return luViewDir(rec);
     if (isSpTorso(rec)) return spTorsoViewDir(rec);
     if (isInnerLimb(rec)) return innerLimbViewNormal(rec);
@@ -1798,6 +1852,10 @@ const Meridian3D = (() => {
     const lr = list.filter((rec) => lrSegment(rec));
     if (lr.length && lr.length * 2 >= list.length) {
       return lrViewDir(lr[0]);
+    }
+    const gb = list.filter((rec) => rec && rec.meridianId === 'GB');
+    if (gb.length && gb.length * 2 >= list.length) {
+      return gbViewDir(gb[0]);
     }
     const luMale = list.filter(isLuMaleDistal);
     if (luMale.length && luMale.length * 2 >= list.length) {
@@ -1863,6 +1921,7 @@ const Meridian3D = (() => {
       || id === 'KI'
       || id === 'LR'
       || id === 'HT'
+      || id === 'GB'
       || isPcPalm(rec)
     );
     const ok = (d) => {
@@ -1873,6 +1932,7 @@ const Meridian3D = (() => {
       if (id === 'HT' && !htDirOk(d, rec)) return false;
       if (id === 'KI' && !kiDirOk(d, rec)) return false;
       if (id === 'LR' && !lrDirOk(d, rec)) return false;
+      if (id === 'GB' && !gbDirOk(d, rec)) return false;
       if (isLuMaleDistal(rec) && !luDirOk(d, rec)) return false;
       if (isPcPalm(rec) && !pcDirOk(d, rec)) return false;
       if (id === 'SP' && (Number(rec.sequence) || 0) >= 12 && d.z < 0.55) return false;
@@ -1883,12 +1943,14 @@ const Meridian3D = (() => {
     const lateral = rec && rec.side === 'left' ? -1 : 1;
     const preferBack = id === 'GV' || id === 'BL' || id === 'SI' || id === 'TE'
       || kiSegment(rec) === 'medial'
-      || isHtMaleDistal(rec);
+      || isHtMaleDistal(rec)
+      || gbAutoSegment(rec) === 'occiput';
     const candidates = [
       fallbackViewDir(rec),
       id === 'HT' ? htViewDir(rec) : null,
       id === 'KI' ? kiViewDir(rec) : null,
       id === 'LR' ? lrViewDir(rec) : null,
+      id === 'GB' ? gbViewDir(rec) : null,
       isLuMaleDistal(rec) ? luViewDir(rec) : null,
       isPcPalm(rec) ? pcViewDir(rec) : null,
       id === 'HT' && htSegment(rec) !== 'dorsal'
@@ -1907,6 +1969,7 @@ const Meridian3D = (() => {
     if (id === 'KI') return kiViewDir(rec);
     if (id === 'LR') return lrViewDir(rec);
     if (id === 'HT') return htViewDir(rec);
+    if (id === 'GB') return gbViewDir(rec);
     if (isLuMaleDistal(rec)) return luViewDir(rec);
     return new THREE.Vector3(0, 0, preferBack ? -1 : 1);
   }
@@ -2039,6 +2102,7 @@ const Meridian3D = (() => {
         if (htSegment(anchor) && htSegment(rest[i]) && htSegment(anchor) !== htSegment(rest[i])) break;
         if (kiSegment(anchor) && kiSegment(rest[i]) && kiSegment(anchor) !== kiSegment(rest[i])) break;
         if (lrSegment(anchor) && lrSegment(rest[i]) && lrSegment(anchor) !== lrSegment(rest[i])) break;
+        if (gbAutoSegment(anchor) && gbAutoSegment(rest[i]) && gbAutoSegment(anchor) !== gbAutoSegment(rest[i])) break;
         if (isLuMaleDistal(anchor) !== isLuMaleDistal(rest[i])) break;
         if (pcSegment(anchor) && pcSegment(rest[i]) && pcSegment(anchor) !== pcSegment(rest[i])) break;
         if (!recFitsInPose(rest[i], pose, width, height)) break;
@@ -2150,7 +2214,7 @@ const Meridian3D = (() => {
 
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
-    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec) || isPcPalmStart(rec) || isLrSegmentStart(rec) || isLuSegmentStart(rec)) force = true;
+    if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec) || isPcPalmStart(rec) || isLrSegmentStart(rec) || isLuSegmentStart(rec) || isGbSegmentStart(rec)) force = true;
     let labelFix = false;
     if (!force) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
@@ -3425,6 +3489,42 @@ const Meridian3D = (() => {
     }
   }
 
+  function applySigned45Dogleg(item, dirY, partner) {
+    const toward = item.park === 'left' ? -1 : 1;
+    const midX = partner
+      ? (item.px + partner.px) / 2
+      : item.px + toward * Math.max(16, item.textH * 0.55);
+    const gap = Math.abs(midX - item.px);
+    const drop = Math.max(item.textH * 0.72, gap, item.textH * 0.62);
+    item.dogleg = true;
+    item.elbowX = item.px + toward * drop;
+    item.slotY = item.py + dirY * drop;
+  }
+
+  function applyGbParallelDoglegs(laid) {
+    GB_PARALLEL_PAIRS.forEach(({ up, down }) => {
+      const upItem = laid.find((it) => it.rec && it.rec.name === up);
+      const downItem = laid.find((it) => it.rec && it.rec.name === down);
+      if (!upItem || !downItem) return;
+      applySigned45Dogleg(upItem, -1, downItem);
+      applySigned45Dogleg(downItem, 1, upItem);
+      const pair = [upItem, downItem];
+      laid.forEach((it) => {
+        if (pair.includes(it) || it.park !== upItem.park || it.gbHead) return;
+        pair.forEach((hit) => {
+          if (Math.abs(it.slotY - hit.slotY) < hit.textH * 0.82) {
+            const dir = it.py >= (hit.py + upItem.py + downItem.py) / 3 ? 1 : -1;
+            it.slotY = hit.slotY + dir * hit.textH * 0.95;
+            if (Math.abs(it.slotY - it.py) >= 6) {
+              it.dogleg = true;
+              it.elbowX = it.px + (it.park === 'left' ? -1 : 1) * Math.abs(it.slotY - it.py);
+            }
+          }
+        });
+      });
+    });
+  }
+
   function applyBlParallelDoglegs(laid) {
     BL_PARALLEL_PAIRS.forEach(([medial, lateral]) => {
       const mei = laid.find((it) => it.rec && it.rec.name === medial);
@@ -3544,15 +3644,15 @@ const Meridian3D = (() => {
         }
       });
       liftKunlunAboveFoot(columns, pad + 6);
-      const gbHeadMaxW = Math.max(0, ...columns.filter((col) => col.gbHead).flatMap((col) => col.items.map((it) => it.textW)));
+      const gbHeadMaxW = Math.max(0, ...columns.filter((col) => col.gbHead && !col.indent).flatMap((col) => col.items.map((it) => it.textW)));
       columns.forEach((col) => {
         const colMaxW = col.gbHead
-          ? Math.max(gbHeadMaxW, ...col.items.map((it) => it.textW))
+          ? Math.max(col.indent ? 0 : gbHeadMaxW, ...col.items.map((it) => it.textW))
           : Math.max(0, ...col.items.map((it) => it.textW));
         col.items.forEach((item) => {
           const slotY = item.slotY;
           if (park === 'right') {
-            const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao);
+            const gutterCol = !!(col.indent && !col.stick && !col.foot && !col.liao && !col.gbHead);
             const fs = (item.textH || 32) / 1.35;
             const band = fs * 2;
             const gap = 12;
@@ -3565,6 +3665,9 @@ const Meridian3D = (() => {
             let textX = width - pad - nameW - inset;
             if (gutterCol) {
               textX = width - pad - band - gap - item.textW;
+            } else if (col.gbHead && col.indent) {
+              const innerInset = Math.max(outerW + 18, fs * 2.2, 52);
+              textX = width - pad - nameW - innerInset;
             } else if (col.liao || col.gbHead) {
               textX = width - pad - nameW;
             } else if (col.stick) {
@@ -3609,6 +3712,7 @@ const Meridian3D = (() => {
       });
     });
     applyBlParallelDoglegs(laid);
+    applyGbParallelDoglegs(laid);
 
     svg.innerHTML = '';
     calloutRecByKey.clear();
