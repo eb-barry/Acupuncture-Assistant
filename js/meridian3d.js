@@ -3233,7 +3233,9 @@ const Meridian3D = (() => {
 
     if (upper && upper.items.length) {
       const items = upper.items;
-      items.sort(byGbSequence);
+      // Home forehead: 承靈→本神 from the top so fans do not cross. Temple stays TTS order.
+      if (upper.gbBlock === 'forehead') items.sort((a, b) => byGbSequence(b, a));
+      else items.sort(byGbSequence);
       const n = items.length;
       const reserve = (lower && lower.items.length)
         ? Math.max(step, (lower.items.length - 1) * step + step * 1.15)
