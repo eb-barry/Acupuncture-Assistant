@@ -6,7 +6,7 @@
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v90';
+const SHELL_CACHE   = 'acupuncture-shell-v91';
 const ASSET_CACHE   = 'acupuncture-assets-v3';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 
