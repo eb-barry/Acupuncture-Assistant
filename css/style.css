@@ -410,6 +410,40 @@ body::before {
 .settings-row-label { flex: 1; font-size: var(--fs-md); color: var(--clr-ink); }
 .settings-row-label small { display: block; font-size: var(--fs-xs); color: var(--clr-muted); margin-top: 2px; }
 
+.about-credits {
+  padding: var(--sp-md) var(--sp-lg) var(--sp-lg);
+  border-top: var(--border);
+}
+.about-credits-title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--clr-ink);
+  margin-bottom: var(--sp-sm);
+}
+.about-credits p {
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+  color: var(--clr-text);
+}
+.about-credits-model {
+  font-weight: 600;
+  color: var(--clr-ink);
+  margin-top: var(--sp-md);
+}
+.about-credits-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+  color: var(--clr-text);
+}
+.about-credits-list a {
+  color: var(--clr-teal-dark);
+  word-break: break-all;
+}
+
 .font-size-picker { display: flex; gap: var(--sp-xs); }
 .font-size-picker button {
   width: 36px; height: 36px; border-radius: var(--radius-sm);
