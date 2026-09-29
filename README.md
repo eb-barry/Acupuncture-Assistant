@@ -2,9 +2,11 @@
 
 > 全人醫療・調和陰陽・扶正祛邪
 
-一款以 HTML + JavaScript 為基礎的手機端 PWA 應用程式，涵蓋中醫針灸的三大核心功能模組，專為中醫師、針灸學習者及學術探討設計。
+一款以 HTML + JavaScript 為基礎的手機端 PWA 應用程式，涵蓋中醫針灸的四大核心功能模組，專為中醫師、針灸學習者及學術探討設計。
 
-**版本 2.0**
+**版本 2.0（正式版）**
+
+2.0 在靈龜八法、經絡穴位、中醫歌訣之上，正式加入 **3D 經絡模型**，並於設定「關於」標示版本與體表模型來源 Credits。
 
 ---
 
@@ -13,6 +15,23 @@
 **GitHub Pages：** [https://eb-barry.github.io/Acupuncture-Assistant/](https://eb-barry.github.io/Acupuncture-Assistant/)
 
 支援加入主畫面，可離線使用（PWA）。
+
+---
+
+## 🔖 版本 2.0
+
+本版為目前正式發行內容，結案重點如下。
+
+**新增：3D 經絡模型**
+- 主畫面第四個模組：男／女體表、十四經脈、手動與自動導覽
+- 自動導覽固定 5×：每條經脈第一穴置中並面對使用者；後續穴位在靠近畫面邊緣 10%、或穴名超出畫面時才緩慢移到下一視角
+- 貼皮經脈帶、穴名標註、點選穴位說明；經穴與路線取自經脈繪圖室出版地圖
+
+**設定「關於」**
+- 顯示 **版本 2.0**
+- 完整 **3D 模型來源 Credits**（Sketchfab CC Attribution；見下方授權）
+
+**其餘 1.0 功能**仍保留：靈龜八法與子午流注、經絡穴位四種查詢、中醫歌訣 TTS、條款同意與字型／語音設定。
 
 ---
 
@@ -60,14 +79,24 @@
 - **經穴屬性與細節配對標籤**（如：交會穴 → 手足太陽、少陽之會；八會穴 → 骨會）
 - 結構化說明：主治、現代醫學闡釋、取穴要領、簡易取穴法、針灸禁忌
 
-### 3. 中醫歌訣
+### 3. 3D 經絡模型
+
+在體表 3D 模型上顯示十四經脈與穴位。
+
+- **模型性別**：男／女
+- **導覽模式**：手動旋轉檢視，或自動依經脈順序播報穴名
+- **自動導覽**：固定 5×；每條經脈第一穴置中並面對使用者；播報延遲可調 0.5–3 秒
+- 可全選或指定經脈；點選穴位可開啟說明
+- 體表模型來源見設定「關於」與下方 Credits
+
+### 4. 中醫歌訣
 
 - 9 首經典中醫歌訣（醫學三字經、四總穴歌、十問歌、八綱辨證歌等）
 - 顯示歌訣說明與全文
 - TTS 語音朗讀，支援中文女聲／男聲切換
 - 可暫停、停止播放
 
-### 4. 設定
+### 5. 設定
 
 - **介面字型大小**：小 / 中 / 大
 - **說明文字大小**：標準 / 大 / 特大（穴位主治、取穴等說明）
@@ -79,7 +108,7 @@
 ### 主畫面
 
 - 全螢幕背景圖（`main-menu.webp`，1320×2868），適配各種手機螢幕比例
-- 透明熱區按鈕對應三大功能模組與設定
+- 透明熱區按鈕對應四大功能模組與設定（靈龜八法、經絡與穴位、3D 經絡模型、中醫歌訣）
 
 ---
 
@@ -89,7 +118,7 @@
 Acupuncture-Assistant/
 ├── index.html                  # 主頁面（含所有子頁面框架、條款模板）
 ├── manifest.json               # PWA 設定
-├── sw.js                       # Service Worker（離線快取，shell v5）
+├── sw.js                       # Service Worker（離線快取，shell v93）
 ├── favicon.svg                 # 網站圖示
 ├── favicon.ico                 # 網站圖示（備援）
 ├── LICENSE                     # GNU General Public License v3.0
@@ -101,6 +130,7 @@ Acupuncture-Assistant/
 │   ├── ganzhi.js               # 天干地支核心計算模組
 │   ├── lingui.js               # 靈龜八法頁面邏輯
 │   ├── meridian.js             # 經絡與穴位頁面邏輯（四種查詢模式）
+│   ├── meridian3d.js           # 3D 經絡模型（Three.js、自動／手動導覽）
 │   ├── rhymes.js               # 中醫歌訣頁面邏輯
 │   ├── settings.js             # 設定管理（localStorage、條款同意紀錄）
 │   ├── consent.js              # 首次啟動條款同意視窗
@@ -110,7 +140,9 @@ Acupuncture-Assistant/
 └── assets/
     ├── main-menu.webp          # 主選單全螢幕背景圖（1320×2868）
     ├── home-icon.png           # 功能頁返回主頁圖示
-    ├── icons/                  # PWA 圖示（192×192、512×512）
+    ├── icons/                  # PWA 圖示與 3D 播放／選單圖示
+    ├── models/                 # 體表 GLB（male.glb、female.glb）
+    ├── meridians/              # 3D 經脈地圖（male.json、female.json）
     ├── acupuncture-data.json   # 十四經脈穴位特性對照表
     ├── points-data.json        # 362 個穴位完整說明資料（含經穴屬性配對）
     ├── rhymes-data.json        # 9 首歌訣清單
@@ -125,6 +157,7 @@ Acupuncture-Assistant/
 | 項目 | 技術 |
 |------|------|
 | 前端框架 | 純 HTML5 + Vanilla JavaScript（無框架依賴） |
+| 3D 檢視 | Three.js 0.185.1（GLTFLoader、OrbitControls） |
 | 樣式 | CSS 自訂屬性（CSS Variables）+ Flexbox / Grid |
 | 字型 | Noto Serif TC / Noto Sans TC（Google Fonts） |
 | 農曆計算 | Julian Day Number（JDN）算法，基準日 2024/1/1 甲子日，經 lunar-python 驗證 |
@@ -215,6 +248,8 @@ Acupuncture-Assistant/
 | 取穴要領 | 標準針灸學教材 |
 | 歌訣內容 | 中醫經典文獻彙整 |
 | 靈龜八法數值 | 傳統針灸典籍 |
+| 3D 經穴與經脈路線 | 經脈繪圖室出版地圖 |
+| 3D 體表模型 | Sketchfab，CC Attribution（見下方 Credits） |
 
 ---
 
@@ -263,6 +298,21 @@ python3 -m http.server 8080
 本專案程式碼以 [GNU General Public License v3.0](LICENSE) 授權。
 
 穴位資料整理自中醫古典文獻；程式碼及介面設計由開發者原創。AI 生成內容（現代醫學闡釋）未經臨床驗證，僅供學術探討。
+
+### 3D 模型來源 Credits
+
+內建體表模型來自 Sketchfab，均為 CC Attribution 授權。本專案對網格的整理與匯出方式見第三方授權檔，不代表原作者背書。
+
+**Female**
+- Creator: yuzutarou (@yuzuponponpon), Japan
+- Profile: [sketchfab.com/yuzuponponpon](https://sketchfab.com/yuzuponponpon)
+- Model: Female (muscle study)
+- Local file: `models/female-character.glb`（執行檔為 `assets/models/female.glb`）
+
+**Male**
+- Creator: MaceLogice
+- Model: Male Character
+- Local file: `models/male_character.glb`（執行檔為 `assets/models/male.glb`）
 
 ---
 
