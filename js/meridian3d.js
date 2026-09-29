@@ -200,12 +200,14 @@ const Meridian3D = (() => {
     if (seq >= 4 && seq <= 12) return 'temple';
     if (seq >= 13 && seq <= 18) return 'forehead';
     if (seq >= 19 && seq <= 20) return 'occiput';
+    if (loadedGender === 'male' && seq >= 22 && seq <= 23) return 'flank';
     return 'default';
   }
 
   function isGbSegmentStart(rec) {
     if (!rec || rec.meridianId !== 'GB') return false;
     const seq = Number(rec.sequence) || 0;
+    if (loadedGender === 'male' && (seq === 22 || seq === 24)) return true;
     return seq === 4 || seq === 13 || seq === 19 || seq === 21;
   }
 
@@ -1182,7 +1184,8 @@ const Meridian3D = (() => {
   }
 
   function skipFlatFacing(rec) {
-    return isCavityPoint(rec) || kiSegment(rec) === 'plantar' || isPcPalm(rec) || isHtMaleDistal(rec);
+    return isCavityPoint(rec) || kiSegment(rec) === 'plantar' || isPcPalm(rec) || isHtMaleDistal(rec)
+      || gbAutoSegment(rec) === 'flank';
   }
 
   function isInnerForearmLu(rec) {
@@ -1665,6 +1668,10 @@ const Meridian3D = (() => {
       // Posterior-oblique 45° so 腦空/風池 face the user.
       return new THREE.Vector3(lateral * 0.71, 0, -0.71).normalize();
     }
+    if (seg === 'flank') {
+      // Male 淵腋/輒筋: below the body, looking up the lateral chest.
+      return new THREE.Vector3(lateral * 0.55, -0.76, 0.35).normalize();
+    }
     // 瞳子髎–上關, 本神–承靈, 肩井+: slightly anterior lateral.
     return new THREE.Vector3(lateral, 0, 0.18).normalize();
   }
@@ -1680,7 +1687,50 @@ const Meridian3D = (() => {
     if (seg === 'occiput') {
       return (n.x * lateral) >= 0.42 && n.z <= -0.42 && Math.abs(n.y) < 0.28;
     }
+    if (seg === 'flank') {
+      return (n.x * lateral) >= 0.32 && n.y <= -0.52 && n.z >= 0.10 && n.z <= 0.58;
+    }
     return (n.x * lateral) >= 0.88 && n.z >= 0.05 && n.z <= 0.35 && Math.abs(n.y) < 0.22;
+  }
+
+  function gbFlankClusterRecs(rec) {
+    const doc = currentMap();
+    const side = rec && rec.side;
+    return ((doc && doc.acupoints) || []).filter((p) => (
+      p.meridianId === 'GB'
+      && p.side === side
+      && (Number(p.sequence) || 0) >= 22
+      && (Number(p.sequence) || 0) <= 23
+    ));
+  }
+
+  function poseForGbFlank(rec, dir) {
+    const { THREE } = three;
+    const nWant = gbDirOk(dir, rec) ? dir.clone().normalize() : gbViewDir(rec);
+    const cluster = gbFlankClusterRecs(rec);
+    const pts = cluster.length ? cluster : [rec];
+    const box = new THREE.Box3();
+    pts.forEach((p) => box.expandByPoint(new THREE.Vector3().fromArray(p.position)));
+    const target = box.getCenter(new THREE.Vector3());
+    const dist = framingDistance();
+    const probe = {
+      meridianId: 'GB',
+      side: rec && rec.side,
+      sequence: rec && rec.sequence,
+      position: [target.x, target.y, target.z],
+      normal: rec && rec.normal,
+    };
+    const n = ensureOutsideDir(probe, nWant, dist);
+    const look = n.clone().multiplyScalar(-1);
+    const up = new THREE.Vector3(0, 1, 0);
+    up.addScaledVector(look, -up.dot(look));
+    if (up.lengthSq() < 1e-6) up.set(0, 0, 1);
+    return {
+      pos: target.clone().addScaledVector(n, dist),
+      target,
+      dir: n,
+      up: up.normalize(),
+    };
   }
 
   function lrSegment(rec) {
@@ -1927,7 +1977,8 @@ const Meridian3D = (() => {
     const ok = (d) => {
       if (!d || d.lengthSq() < 1e-8) return false;
       const p = target.clone().addScaledVector(d, dist);
-      const allowInside = id === 'HT' || kiSegment(rec) === 'plantar' || isPcPalm(rec) || id === 'LR';
+      const allowInside = id === 'HT' || kiSegment(rec) === 'plantar' || isPcPalm(rec) || id === 'LR'
+        || gbAutoSegment(rec) === 'flank';
       if (!allowInside && !box.isEmpty() && box.containsPoint(p)) return false;
       if (id === 'HT' && !htDirOk(d, rec)) return false;
       if (id === 'KI' && !kiDirOk(d, rec)) return false;
@@ -1982,6 +2033,7 @@ const Meridian3D = (() => {
     if (rec && rec.meridianId === 'LR') return poseForLr(rec, dir);
     if (isLuMaleDistal(rec)) return poseForLuMaleDistal(rec, dir);
     if (isPcPalm(rec)) return poseForPcPalm(rec, dir);
+    if (gbAutoSegment(rec) === 'flank') return poseForGbFlank(rec, dir);
     const dist = usesInnerCloseup(rec) ? framingDistance() * INNER_ARM_DIST_SCALE : framingDistance();
     const n = ensureOutsideDir(
       rec,
