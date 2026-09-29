@@ -1669,8 +1669,9 @@ const Meridian3D = (() => {
       return new THREE.Vector3(lateral * 0.71, 0, -0.71).normalize();
     }
     if (seg === 'flank') {
-      // Male 淵腋/輒筋: below the body, looking up the lateral chest.
-      return new THREE.Vector3(lateral * 0.55, -0.76, 0.35).normalize();
+      // Male 淵腋/輒筋: below the right flank, slight elevation, side-front
+      // so the lateral chest faces the user (see user reference still).
+      return new THREE.Vector3(lateral * 0.74, -0.42, 0.52).normalize();
     }
     // 瞳子髎–上關, 本神–承靈, 肩井+: slightly anterior lateral.
     return new THREE.Vector3(lateral, 0, 0.18).normalize();
@@ -1688,7 +1689,8 @@ const Meridian3D = (() => {
       return (n.x * lateral) >= 0.42 && n.z <= -0.42 && Math.abs(n.y) < 0.28;
     }
     if (seg === 'flank') {
-      return (n.x * lateral) >= 0.32 && n.y <= -0.52 && n.z >= 0.10 && n.z <= 0.58;
+      return (n.x * lateral) >= 0.45 && n.y <= -0.22 && n.y >= -0.70
+        && n.z >= 0.28 && n.z <= 0.70;
     }
     return (n.x * lateral) >= 0.88 && n.z >= 0.05 && n.z <= 0.35 && Math.abs(n.y) < 0.22;
   }
