@@ -60,11 +60,16 @@ const Meridian3D = (() => {
     female: 'assets/meridians/female.json',
   };
 
+  const NARRATOR_SYNTH = 'synth';
+  const NARRATORS = ['Barry', 'Ashley', 'Joyce'];
+  const CLIP_SILENCE = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
   const opts = {
     gender: 'male',
     mode: 'manual',
     scale: 1,
     pauseSec: PAUSE_SEC_DEFAULT,
+    narrator: NARRATOR_SYNTH,
     meridians: new Set(),
   };
 
@@ -110,6 +115,11 @@ const Meridian3D = (() => {
   let lastPlayTapAt = 0;
   let autoStartedAt = 0;
   let lastLaidCallouts = [];
+  let clipAudio = null;
+  let clipSeq = 0;
+  let clipFinish = null;
+  let narratorMissNotified = false;
+  let lastClipUrl = '';
 
   const $ = (id) => document.getElementById(id);
 
@@ -791,7 +801,163 @@ const Meridian3D = (() => {
     } catch {}
   }
 
+  function clampNarrator(value) {
+    return NARRATORS.includes(value) ? value : NARRATOR_SYNTH;
+  }
+
+  function usingNarrator() {
+    return opts.narrator !== NARRATOR_SYNTH;
+  }
+
+  function narratorClipUrl(name, file) {
+    return `assets/audio/${encodeURIComponent(name)}/${encodeURIComponent(file)}`;
+  }
+
+  function ensureClipAudio() {
+    if (!clipAudio) {
+      clipAudio = new Audio();
+      clipAudio.preload = 'auto';
+      clipAudio.setAttribute('playsinline', '');
+    }
+    return clipAudio;
+  }
+
+  function settleClip(status) {
+    const finish = clipFinish;
+    clipFinish = null;
+    if (finish) finish(status);
+  }
+
+  function stopClip() {
+    clipSeq += 1;
+    const audio = clipAudio;
+    settleClip('aborted');
+    if (!audio) return;
+    try { audio.pause(); } catch {}
+  }
+
+  function unlockClipAudio() {
+    const audio = ensureClipAudio();
+    const token = clipSeq;
+    try {
+      audio.muted = true;
+      audio.src = CLIP_SILENCE;
+      const done = () => {
+        if (token !== clipSeq) return;
+        try { audio.pause(); } catch {}
+        audio.muted = false;
+      };
+      const pending = audio.play();
+      if (pending && typeof pending.then === 'function') pending.then(done, done);
+      else done();
+    } catch {}
+  }
+
+  function playClip(url) {
+    const audio = ensureClipAudio();
+    settleClip('aborted');
+    clipSeq += 1;
+    const token = clipSeq;
+    lastClipUrl = url;
+    if (window.__m3dTest) {
+      if (!Array.isArray(window.__m3dTest.clips)) window.__m3dTest.clips = [];
+      window.__m3dTest.clips.push(url);
+    }
+    return new Promise((resolve) => {
+      if (autoAbort) {
+        try { audio.pause(); } catch {}
+        resolve('aborted');
+        return;
+      }
+      let settled = false;
+      const fast = !!(window.__m3dTest && window.__m3dTest.fastAuto);
+      const cleanup = () => {
+        audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('error', onError);
+        audio.removeEventListener('loadeddata', onLoaded);
+      };
+      const finish = (status) => {
+        if (settled) return;
+        settled = true;
+        if (clipFinish === finish) clipFinish = null;
+        cleanup();
+        resolve(status);
+      };
+      clipFinish = finish;
+      const onEnded = () => finish('ok');
+      const onError = () => finish(token === clipSeq ? 'missing' : 'aborted');
+      const onLoaded = () => {
+        if (!fast || token !== clipSeq) return;
+        try { audio.pause(); } catch {}
+        finish('ok');
+      };
+      audio.addEventListener('ended', onEnded);
+      audio.addEventListener('error', onError);
+      if (fast) audio.addEventListener('loadeddata', onLoaded);
+      try { audio.pause(); } catch {}
+      audio.muted = false;
+      audio.src = url;
+      let pending;
+      try { pending = audio.play(); }
+      catch (err) {
+        finish(err && err.name === 'NotAllowedError' ? 'blocked' : 'missing');
+        return;
+      }
+      if (pending && typeof pending.catch === 'function') {
+        pending.catch((err) => {
+          if (settled) return;
+          if (token !== clipSeq || (err && err.name === 'AbortError')) {
+            finish('aborted');
+            return;
+          }
+          if (err && err.name === 'NotAllowedError') {
+            finish('blocked');
+            return;
+          }
+          finish('missing');
+        });
+      }
+    });
+  }
+
+  function revertNarratorToSynth() {
+    const name = opts.narrator;
+    if (name === NARRATOR_SYNTH) return;
+    opts.narrator = NARRATOR_SYNTH;
+    const sel = $('m3d-narrator');
+    if (sel) sel.value = NARRATOR_SYNTH;
+    if (typeof Settings !== 'undefined') Settings.set('narrator', NARRATOR_SYNTH);
+    if (!narratorMissNotified) {
+      narratorMissNotified = true;
+      UI.toast(`找不到${name}的語音檔，已改回電腦合成`);
+    }
+  }
+
+  async function narrateIntro(mer, count, phase) {
+    if (usingNarrator()) {
+      const status = await playClip(narratorClipUrl(opts.narrator, `${mer.id}-${count}.mp3`));
+      if (status === 'ok' || status === 'aborted' || autoAbort) return;
+      if (status === 'missing') revertNarratorToSynth();
+    }
+    if (phase !== 'count') {
+      await speak(mer.name, opts.gender);
+      if (autoAbort) return;
+    }
+    await speak(`共${chineseNum(count)}穴`, opts.gender);
+  }
+
+  async function narratePoint(rec) {
+    if (usingNarrator()) {
+      const file = `${rec.code}-${rec.meridian}-${rec.name}.mp3`;
+      const status = await playClip(narratorClipUrl(opts.narrator, file));
+      if (status === 'ok' || status === 'aborted' || autoAbort) return;
+      if (status === 'missing') revertNarratorToSynth();
+    }
+    await speak(rec.name, opts.gender);
+  }
+
   function cancelSpeech() {
+    stopClip();
     if (!window.speechSynthesis) return;
     try { window.speechSynthesis.cancel(); } catch {}
   }
@@ -4459,11 +4625,7 @@ const Meridian3D = (() => {
         }
 
         if (!resume || phase === 'name' || phase === 'count') {
-          if (phase !== 'count') {
-            await speak(mer.name, opts.gender);
-            if (autoAbort || gen !== playGeneration) return;
-          }
-          await speak(`共${chineseNum(pts.length)}穴`, opts.gender);
+          await narrateIntro(mer, pts.length, phase);
           if (autoAbort || gen !== playGeneration) return;
           await sleep(tourPauseMs());
           if (autoAbort || gen !== playGeneration) return;
@@ -4486,7 +4648,7 @@ const Meridian3D = (() => {
           if (autoAbort || gen !== playGeneration) return;
           await holdForTest(rec);
           if (autoAbort || gen !== playGeneration) return;
-          await speak(rec.name, opts.gender);
+          await narratePoint(rec);
           if (autoAbort || gen !== playGeneration) return;
           await sleep(tourPauseMs());
           if (autoAbort || gen !== playGeneration) return;
@@ -4531,6 +4693,7 @@ const Meridian3D = (() => {
     }
     if (!validatePlay()) return;
     unlockSpeech();
+    unlockClipAudio();
     setModal(false);
     if (opts.mode === 'auto') {
       playAuto(cursorMatchesSelection()).catch((err) => console.warn(err));
@@ -4628,6 +4791,18 @@ const Meridian3D = (() => {
       scaleVal.textContent = opts.scale.toFixed(1) + '×';
       applyScale();
     };
+
+    const narrator = $('m3d-narrator');
+    opts.narrator = clampNarrator(typeof Settings !== 'undefined' ? Settings.get('narrator') : NARRATOR_SYNTH);
+    if (narrator) {
+      narrator.value = opts.narrator;
+      narrator.onchange = () => {
+        opts.narrator = clampNarrator(narrator.value);
+        narrator.value = opts.narrator;
+        narratorMissNotified = false;
+        if (typeof Settings !== 'undefined') Settings.set('narrator', opts.narrator);
+      };
+    }
 
     const pause = $('m3d-pause');
     const pauseVal = $('m3d-pause-val');
@@ -5142,6 +5317,8 @@ const Meridian3D = (() => {
         mode: opts.mode,
         meridians: [...opts.meridians],
         pauseSec: opts.pauseSec,
+        narrator: opts.narrator,
+        lastClip: lastClipUrl,
       }),
       meshStats() {
         let verts = 0;
