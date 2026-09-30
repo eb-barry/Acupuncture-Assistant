@@ -195,6 +195,16 @@
             <p class="m3d-field-label">播報延遲 <span id="m3d-pause-val">1.5 秒</span></p>
             <input type="range" id="m3d-pause" min="0.5" max="3" step="0.5" value="1.5">
             <p class="m3d-field-hint">自動導覽時，穴位播報之間的停頓時間，可調 0.5–3 秒。</p>
+            <p class="m3d-field-label">語音播報</p>
+            <div class="select-wrap">
+              <select id="m3d-narrator" class="styled-select" aria-label="語音播報">
+                <option value="synth">電腦合成</option>
+                <option value="Barry">Barry</option>
+                <option value="Ashley">Ashley</option>
+                <option value="Joyce">Joyce</option>
+              </select>
+            </div>
+            <p class="m3d-field-hint">選擇播報員時，每條經脈先播簡介，再逐穴播放錄音。找不到檔案就改回電腦合成。</p>
             <p class="m3d-field-label">經脈選擇</p>
             <div class="m3d-meridian-actions">
               <button type="button" class="btn btn-secondary" id="m3d-select-all">全選</button>

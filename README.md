@@ -85,7 +85,7 @@
 
 - **模型性別**：男／女
 - **導覽模式**：手動旋轉檢視，或自動依經脈順序播報穴名
-- **自動導覽**：固定 5×；每條經脈第一穴置中並面對使用者；播報延遲可調 0.5–3 秒
+- **自動導覽**：固定 5×；每條經脈第一穴置中並面對使用者；播報延遲可調 0.5–3 秒；語音播報可選電腦合成或 Barry、Ashley、Joyce
 - 可全選或指定經脈；點選穴位可開啟說明
 - 體表模型來源見設定「關於」與下方 Credits
 
@@ -118,7 +118,7 @@
 Acupuncture-Assistant/
 ├── index.html                  # 主頁面（含所有子頁面框架、條款模板）
 ├── manifest.json               # PWA 設定
-├── sw.js                       # Service Worker（離線快取，shell v93）
+├── sw.js                       # Service Worker（離線快取，shell v94）
 ├── favicon.svg                 # 網站圖示
 ├── favicon.ico                 # 網站圖示（備援）
 ├── LICENSE                     # GNU General Public License v3.0
