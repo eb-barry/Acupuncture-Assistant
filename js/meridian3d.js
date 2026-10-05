@@ -50,7 +50,7 @@ const Meridian3D = (() => {
   const INNER_ARM_FACE_DOT_MIN = 0.85;
   const INNER_ARM_DIST_SCALE = 0.50;
   const VIEW_CARDINAL_COS = 0.985;
-  const PAUSE_SEC_MIN = 0.5;
+  const PAUSE_SEC_MIN = 0;
   const PAUSE_SEC_MAX = 3;
   const PAUSE_SEC_STEP = 0.5;
   const PAUSE_SEC_DEFAULT = 1.5;
