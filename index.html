@@ -439,7 +439,7 @@
       <ul class="disclaimer-list">
         <li><span class="disclaimer-term">現狀提供</span>本程式依「現狀」提供，不附帶任何明示或暗示的擔保。</li>
         <li><span class="disclaimer-term">不含保證</span>包括但不限於適售性及特定目的適用性的暗示擔保。</li>
-        <li><span class="disclaimer-term">完整條款</span>完整授權條款請參閱 <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">gnu.org/licenses/gpl-3.0.html</a>。</li>
+        <li><span class="disclaimer-term">完整條款</span>完整授權條款請參閱 GNU GPLv3。<a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">gnu.org/licenses/gpl-3.0.html</a></li>
       </ul>
     </section>
 
@@ -637,8 +637,17 @@
   function jumpSettingsTerms(key) {
     showSettingsTab('terms', { keepScroll: true });
     requestAnimationFrame(() => {
+      const scroller = document.getElementById('settings-scroll');
       const target = document.querySelector('#settings-panel-terms [data-terms="' + key + '"]');
-      if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (!scroller || !target) return;
+      if (key === 'credits') {
+        scroller.scrollTop = 0;
+        return;
+      }
+      const anchor = document.querySelector('#settings-panel-terms .settings-anchors');
+      const offset = (anchor ? anchor.offsetHeight : 48) + 8;
+      const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      scroller.scrollTo({ top: Math.max(0, top - offset), behavior: 'smooth' });
     });
   }
 

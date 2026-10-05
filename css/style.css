@@ -1279,8 +1279,10 @@ body::before {
   gap: var(--sp-sm);
 }
 .disclaimer-list a {
+  display: block;
+  margin-top: 2px;
   color: var(--clr-teal-dark);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .disclaimer-warn .disclaimer-heading  { color: var(--clr-danger); }
 .disclaimer-agree .disclaimer-heading { color: var(--clr-teal-dark); }
