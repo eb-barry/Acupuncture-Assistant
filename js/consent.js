@@ -8,10 +8,18 @@ const Consent = (() => {
   const SCROLL_THRESHOLD = 24;
   let _scrollHandler = null;
 
-  function _mountTerms(container) {
+  const CONSENT_INTRO = '使用「針灸助理」前，請詳閱以下重要事項。捲動至文末後，方可勾選同意並繼續使用。';
+
+  function _mountTerms(container, opts) {
     const tpl = document.getElementById('legal-terms-template');
     if (!tpl || !container) return;
     container.innerHTML = '';
+    if (opts && opts.intro) {
+      const intro = document.createElement('p');
+      intro.className = 'legal-terms-intro';
+      intro.textContent = CONSENT_INTRO;
+      container.appendChild(intro);
+    }
     container.appendChild(tpl.content.cloneNode(true));
   }
 
@@ -78,7 +86,7 @@ const Consent = (() => {
 
     if (!overlay || !scrollEl || !footerEl) return;
 
-    _mountTerms(scrollEl);
+    _mountTerms(scrollEl, { intro: true });
 
     footerEl.classList.remove('visible');
     checkbox.checked = false;
