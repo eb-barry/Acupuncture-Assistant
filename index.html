@@ -268,110 +268,135 @@
       <span class="page-title">設定</span>
       <div style="width:38px"></div>
     </div>
-    <div class="scroll-area">
-      <div class="flex-col gap-lg">
+    <div class="settings-tabs" role="tablist" aria-label="設定分頁">
+      <button type="button" class="settings-tab" id="settings-tab-prefs" role="tab"
+              aria-selected="true" aria-controls="settings-panel-prefs">使用設定</button>
+      <button type="button" class="settings-tab" id="settings-tab-terms" role="tab"
+              aria-selected="false" aria-controls="settings-panel-terms">條款與致謝</button>
+    </div>
+    <div class="scroll-area" id="settings-scroll">
+      <div id="settings-panel-prefs" class="settings-panel page-content" role="tabpanel" aria-labelledby="settings-tab-prefs">
+        <div class="flex-col gap-lg">
 
-        <div>
-          <p class="section-title">顯示</p>
-          <div class="settings-section">
-            <div class="settings-row">
-              <div class="settings-row-label">
-                介面字型大小
-                <small>調整按鈕、選單等 UI 文字</small>
+          <div>
+            <p class="section-title">顯示</p>
+            <div class="settings-section">
+              <div class="settings-row">
+                <div class="settings-row-label">
+                  介面字型大小
+                  <small>調整按鈕、選單等 UI 文字</small>
+                </div>
+                <div class="font-size-picker" id="font-size-picker">
+                  <button data-size="small"  title="小">小</button>
+                  <button data-size="medium" title="中">中</button>
+                  <button data-size="large"  title="大">大</button>
+                </div>
               </div>
-              <div class="font-size-picker" id="font-size-picker">
-                <button data-size="small"  title="小">小</button>
-                <button data-size="medium" title="中">中</button>
-                <button data-size="large"  title="大">大</button>
-              </div>
-            </div>
-            <div class="settings-row">
-              <div class="settings-row-label">
-                說明文字大小
-                <small>穴位主治、取穴等說明的字型</small>
-              </div>
-              <div class="font-size-picker" id="desc-size-picker">
-                <button data-desc="normal" title="標準">標準</button>
-                <button data-desc="large"  title="大">大</button>
-                <button data-desc="xlarge" title="特大">特大</button>
+              <div class="settings-row">
+                <div class="settings-row-label">
+                  說明文字大小
+                  <small>穴位主治、取穴等說明的字型</small>
+                </div>
+                <div class="font-size-picker" id="desc-size-picker">
+                  <button data-desc="normal" title="標準">標準</button>
+                  <button data-desc="large"  title="大">大</button>
+                  <button data-desc="xlarge" title="特大">特大</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div>
-          <p class="section-title">語音</p>
-          <div class="settings-section">
-            <div class="settings-row">
-              <div class="settings-row-label">
-                TTS 聲音
-                <small>朗讀歌訣時的聲音性別</small>
+          <div>
+            <p class="section-title">語音</p>
+            <div class="settings-section">
+              <div class="settings-row">
+                <div class="settings-row-label">
+                  TTS 聲音
+                  <small>朗讀歌訣時的聲音性別</small>
+                </div>
+                <div class="voice-picker" id="voice-picker">
+                  <button data-voice="female">女聲</button>
+                  <button data-voice="male">男聲</button>
+                </div>
               </div>
-              <div class="voice-picker" id="voice-picker">
-                <button data-voice="female">女聲</button>
-                <button data-voice="male">男聲</button>
+              <div class="settings-row">
+                <div class="settings-row-label">
+                  語音測試
+                  <small>點擊試聽目前設定</small>
+                </div>
+                <button class="btn btn-secondary" id="btn-tts-test" style="font-size:var(--fs-sm);padding:8px 14px;">
+                  試聽
+                </button>
               </div>
             </div>
-            <div class="settings-row">
-              <div class="settings-row-label">
-                語音測試
-                <small>點擊試聽目前設定</small>
+          </div>
+
+          <div>
+            <p class="section-title">關於</p>
+            <div class="settings-section">
+              <div class="settings-row">
+                <div class="settings-row-label">
+                  針灸助理
+                  <small>版本 2.0</small>
+                </div>
               </div>
-              <button class="btn btn-secondary" id="btn-tts-test" style="font-size:var(--fs-sm);padding:8px 14px;">
-                試聽
+              <button type="button" class="about-terms-link" id="about-open-terms">
+                3D 模型來源與使用條款見「條款與致謝」
               </button>
             </div>
           </div>
-        </div>
 
-        <div>
-          <p class="section-title">關於</p>
-          <div class="settings-section">
-            <div class="settings-row">
-              <div class="settings-row-label">
-                針灸助理
-                <small>版本 2.0</small>
+          <div>
+            <p class="section-title">條款同意時間</p>
+            <div class="settings-section">
+              <div class="settings-row">
+                <div class="settings-row-label">
+                  同意日期時間
+                  <small id="terms-consent-datetime">尚未同意</small>
+                </div>
               </div>
             </div>
-            <div class="about-credits">
-              <p class="about-credits-title">3D 模型來源 Credits</p>
-              <p>內建體表模型來自 Sketchfab，均為 CC Attribution 授權。本專案對網格的整理與匯出方式見第三方授權檔，不代表原作者背書。</p>
-              <p class="about-credits-model">Female</p>
-              <ul class="about-credits-list">
-                <li>Creator: yuzutarou (@yuzuponponpon), Japan</li>
-                <li>Profile: <a href="https://sketchfab.com/yuzuponponpon" target="_blank" rel="noopener noreferrer">sketchfab.com/yuzuponponpon</a></li>
-                <li>Model: Female (muscle study)</li>
-                <li>Local file: models/female-character.glb</li>
-              </ul>
-              <p class="about-credits-model">Male</p>
-              <ul class="about-credits-list">
-                <li>Creator: MaceLogice</li>
-                <li>Model: Male Character</li>
-                <li>Local file: models/male_character.glb</li>
-              </ul>
-            </div>
           </div>
-        </div>
 
-        <div>
-          <p class="section-title">重要事項與條款</p>
+        </div>
+        <div class="safe-bottom"></div>
+      </div>
+
+      <div id="settings-panel-terms" class="settings-panel page-content" role="tabpanel" aria-labelledby="settings-tab-terms" hidden>
+        <div class="settings-anchors" role="navigation" aria-label="條款目錄">
+          <button type="button" class="settings-anchor" data-terms-jump="credits">模型致謝</button>
+          <button type="button" class="settings-anchor" data-terms-jump="license">授權條款</button>
+          <button type="button" class="settings-anchor" data-terms-jump="rights">您的權利</button>
+          <button type="button" class="settings-anchor" data-terms-jump="duties">您的義務</button>
+          <button type="button" class="settings-anchor" data-terms-jump="warranty">無擔保</button>
+          <button type="button" class="settings-anchor" data-terms-jump="medical">免責聲明</button>
+          <button type="button" class="settings-anchor" data-terms-jump="limits">免責條款</button>
+          <button type="button" class="settings-anchor" data-terms-jump="responsibility">使用者責任</button>
+        </div>
+        <div class="flex-col gap-lg">
+          <section class="disclaimer-block" data-terms="credits">
+            <p class="disclaimer-heading">3D 模型來源與感謝</p>
+            <ul class="disclaimer-list">
+              <li><span class="disclaimer-term">授權</span>內建體表模型來自 Sketchfab，均為 CC Attribution 授權。本專案對網格的整理與匯出方式見第三方授權檔，不代表原作者背書。</li>
+            </ul>
+            <p class="disclaimer-model">Female</p>
+            <ul class="disclaimer-list">
+              <li><span class="disclaimer-term">Creator</span>yuzutarou (@yuzuponponpon), Japan</li>
+              <li><span class="disclaimer-term">Profile</span><a href="https://sketchfab.com/yuzuponponpon" target="_blank" rel="noopener noreferrer">sketchfab.com/yuzuponponpon</a></li>
+              <li><span class="disclaimer-term">Model</span>Female (muscle study)</li>
+              <li><span class="disclaimer-term">Local file</span>models/female-character.glb</li>
+            </ul>
+            <p class="disclaimer-model">Male</p>
+            <ul class="disclaimer-list">
+              <li><span class="disclaimer-term">Creator</span>MaceLogice</li>
+              <li><span class="disclaimer-term">Model</span>Male Character</li>
+              <li><span class="disclaimer-term">Local file</span>models/male_character.glb</li>
+            </ul>
+          </section>
           <div id="settings-terms-mount" class="disclaimer-box"></div>
         </div>
-
-        <div>
-          <p class="section-title">條款同意紀錄</p>
-          <div class="settings-section">
-            <div class="settings-row">
-              <div class="settings-row-label">
-                同意日期時間
-                <small id="terms-consent-datetime">尚未同意</small>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <div class="safe-bottom"></div>
       </div>
-      <div class="safe-bottom"></div>
     </div>
   </div>
 
@@ -380,24 +405,26 @@
 <!-- 條款文檔（設定頁與首次同意視窗共用） -->
 <template id="legal-terms-template">
   <div class="legal-terms-doc">
-    <p class="legal-terms-intro">使用「針灸助理」前，請詳閱以下重要事項。捲動至文末後，方可勾選同意並繼續使用。</p>
+    <section class="disclaimer-block" data-terms="license">
+      <p class="disclaimer-heading">授權條款</p>
+      <p class="disclaimer-sub">GNU General Public License v3.0</p>
+      <ul class="disclaimer-list">
+        <li><span class="disclaimer-term">自由軟體</span>本程式為自由軟體，依據 GNU 通用公共授權條款第三版（GPLv3）發布。</li>
+        <li><span class="disclaimer-term">可再散布與修改</span>您可以自由地重新發布和/或修改本程式。</li>
+      </ul>
+    </section>
 
-    <div class="disclaimer-block">
-      <p class="disclaimer-heading">一、授權條款（GNU General Public License v3.0）</p>
-      <p>本程式為自由軟體，依據 GNU 通用公共授權條款第三版（GPLv3）發布。您可以自由地重新發布和/或修改本程式。</p>
-    </div>
-
-    <div class="disclaimer-block">
-      <p class="disclaimer-heading" style="color:var(--clr-teal-dark)">您的權利</p>
+    <section class="disclaimer-block" data-terms="rights">
+      <p class="disclaimer-heading">您的權利</p>
       <ul class="disclaimer-list">
         <li><span class="disclaimer-term">自由使用</span>可基於任何目的自由執行本程式。</li>
         <li><span class="disclaimer-term">自由研究</span>可研究程式的運作方式並按需修改。存取原始碼為前提。</li>
         <li><span class="disclaimer-term">自由散布</span>可重新散布本程式的副本，幫助他人。</li>
         <li><span class="disclaimer-term">自由改進</span>可改進本程式並向公眾發布，使整個社群受益。</li>
       </ul>
-    </div>
+    </section>
 
-    <div class="disclaimer-block disclaimer-warn">
+    <section class="disclaimer-block" data-terms="duties">
       <p class="disclaimer-heading">您的義務</p>
       <ul class="disclaimer-list">
         <li><span class="disclaimer-term">保留授權聲明</span>散布或修改時，必須保留原始著作權聲明及 GPLv3 授權聲明。</li>
@@ -405,54 +432,48 @@
         <li><span class="disclaimer-term">相同授權</span>基於本程式衍生的作品，必須採用相同的 GPLv3 授權條款（著作傳）。</li>
         <li><span class="disclaimer-term">提供原始碼</span>以二進位形式散布時，必須同時提供或附上取得原始碼的方式。</li>
       </ul>
-    </div>
+    </section>
 
-    <div class="disclaimer-block disclaimer-agree">
-      <p class="disclaimer-heading">二、無擔保聲明</p>
-      <p>本程式依「現狀」提供，不附帶任何明示或暗示的擔保，包括但不限於適售性及特定目的適用性的暗示擔保。完整授權條款請參閱：</p>
-      <p style="margin-top:8px;">
-        <a href="https://www.gnu.org/licenses/gpl-3.0.html"
-           style="color:var(--clr-teal);text-decoration:underline;font-size:var(--fs-sm);"
-           target="_blank" rel="noopener">
-          https://www.gnu.org/licenses/gpl-3.0.html
-        </a>
-      </p>
-    </div>
-
-    <div class="disclaimer-block disclaimer-warn">
-      <p class="disclaimer-heading">三、免責聲明</p>
-      <p class="disclaimer-heading" style="font-size:var(--fs-sm);margin-top:var(--sp-sm)">本 App 不提供醫療建議，亦非醫療行為</p>
-      <p>本應用程式（含穴位圖、治症描述及 AI 生成內容）僅供中醫／針灸教學、學術探討及知識參考之用。嚴禁使用者依據本 App 內容進行自我或他人之針灸、按壓、放血或其他侵入性治療。</p>
-      <p style="margin-top:8px;">若您身體不適或有疾病，請立即尋求合格之中醫師或西醫師診治。延誤就醫或自行針灸可能導致健康風險。</p>
-    </div>
-
-    <div class="disclaimer-block">
-      <p class="disclaimer-heading">四、免責條款</p>
+    <section class="disclaimer-block" data-terms="warranty">
+      <p class="disclaimer-heading">無擔保聲明</p>
       <ul class="disclaimer-list">
-        <li>
-          <span class="disclaimer-term">非醫療關係</span>
-          使用本 App 不會在您與任何開發者、資料來源或 AI 模型之間建立醫病關係。
-        </li>
-        <li>
-          <span class="disclaimer-term">AI 生成限制</span>
-          App 中的「現代醫學闡釋」及取穴圖由人工智慧生成，未經人體試驗、未經同儕審查、亦不代表正規醫學實證。這些內容可能存有錯誤、偏誤或不適用於您的個人體況。
-        </li>
-        <li>
-          <span class="disclaimer-term">針灸的風險</span>
-          針灸為醫療行為，涉及解剖學、無菌技術及急症處理能力。未經正式醫學院訓練及取得執照，擅自施針可能導致氣胸、感染、神經損傷、出血甚至死亡。
-        </li>
-        <li>
-          <span class="disclaimer-term">資訊更新</span>
-          穴位治症整理自古典文獻，部分資訊可能與現代醫學衝突；AI 解釋亦可能不完全符合最新研究。本 App 不保證內容的即時準確性。
-        </li>
+        <li><span class="disclaimer-term">現狀提供</span>本程式依「現狀」提供，不附帶任何明示或暗示的擔保。</li>
+        <li><span class="disclaimer-term">不含保證</span>包括但不限於適售性及特定目的適用性的暗示擔保。</li>
+        <li><span class="disclaimer-term">完整條款</span>完整授權條款請參閱 <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">gnu.org/licenses/gpl-3.0.html</a>。</li>
       </ul>
-    </div>
+    </section>
 
-    <div class="disclaimer-block disclaimer-agree legal-terms-end">
-      <p class="disclaimer-heading">五、使用者責任條款</p>
-      <p>您明確同意：使用本 App 所產生之任何知識理解，均不可取代醫師親診。若您因參考本 App 內容而自行針灸、請他人施針、停藥或延遲就醫，所衍生之直接或間接傷害、法律責任，本 App 開發者、資料提供者概不負責。</p>
+    <section class="disclaimer-block" data-terms="medical">
+      <p class="disclaimer-heading">免責聲明</p>
+      <p class="disclaimer-sub">本 App 不是醫療行為</p>
+      <ul class="disclaimer-list">
+        <li><span class="disclaimer-term">非醫療建議</span>本 App 不提供醫療建議，亦非醫療行為。</li>
+        <li><span class="disclaimer-term">僅供教學參考</span>本應用程式（含穴位圖、治症描述及 AI 生成內容）僅供中醫／針灸教學、學術探討及知識參考之用。</li>
+        <li><span class="disclaimer-term">禁止自行施術</span>嚴禁使用者依據本 App 內容進行自我或他人之針灸、按壓、放血或其他侵入性治療。</li>
+        <li><span class="disclaimer-term">請即就醫</span>若您身體不適或有疾病，請立即尋求合格之中醫師或西醫師診治。延誤就醫或自行針灸可能導致健康風險。</li>
+      </ul>
+    </section>
+
+    <section class="disclaimer-block" data-terms="limits">
+      <p class="disclaimer-heading">免責條款</p>
+      <p class="disclaimer-sub">使用上的限制</p>
+      <ul class="disclaimer-list">
+        <li><span class="disclaimer-term">非醫療關係</span>使用本 App 不會在您與任何開發者、資料來源或 AI 模型之間建立醫病關係。</li>
+        <li><span class="disclaimer-term">AI 生成限制</span>App 中的「現代醫學闡釋」及取穴圖由人工智慧生成，未經人體試驗、未經同儕審查、亦不代表正規醫學實證。這些內容可能存有錯誤、偏誤或不適用於您的個人體況。</li>
+        <li><span class="disclaimer-term">針灸的風險</span>針灸為醫療行為，涉及解剖學、無菌技術及急症處理能力。未經正式醫學院訓練及取得執照，擅自施針可能導致氣胸、感染、神經損傷、出血甚至死亡。</li>
+        <li><span class="disclaimer-term">資訊更新</span>穴位治症整理自古典文獻，部分資訊可能與現代醫學衝突；AI 解釋亦可能不完全符合最新研究。本 App 不保證內容的即時準確性。</li>
+      </ul>
+    </section>
+
+    <section class="disclaimer-block legal-terms-end" data-terms="responsibility">
+      <p class="disclaimer-heading">使用者責任條款</p>
+      <p class="disclaimer-sub">不能取代醫師親診</p>
+      <ul class="disclaimer-list">
+        <li><span class="disclaimer-term">不可取代親診</span>您明確同意：使用本 App 所產生之任何知識理解，均不可取代醫師親診。</li>
+        <li><span class="disclaimer-term">自行負責</span>若您因參考本 App 內容而自行針灸、請他人施針、停藥或延遲就醫，所衍生之直接或間接傷害、法律責任，本 App 開發者、資料提供者概不負責。</li>
+      </ul>
       <p class="legal-terms-endmark">— 條款全文結束 —</p>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -598,15 +619,57 @@
   });
 
   // ── Settings Page ──
+  function showSettingsTab(name, opts) {
+    const prefsOn = name !== 'terms';
+    const panelPrefs = document.getElementById('settings-panel-prefs');
+    const panelTerms = document.getElementById('settings-panel-terms');
+    const tabPrefs = document.getElementById('settings-tab-prefs');
+    const tabTerms = document.getElementById('settings-tab-terms');
+    if (!panelPrefs || !panelTerms) return;
+    panelPrefs.hidden = !prefsOn;
+    panelTerms.hidden = prefsOn;
+    tabPrefs.setAttribute('aria-selected', prefsOn ? 'true' : 'false');
+    tabTerms.setAttribute('aria-selected', prefsOn ? 'false' : 'true');
+    const scroller = document.getElementById('settings-scroll');
+    if (scroller && !(opts && opts.keepScroll)) scroller.scrollTop = 0;
+  }
+
+  function jumpSettingsTerms(key) {
+    showSettingsTab('terms', { keepScroll: true });
+    requestAnimationFrame(() => {
+      const target = document.querySelector('#settings-panel-terms [data-terms="' + key + '"]');
+      if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+  }
+
   function initSettings() {
     const prefs = Settings.load();
 
+    showSettingsTab('prefs');
     Consent.mountSettingsTerms();
     Consent.updateSettingsDisplay();
 
-    // 介面字型大小
     document.querySelectorAll('#font-size-picker button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.size === prefs.fontSize);
+    });
+    document.querySelectorAll('#desc-size-picker button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.desc === prefs.descSize);
+    });
+    document.querySelectorAll('#voice-picker button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.voice === prefs.voiceGender);
+    });
+
+    if (document.body.dataset.settingsBound === '1') return;
+    document.body.dataset.settingsBound = '1';
+
+    document.getElementById('settings-tab-prefs').addEventListener('click', () => showSettingsTab('prefs'));
+    document.getElementById('settings-tab-terms').addEventListener('click', () => showSettingsTab('terms'));
+    document.getElementById('about-open-terms').addEventListener('click', () => jumpSettingsTerms('credits'));
+    document.querySelectorAll('[data-terms-jump]').forEach(btn => {
+      btn.addEventListener('click', () => jumpSettingsTerms(btn.dataset.termsJump));
+    });
+
+    document.querySelectorAll('#font-size-picker button').forEach(btn => {
       btn.addEventListener('click', () => {
         Settings.set('fontSize', btn.dataset.size);
         document.querySelectorAll('#font-size-picker button').forEach(b => b.classList.remove('active'));
@@ -615,9 +678,7 @@
       });
     });
 
-    // 說明文字大小
     document.querySelectorAll('#desc-size-picker button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.desc === prefs.descSize);
       btn.addEventListener('click', () => {
         Settings.set('descSize', btn.dataset.desc);
         document.querySelectorAll('#desc-size-picker button').forEach(b => b.classList.remove('active'));
@@ -626,9 +687,7 @@
       });
     });
 
-    // Voice picker
     document.querySelectorAll('#voice-picker button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.voice === prefs.voiceGender);
       btn.addEventListener('click', () => {
         Settings.set('voiceGender', btn.dataset.voice);
         document.querySelectorAll('#voice-picker button').forEach(b => b.classList.remove('active'));
@@ -637,7 +696,6 @@
       });
     });
 
-    // TTS test
     document.getElementById('btn-tts-test').addEventListener('click', () => {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
