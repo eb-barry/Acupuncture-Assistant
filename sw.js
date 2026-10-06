@@ -7,7 +7,7 @@
  */
 
 const SHELL_CACHE   = 'acupuncture-shell-v96';
-const ASSET_CACHE   = 'acupuncture-assets-v4';
+const ASSET_CACHE   = 'acupuncture-assets-v5';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 
 const SHELL_FILES = [
