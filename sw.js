@@ -2,13 +2,15 @@
  * sw.js — Service Worker for 針灸助理
  * Strategy:
  *   App Shell (HTML/CSS/JS) → Cache-First
- *   GLB + JSON → Cache-First, refetch only when ASSET_CACHE version changes
+ *   GLB + JSON → Cache-First after the page fetches the selected gender
+ *   Narration MP3 → Network, then AUDIO_CACHE fallback when offline
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v96';
+const SHELL_CACHE   = 'acupuncture-shell-v97';
 const ASSET_CACHE   = 'acupuncture-assets-v5';
 const CONTENT_CACHE = 'acupuncture-content-v2';
+const AUDIO_CACHE   = 'acupuncture-audio-v1';
 
 const SHELL_FILES = [
   './',
@@ -37,16 +39,12 @@ const SHELL_FILES = [
 ];
 
 const ASSET_FILES = [
-  './assets/models/male.glb',
-  './assets/models/female.glb',
-  './assets/meridians/male.json',
-  './assets/meridians/female.json',
   './assets/points-data.json',
   './assets/acupuncture-data.json',
   './assets/rhymes-data.json',
 ];
 
-const LIVE_CACHES = [SHELL_CACHE, ASSET_CACHE, CONTENT_CACHE];
+const LIVE_CACHES = [SHELL_CACHE, ASSET_CACHE, CONTENT_CACHE, AUDIO_CACHE];
 
 function toRequest(file) {
   return new Request(new URL(file, self.registration.scope).href, { cache: 'reload' });
@@ -114,6 +112,19 @@ self.addEventListener('fetch', (e) => {
           return res;
         }).catch(() => cached);
       }),
+    );
+    return;
+  }
+
+  if (/\.mp3$/i.test(url.pathname) && url.pathname.includes('/assets/audio/')) {
+    e.respondWith(
+      fetch(e.request).then((res) => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(AUDIO_CACHE).then((cache) => cache.put(e.request, clone));
+        }
+        return res;
+      }).catch(() => caches.match(e.request)),
     );
     return;
   }
