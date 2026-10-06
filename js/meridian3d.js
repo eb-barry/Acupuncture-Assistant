@@ -2476,6 +2476,11 @@ const Meridian3D = (() => {
     let resolveFlight = () => {};
     const promise = new Promise((resolve) => { resolveFlight = resolve; });
     cameraFlightPose = { token, pose, promise };
+    const flightMark = window.__m3dTest ? { start: performance.now(), end: 0 } : null;
+    if (flightMark) {
+      if (!Array.isArray(window.__m3dTest.flights)) window.__m3dTest.flights = [];
+      window.__m3dTest.flights.push(flightMark);
+    }
     applyCameraLimits();
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
@@ -2491,6 +2496,7 @@ const Meridian3D = (() => {
       if (completed) {
         noteCameraMoving(300);
         calloutsDirty = true;
+        if (flightMark) flightMark.end = performance.now();
       }
       resolveFlight();
     };
@@ -2547,7 +2553,10 @@ const Meridian3D = (() => {
     const shot = planShot(shotList, (force || !autoViewDir) ? null : autoViewDir);
     if (shot && shot.dir) autoViewDir = shot.dir.clone();
     if (!shot || !shot.pose) return;
-    if (flying && cameraFlightPose && posesClose(cameraFlightPose.pose, shot.pose)) return;
+    if (flying && cameraFlightPose && posesClose(cameraFlightPose.pose, shot.pose)) {
+      await cameraFlightPose.promise;
+      return;
+    }
     if (!labelFix && !flying && camera && controls) {
       const samePos = camera.position.distanceTo(shot.pose.pos) < Math.max(bodyHeight * 0.02, 0.01);
       const sameTgt = controls.target.distanceTo(shot.pose.target) < Math.max(bodyHeight * 0.02, 0.01);
@@ -4780,7 +4789,8 @@ const Meridian3D = (() => {
             if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
             window.__m3dTest.trace.push(rec.name);
           }
-          framePointIfNeeded(rec, false, gen, pts.slice(i)).catch(() => {});
+          await framePointIfNeeded(rec, false, gen, pts.slice(i));
+          if (autoAbort || gen !== playGeneration) return;
           await holdForTest(rec);
           if (autoAbort || gen !== playGeneration) return;
           await narratePoint(rec);
