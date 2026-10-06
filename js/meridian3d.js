@@ -94,7 +94,11 @@ const Meridian3D = (() => {
   let pointsData = null;
   let entered = false;
   let movingUntil = 0;
+  let cameraFlightToken = 0;
+  let cameraFlightPose = null;
   let mapCache = { male: null, female: null };
+  let mapBytes = { male: null, female: null };
+  const clipUrlCache = new Map();
   let mapFit = { scale: 1, cx: 0, cy: 0, cz: 0 };
   let skinMaterial = null;
   let nailMaterial = null;
@@ -521,10 +525,19 @@ const Meridian3D = (() => {
     if (el) el.textContent = text || '3D 經絡模型';
   }
 
-  function setLoading(on) {
+  function setLoading(on, caption) {
     const el = $('m3d-loading');
     if (el) el.hidden = !on;
+    const status = $('m3d-load-status');
+    if (status && on) status.textContent = caption || '模型載入中，請稍候';
     if (on) setLoadProgress(0);
+  }
+
+  function setLoadPhrase(text) {
+    const pct = $('m3d-load-pct');
+    if (!pct) return;
+    pct.textContent = text;
+    pct.classList.add('is-phrase');
   }
 
   function loadPiePath(t) {
@@ -549,7 +562,10 @@ const Meridian3D = (() => {
     const fan = $('m3d-load-fan');
     if (fan) fan.setAttribute('d', loadPiePath(p));
     const pct = $('m3d-load-pct');
-    if (pct) pct.textContent = `${Math.round(p * 100)}%`;
+    if (pct) {
+      pct.textContent = `${Math.round(p * 100)}%`;
+      pct.classList.remove('is-phrase');
+    }
     const meter = $('m3d-load-meter');
     if (meter) meter.setAttribute('aria-valuenow', String(Math.round(p * 100)));
   }
@@ -562,6 +578,8 @@ const Meridian3D = (() => {
     `${THREE_CDN}/examples/jsm/libs/meshopt_decoder.module.js`,
   ];
   const GLB_BYTES = { male: 611636, female: 717824 };
+  const MAP_BYTES = { male: 2396529, female: 11217020 };
+  const AUDIO_CACHE_NAME = 'acupuncture-audio-v1';
   const glbBuffer = { male: null, female: null };
 
   async function fetchBuffer(url, onProg, fallbackTotal) {
@@ -896,7 +914,7 @@ const Meridian3D = (() => {
       if (fast) audio.addEventListener('loadeddata', onLoaded);
       try { audio.pause(); } catch {}
       audio.muted = false;
-      audio.src = url;
+      audio.src = clipUrlCache.get(url) || url;
       let pending;
       try { pending = audio.play(); }
       catch (err) {
@@ -944,6 +962,63 @@ const Meridian3D = (() => {
       if (autoAbort) return;
     }
     await speak(`共${chineseNum(count)}穴`, opts.gender);
+  }
+
+  async function rememberClip(url, blob) {
+    const prev = clipUrlCache.get(url);
+    if (prev) URL.revokeObjectURL(prev);
+    clipUrlCache.set(url, URL.createObjectURL(blob));
+    try {
+      const cache = await caches.open(AUDIO_CACHE_NAME);
+      await cache.put(url, new Response(blob.slice(0), {
+        headers: { 'Content-Type': blob.type || 'audio/mpeg' },
+      }));
+    } catch {}
+  }
+
+  async function prefetchClip(url) {
+    if (clipUrlCache.has(url)) return true;
+    const res = await fetch(url);
+    if (!res.ok) return false;
+    const blob = await res.blob();
+    await rememberClip(url, blob);
+    return true;
+  }
+
+  function tourClipUrls() {
+    const urls = [];
+    selectedMeridians().forEach((mer) => {
+      const pts = tourPoints(mer.id);
+      if (!pts.length) return;
+      urls.push(narratorClipUrl(opts.narrator, `${mer.id}-${pts.length}.mp3`));
+      pts.forEach((rec) => {
+        urls.push(narratorClipUrl(opts.narrator, `${rec.code}-${rec.meridian}-${rec.name}.mp3`));
+      });
+    });
+    return [...new Set(urls)];
+  }
+
+  async function prefetchTourAudio(onProgress) {
+    const urls = tourClipUrls();
+    const pending = urls.filter((url) => !clipUrlCache.has(url));
+    if (!pending.length) {
+      if (onProgress) onProgress(1);
+      return;
+    }
+    let done = urls.length - pending.length;
+    if (onProgress) onProgress(done / urls.length);
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(4, pending.length) }, async () => {
+      while (cursor < pending.length) {
+        if (autoAbort) return;
+        const url = pending[cursor++];
+        try { await prefetchClip(url); }
+        catch {}
+        done += 1;
+        if (onProgress) onProgress(done / urls.length);
+      }
+    });
+    await Promise.all(workers);
   }
 
   async function narratePoint(rec) {
@@ -1050,7 +1125,8 @@ const Meridian3D = (() => {
     return three;
   }
 
-  async function ensurePlayAssets(onDownload) {
+  async function ensurePlayAssets(gender, onDownload) {
+    const key = gender === 'female' ? 'female' : 'male';
     const budget = makeLoadBudget((p) => {
       if (onDownload) onDownload(p);
     });
@@ -1061,19 +1137,22 @@ const Meridian3D = (() => {
         jobs.push(fetchBuffer(url, tick, 180000));
       });
     }
-    ['male', 'female'].forEach((key) => {
-      if (glbBuffer[key]) return;
+    if (!glbBuffer[key]) {
       const tick = budget.track(GLB_BYTES[key]);
       jobs.push(
         fetchBuffer(`assets/models/${key}.glb`, tick, GLB_BYTES[key])
           .then((buf) => { glbBuffer[key] = buf; }),
       );
-    });
-    if (!mapCache.male) jobs.push(loadMap('male'));
-    if (!mapCache.female) jobs.push(loadMap('female'));
+    }
+    if (!mapCache[key] && !mapBytes[key]) {
+      const tick = budget.track(MAP_BYTES[key]);
+      jobs.push(
+        fetchBuffer(MAP_URL[key], tick, MAP_BYTES[key])
+          .then((buf) => { mapBytes[key] = buf; }),
+      );
+    }
     if (jobs.length) await Promise.all(jobs);
     else if (onDownload) onDownload(1);
-    await loadThree();
   }
 
   function isNailMesh(object) {
@@ -2384,48 +2463,68 @@ const Meridian3D = (() => {
     return Math.max(700, Math.min(2000, ms));
   }
 
+  function posesClose(a, b) {
+    if (!a || !b || !a.pos || !b.pos || !a.target || !b.target) return false;
+    const limit = Math.max((bodyHeight || 1) * 0.02, 0.01);
+    return a.pos.distanceTo(b.pos) < limit && a.target.distanceTo(b.target) < limit;
+  }
+
   function animateCameraToPose(pose, gen) {
-    return new Promise((resolve) => {
-      if (!camera || !controls || !three || !pose || !pose.pos) { resolve(); return; }
-      applyCameraLimits();
-      const startPos = camera.position.clone();
-      const startTarget = controls.target.clone();
-      const startUp = camera.up.clone();
-      const endUp = poseUpVec(pose);
-      let dur = moveDuration(startPos, pose.pos, startTarget, pose.target);
-      if (window.__m3dTest && window.__m3dTest.fastAuto) dur = 50;
-      controls.enableDamping = false;
-      const t0 = performance.now();
-      noteCameraMoving(dur + 80);
-      const step = () => {
-        if (playingAuto && (autoAbort || (gen && gen !== playGeneration))) {
-          resolve();
-          return;
-        }
-        const t = Math.min(1, (performance.now() - t0) / dur);
-        const e = easeInOutCubic(t);
-        camera.position.lerpVectors(startPos, pose.pos, e);
-        controls.target.lerpVectors(startTarget, pose.target, e);
-        camera.zoom = 1;
-        camera.up.lerpVectors(startUp, endUp, e);
-        if (camera.up.lengthSq() < 1e-8) camera.up.copy(endUp);
-        else camera.up.normalize();
-        camera.lookAt(controls.target);
-        camera.near = Math.max(bodyHeight / 200, 0.01);
-        camera.far = bodyHeight * 40;
-        camera.updateProjectionMatrix();
-        controls.update();
-        if (t < 1) {
-          noteCameraMoving(80);
-          requestAnimationFrame(step);
-        } else {
-          noteCameraMoving(280);
-          calloutsDirty = true;
-          resolve();
-        }
-      };
-      requestAnimationFrame(step);
-    });
+    if (!camera || !controls || !three || !pose || !pose.pos) return Promise.resolve();
+    if (cameraFlightPose && posesClose(cameraFlightPose.pose, pose)) return cameraFlightPose.promise;
+    const token = ++cameraFlightToken;
+    let resolveFlight = () => {};
+    const promise = new Promise((resolve) => { resolveFlight = resolve; });
+    cameraFlightPose = { token, pose, promise };
+    applyCameraLimits();
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const startUp = camera.up.clone();
+    const endUp = poseUpVec(pose);
+    let dur = moveDuration(startPos, pose.pos, startTarget, pose.target);
+    if (window.__m3dTest && window.__m3dTest.fastAuto) dur = 50;
+    controls.enableDamping = false;
+    const t0 = performance.now();
+    noteCameraMoving(dur + 80);
+    const finish = (completed) => {
+      if (cameraFlightPose && cameraFlightPose.token === token) cameraFlightPose = null;
+      if (completed) {
+        noteCameraMoving(300);
+        calloutsDirty = true;
+      }
+      resolveFlight();
+    };
+    const step = () => {
+      if (token !== cameraFlightToken) {
+        finish(false);
+        return;
+      }
+      if (playingAuto && (autoAbort || (gen && gen !== playGeneration))) {
+        finish(false);
+        return;
+      }
+      const t = Math.min(1, (performance.now() - t0) / dur);
+      const e = easeInOutCubic(t);
+      camera.position.lerpVectors(startPos, pose.pos, e);
+      controls.target.lerpVectors(startTarget, pose.target, e);
+      camera.zoom = 1;
+      camera.up.lerpVectors(startUp, endUp, e);
+      if (camera.up.lengthSq() < 1e-8) camera.up.copy(endUp);
+      else camera.up.normalize();
+      camera.lookAt(controls.target);
+      camera.near = Math.max(bodyHeight / 200, 0.01);
+      camera.far = bodyHeight * 40;
+      camera.updateProjectionMatrix();
+      controls.update();
+      if (t < 1) {
+        noteCameraMoving(80);
+        requestAnimationFrame(step);
+      } else {
+        finish(true);
+      }
+    };
+    requestAnimationFrame(step);
+    return promise;
   }
 
   function animateCameraTo(position, normal, gen, rec) {
@@ -2435,8 +2534,9 @@ const Meridian3D = (() => {
   async function framePointIfNeeded(rec, force, gen, upcoming) {
     if (!rec) return;
     if (isSpChongmen(rec) || isHtLingdao(rec) || isHtProximalArm(rec) || isHtShaochong(rec) || isKiSegmentStart(rec) || isPcPalmStart(rec) || isLrSegmentStart(rec) || isLuSegmentStart(rec) || isGbSegmentStart(rec)) force = true;
+    const flying = !!cameraFlightPose;
     let labelFix = false;
-    if (!force) {
+    if (!force && !flying) {
       if (!orbiting && performance.now() >= movingUntil) updateCallouts();
       labelFix = focusLabelOffscreen(rec);
       if (!needsReframe(rec) && !labelFix) return;
@@ -2446,17 +2546,17 @@ const Meridian3D = (() => {
       : ((upcoming && upcoming.length) ? upcoming : [rec]);
     const shot = planShot(shotList, (force || !autoViewDir) ? null : autoViewDir);
     if (shot && shot.dir) autoViewDir = shot.dir.clone();
-    if (!labelFix && shot && shot.pose && camera && controls) {
+    if (!shot || !shot.pose) return;
+    if (flying && cameraFlightPose && posesClose(cameraFlightPose.pose, shot.pose)) return;
+    if (!labelFix && !flying && camera && controls) {
       const samePos = camera.position.distanceTo(shot.pose.pos) < Math.max(bodyHeight * 0.02, 0.01);
       const sameTgt = controls.target.distanceTo(shot.pose.target) < Math.max(bodyHeight * 0.02, 0.01);
       if (samePos && sameTgt) return;
     }
+    if (autoAbort || (gen && gen !== playGeneration)) return;
     lastReframeName = rec.name;
     reframeLog.push(rec.name);
     await animateCameraToPose(shot.pose, gen);
-    if (autoAbort || (gen && gen !== playGeneration)) return;
-    await sleep(300);
-    calloutsDirty = true;
   }
 
   function lookAtWorld(position, normal, rec) {
@@ -4434,12 +4534,16 @@ const Meridian3D = (() => {
     });
   }
 
-  async function loadMap(gender) {
-    const key = gender === 'female' ? 'female' : 'male';
+  function parseCachedMap(key) {
     if (mapCache[key]) return mapCache[key];
-    const res = await fetch(MAP_URL[key]);
-    if (!res.ok) throw new Error(`地圖載入失敗（${key}）`);
-    const doc = await res.json();
+    const bytes = mapBytes[key];
+    if (!bytes) throw new Error(`地圖尚未下載（${key}）`);
+    let doc;
+    try {
+      doc = JSON.parse(new TextDecoder().decode(bytes));
+    } finally {
+      mapBytes[key] = null;
+    }
     if (!doc || !Array.isArray(doc.acupoints) || !Array.isArray(doc.meridians)) {
       throw new Error('地圖格式不正確');
     }
@@ -4447,15 +4551,35 @@ const Meridian3D = (() => {
     return doc;
   }
 
+  async function loadMap(gender) {
+    const key = gender === 'female' ? 'female' : 'male';
+    if (mapCache[key]) return mapCache[key];
+    if (!mapBytes[key]) {
+      mapBytes[key] = await fetchBuffer(MAP_URL[key], null, MAP_BYTES[key]);
+    }
+    return parseCachedMap(key);
+  }
+
   async function loadBody(gender, onProgress) {
     const wanted = gender === 'female' ? 'female' : 'male';
     const ui = (t) => { if (onProgress) onProgress(t); else setLoadProgress(t); };
+    const haveModel = loadedGender === wanted && modelRoot && modelRoot.children.length;
     ui(0);
-    await ensurePlayAssets((p) => ui(p * 0.88));
+    await ensurePlayAssets(wanted, (p) => ui(p * 0.88));
     ui(0.90);
+    await yieldPaint();
     const { THREE, GLTFLoader, MeshoptDecoder } = await loadThree();
     await ensureScene();
-    const doc = await loadMap(wanted);
+    if (!mapCache[wanted]) {
+      setLoadPhrase('正在整理經脈');
+      await yieldPaint();
+      parseCachedMap(wanted);
+    }
+    const doc = mapCache[wanted];
+    if (!haveModel) {
+      ui(0.96);
+      await yieldPaint();
+    }
     if (loadedGender === wanted && modelRoot.children.length) {
       if (!skinAccel) buildSkinAccel();
       if (!playingAuto && annotDirty) await rebuildAnnotations({ reset: true });
@@ -4592,6 +4716,19 @@ const Meridian3D = (() => {
         setLoading(false);
         return;
       }
+      if (usingNarrator()) {
+        setLoading(true, '語音準備中，請稍候');
+        await yieldPaint();
+        try {
+          await prefetchTourAudio((p) => setLoadProgress(p));
+        } catch (err) {
+          console.warn(err);
+        }
+        if (autoAbort || gen !== playGeneration || work !== annotWork) {
+          setLoading(false);
+          return;
+        }
+      }
       const firstId = list[0] && list[0].id;
       if (firstId && (annotDirty || !annotPlaced.has(firstId))) {
         await rebuildAnnotations({ ids: [firstId], reset: true, work });
@@ -4620,8 +4757,7 @@ const Meridian3D = (() => {
         autoViewDir = null;
         if (pts[0]) {
           highlightPoint(pts[0]);
-          await framePointIfNeeded(pts[0], true, gen, pts);
-          if (autoAbort || gen !== playGeneration) return;
+          framePointIfNeeded(pts[0], true, gen, pts).catch(() => {});
         }
 
         if (!resume || phase === 'name' || phase === 'count') {
@@ -4644,8 +4780,7 @@ const Meridian3D = (() => {
             if (!Array.isArray(window.__m3dTest.trace)) window.__m3dTest.trace = [];
             window.__m3dTest.trace.push(rec.name);
           }
-          await framePointIfNeeded(rec, false, gen, pts.slice(i));
-          if (autoAbort || gen !== playGeneration) return;
+          framePointIfNeeded(rec, false, gen, pts.slice(i)).catch(() => {});
           await holdForTest(rec);
           if (autoAbort || gen !== playGeneration) return;
           await narratePoint(rec);
@@ -4871,7 +5006,6 @@ const Meridian3D = (() => {
         catch { UI.toast('穴位資料載入失敗'); }
       }
     }
-    loadMap(opts.gender).catch(() => {});
     setModal(true);
     $('m3d-hint').hidden = !!loadedGender;
   }
