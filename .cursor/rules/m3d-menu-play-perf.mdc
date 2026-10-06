@@ -1,0 +1,32 @@
+---
+description: Keep 3D meridian menu cheap and Play moving after female AUTO LU
+globs: js/meridian3d.js
+alwaysApply: false
+---
+
+# 3D menu / Play performance (female AUTO LU)
+
+After female AUTO 手太陰肺經, the sheet must stay tappable and Play must start the next meridian. The female mesh is ~184k tris; LU hug at 1.5 mm will freeze a phone if these paths regress. Raise a concern before landing a change that breaks any item below.
+
+- **Menu stays cheap.** Checkbox / 全選 / 清除 only `markAnnotDirty()`. No `placeAnnotations`, `densifyNodes`, `hugDenseSamples`, or `snapToSkin` while `#m3d-modal` is open.
+- **No WebGL under the sheet.** The rAF loop must return while `#m3d-modal` is visible. Drawing the female mesh plus dense LU ribbons is what made meridian taps feel stuck.
+- **Play moves before every selected meridian is built.** After LU, switching to LI/ST and tapping Play must start the first meridian’s camera as soon as that ribbon exists. Remaining meridians build in the background. Waiting on a full multi-meridian hug is the “Play 不動” hang.
+- **Skin snaps stay on the short-range grid.** Do not hug ribbons with `Raycaster.intersectObjects(bodyMeshes)` over the whole body, or a far plane of `bodyHeight * 4`. Female LU at 1.5 mm samples will freeze the main thread again.
+- **Keep the `gender|meridian` ribbon/point cache.** Re-selecting 手太陰肺經 after it has already been hugged must reuse cache, not re-raycast.
+- **Closing the sheet must not hug on the click.** Rebuild is `scheduleAnnotRebuild` (idle). Play cancels that work with `annotWork`. A sync rebuild on × / backdrop freezes the UI.
+- **Play debounce only collapses pointerup+click (~80ms).** Ignore mouse `pointerup` (click will follow). A 400ms window swallows Stop → Play.
+
+```javascript
+// ❌ BAD — hug on every checkbox; render under the sheet; build all meridians before camera
+list.onchange = () => placeAnnotations();
+// in rAF: renderer.render(scene, camera) even when modal is open
+await rebuildAnnotations({ ids: allSelected });
+frameFirstPoint();
+
+// ✅ GOOD
+list.onchange = () => markAnnotDirty();
+if ($('m3d-modal') && !$('m3d-modal').hidden) return; // skip rAF render
+await rebuildAnnotations({ ids: [firstId], reset: true });
+setLoading(false);
+frameFirstPoint(); // rest meridians: rebuildAnnotations({ ids: rest, reset: false })
+```
