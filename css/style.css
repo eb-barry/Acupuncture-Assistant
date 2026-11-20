@@ -987,6 +987,11 @@ body::before {
   color: var(--clr-ink);
   margin: 0;
 }
+.m3d-load-pct.is-phrase {
+  font-family: var(--font-serif);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.06em;
+}
 
 .m3d-modal {
   position: absolute; inset: 0;
