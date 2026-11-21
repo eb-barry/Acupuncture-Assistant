@@ -34,6 +34,7 @@ const Cache = (() => {
     if (_pending[cacheKey]) return _pending[cacheKey];
 
     const urls = [
+      `assets/${filename}`,
       `${PAGES_BASE}/${filename}`,
       `${RAW_BASE}/${filename}`,
       `${CDN_BASE}/${filename}`,
@@ -60,6 +61,12 @@ const Cache = (() => {
     }
   }
 
+  function usePointsData(data) {
+    if (!data || typeof data !== 'object') return;
+    _pointsData = data;
+    _mem['json:points-data.json'] = data;
+  }
+
   /** 載入完整穴位資料表（points-data.json） */
   async function loadAllPointsData() {
     if (_pointsData) return _pointsData;
@@ -83,6 +90,7 @@ const Cache = (() => {
   function pointImageUrls(pointName) {
     const enc = _enc(pointName);
     return [
+      `assets/points/${enc}.webp`,
       `${PAGES_BASE}/points/${enc}.webp`,
       `${RAW_BASE}/points/${enc}.webp`,
       `${CDN_BASE}/points/${enc}.webp`,
@@ -287,6 +295,7 @@ const Cache = (() => {
 
   return {
     loadJSON,
+    usePointsData,
     loadAllPointsData,
     loadPointData,
     buildAttrPairs,

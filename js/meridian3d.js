@@ -92,6 +92,7 @@ const Meridian3D = (() => {
   let pickables = [];
   let highlighted = null;
   let pointsData = null;
+  let imagePrefetchGen = 0;
   let entered = false;
   let movingUntil = 0;
   let cameraFlightToken = 0;
@@ -1203,6 +1204,40 @@ const Meridian3D = (() => {
     const blob = await res.blob();
     await rememberClip(url, blob);
     return true;
+  }
+
+  function localPointImageUrl(name) {
+    return `assets/points/${encodeURIComponent(name)}.webp`;
+  }
+
+  function selectedPointNames() {
+    const names = [];
+    const seen = new Set();
+    selectedMeridians().forEach((mer) => {
+      tourPoints(mer.id).forEach((rec) => {
+        if (!rec || !rec.name || seen.has(rec.name)) return;
+        seen.add(rec.name);
+        names.push(rec.name);
+      });
+    });
+    return names;
+  }
+
+  function startPointImagePrefetch() {
+    const gen = ++imagePrefetchGen;
+    const names = selectedPointNames();
+    if (!names.length) return;
+    let cursor = 0;
+    const run = async () => {
+      while (cursor < names.length) {
+        if (gen !== imagePrefetchGen) return;
+        const name = names[cursor++];
+        try { await fetch(localPointImageUrl(name)); }
+        catch {}
+      }
+    };
+    const workers = Math.min(2, names.length);
+    for (let i = 0; i < workers; i++) run();
   }
 
   function tourClipUrls() {
@@ -3548,7 +3583,7 @@ const Meridian3D = (() => {
     return meridianId === 'LU' ? hugDenseSamples(dense) : dense;
   }
 
-  function addRibbon(THREE, samples, color) {
+  function addRibbon(THREE, samples, color, meridianId) {
     if (!samples || samples.length < 2) return;
     const mm = worldPerMm();
     const half = mm * RIBBON_WIDTH_MM * 0.5;
@@ -3614,6 +3649,8 @@ const Meridian3D = (() => {
     }));
     mesh.renderOrder = 2;
     mesh.raycast = () => {};
+    mesh.userData.kind = 'ribbon';
+    mesh.userData.meridianId = meridianId || '';
     annotRoot.add(mesh);
   }
 
@@ -4115,7 +4152,8 @@ const Meridian3D = (() => {
     if ($('m3d-point-overlay') && !$('m3d-point-overlay').hidden) { setCalloutsVisible(false); return; }
 
     const selected = selectedMeridians();
-    if (selected.length === 0 || selected.length > MAX_LABELED_MERIDIANS) {
+    const labelMeridian = activeAutoMeridianId();
+    if (selected.length === 0 || (!labelMeridian && selected.length > MAX_LABELED_MERIDIANS)) {
       svg.innerHTML = '';
       setCalloutsVisible(false);
       return;
@@ -4132,6 +4170,8 @@ const Meridian3D = (() => {
     pickables.forEach((obj) => {
       if (obj.userData.kind !== 'marker' || !obj.userData.point) return;
       const rec = obj.userData.point;
+      if (labelMeridian && rec.meridianId !== labelMeridian) return;
+      if (!obj.visible) return;
       if (!isPointVisible(rec, width, height)) return;
       const screen = projectToScreen(rec.position, width, height);
       if (!screen) return;
@@ -4570,12 +4610,12 @@ const Meridian3D = (() => {
       if (routeUsesBakedRibbons(route)) {
         route.ribbons.forEach((ribbon, ribbonIdx) => {
           splitBlFengmenFufenRibbon(route, bakedRibbonSamples(route, ribbon, ribbonIdx))
-            .forEach((chunk) => addRibbon(THREE, chunk, color));
+            .forEach((chunk) => addRibbon(THREE, chunk, color, meridianId));
         });
         return;
       }
       splitRouteNodes(route.nodes || []).forEach((chunk, chunkIdx) => {
-        addRibbon(THREE, ribbonSamples(route, chunk, chunkIdx), color);
+        addRibbon(THREE, ribbonSamples(route, chunk, chunkIdx), color, meridianId);
       });
     });
     (doc.acupoints || []).forEach((p) => {
@@ -4636,6 +4676,36 @@ const Meridian3D = (() => {
     }, 0);
   }
 
+  function activeAutoMeridianId() {
+    if (opts.mode !== 'auto' || !(playingAuto || autoPaused)) return '';
+    if (autoCursor && autoCursor.meridianId) return autoCursor.meridianId;
+    if (highlighted && highlighted.meridianId) return highlighted.meridianId;
+    if (currentPoint && currentPoint.meridianId) return currentPoint.meridianId;
+    return '';
+  }
+
+  function applyAutoMeridianFocus() {
+    const active = activeAutoMeridianId();
+    pickables.forEach((obj) => {
+      if (!obj.userData || obj.userData.kind !== 'marker') return;
+      const pt = obj.userData.point;
+      obj.visible = !active || !!(pt && pt.meridianId === active);
+    });
+    if (!annotRoot) return;
+    annotRoot.traverse((obj) => {
+      if (!obj.userData || obj.userData.kind !== 'ribbon' || !obj.material) return;
+      const on = !active || obj.userData.meridianId === active;
+      const mat = obj.material;
+      const transparent = !on;
+      if (mat.transparent !== transparent || mat.opacity !== (on ? 1 : 0.28)) {
+        mat.transparent = transparent;
+        mat.opacity = on ? 1 : 0.28;
+        mat.depthWrite = on;
+        mat.needsUpdate = true;
+      }
+    });
+  }
+
   function highlightPoint(rec) {
     pickables.forEach((obj) => {
       if (obj.userData.kind !== 'marker') return;
@@ -4646,6 +4716,7 @@ const Meridian3D = (() => {
       if (obj.userData.halo) obj.userData.halo.visible = !!isOn;
     });
     highlighted = rec;
+    applyAutoMeridianFocus();
     calloutsDirty = true;
   }
 
@@ -4659,7 +4730,7 @@ const Meridian3D = (() => {
     const ray = new THREE.Raycaster();
     ray.setFromCamera({ x, y }, camera);
     const hits = ray.intersectObjects(pickables, false);
-    const hit = hits.find((h) => h.object.userData.point);
+    const hit = hits.find((h) => h.object.visible && h.object.userData.point);
     if (hit) openPointFromUser(hit.object.userData.point);
   }
 
@@ -4868,6 +4939,7 @@ const Meridian3D = (() => {
     try {
       await yieldPaint();
       await loadBody(opts.gender);
+      startPointImagePrefetch();
     } catch (err) {
       console.warn(err);
       UI.toast('模型或地圖載入失敗，請檢查網路後再試');
@@ -4887,6 +4959,8 @@ const Meridian3D = (() => {
     closeOverlay();
     setLoading(false);
     setPlayIcon('play');
+    applyAutoMeridianFocus();
+    calloutsDirty = true;
     if (!keepCursor) {
       autoCursor = null;
       autoViewDir = null;
@@ -4963,6 +5037,7 @@ const Meridian3D = (() => {
         await rebuildAnnotations({ ids: [firstId], reset: true, work });
       }
       setLoading(false);
+      startPointImagePrefetch();
       const rest = list.slice(1).map((m) => m.id);
       if (rest.length) {
         rebuildAnnotations({ ids: rest, reset: false, work }).catch(() => {});
@@ -5235,6 +5310,9 @@ const Meridian3D = (() => {
         catch { UI.toast('穴位資料載入失敗'); }
       }
     }
+    if (pointsData && typeof Cache !== 'undefined' && Cache.usePointsData) {
+      Cache.usePointsData(pointsData);
+    }
     setModal(true);
     $('m3d-hint').hidden = !!loadedGender;
   }
@@ -5325,6 +5403,33 @@ const Meridian3D = (() => {
       },
       playingAuto: () => playingAuto,
       autoPaused: () => autoPaused,
+      autoFocus() {
+        const active = activeAutoMeridianId();
+        const markers = { shown: 0, hidden: 0, ids: [] };
+        pickables.forEach((obj) => {
+          if (!obj.userData || obj.userData.kind !== 'marker') return;
+          const id = obj.userData.point && obj.userData.point.meridianId;
+          if (obj.visible) markers.shown += 1;
+          else markers.hidden += 1;
+          if (id && !markers.ids.includes(id)) markers.ids.push(id);
+        });
+        const ribbons = { full: 0, dim: 0 };
+        if (annotRoot) {
+          annotRoot.traverse((obj) => {
+            if (!obj.userData || obj.userData.kind !== 'ribbon' || !obj.material) return;
+            if (obj.material.opacity < 0.9) ribbons.dim += 1;
+            else ribbons.full += 1;
+          });
+        }
+        const svg = $('m3d-callouts');
+        const calloutsVisible = !!(svg && !svg.hasAttribute('hidden'));
+        const labels = calloutsVisible
+          ? [...svg.querySelectorAll('[data-callout-key]')]
+            .map((el) => (el.dataset.calloutKey || '').split('|')[0])
+            .filter(Boolean)
+          : [];
+        return { active, markers, ribbons, labels: [...new Set(labels)], calloutsVisible };
+      },
       overlayOpen: () => {
         const el = $('m3d-point-overlay');
         return !!(el && !el.hidden);

@@ -7,11 +7,12 @@
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v100';
-const SHELL_REV     = 'v100';
+const SHELL_CACHE   = 'acupuncture-shell-v101';
+const SHELL_REV     = 'v101';
 const ASSET_CACHE   = 'acupuncture-assets-v5';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 const AUDIO_CACHE   = 'acupuncture-audio-v1';
+const POINT_IMAGE_CACHE = 'acupuncture-point-images-v1';
 
 const SHELL_FILES = [
   './',
@@ -45,7 +46,7 @@ const ASSET_FILES = [
   './assets/rhymes-data.json',
 ];
 
-const LIVE_CACHES = [SHELL_CACHE, ASSET_CACHE, CONTENT_CACHE, AUDIO_CACHE];
+const LIVE_CACHES = [SHELL_CACHE, ASSET_CACHE, CONTENT_CACHE, AUDIO_CACHE, POINT_IMAGE_CACHE];
 let replaceOpenClients = false;
 
 function toRequest(file) {
@@ -144,6 +145,18 @@ self.addEventListener('fetch', (e) => {
         return res;
       }).catch(() => caches.match(e.request)),
     );
+    return;
+  }
+
+  if (/\/assets\/points\/.+\.webp$/i.test(url.pathname)) {
+    e.respondWith((async () => {
+      const cache = await caches.open(POINT_IMAGE_CACHE);
+      const cached = await cache.match(e.request, { ignoreSearch: true });
+      if (cached) return cached;
+      const res = await fetch(e.request);
+      if (res.ok) await cache.put(e.request, res.clone());
+      return res;
+    })());
     return;
   }
 
