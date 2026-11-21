@@ -1072,6 +1072,14 @@ body::before {
   border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgba(44,74,82,0.18);
   touch-action: pan-y;
 }
+.m3d-point-zoom {
+  transform-origin: 0 0;
+  width: 100%;
+}
+.m3d-point-sheet.is-zoomed {
+  overflow: hidden;
+  touch-action: none;
+}
 
 /* ── 返回主頁：Home 圖示（白色，在 Tiffany Green top-bar 上） ── */
 #page-meridian-3d .btn-home {

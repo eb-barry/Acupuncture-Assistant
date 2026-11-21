@@ -110,6 +110,14 @@ const Meridian3D = (() => {
   let autoViewDir = null;
   let overlayPinch = null;
   let overlayPinched = false;
+  let cardZoom = { scale: 1, x: 0, y: 0 };
+  let cardPinch = null;
+  let cardPan = null;
+  let suppressPointDismiss = false;
+  let suppressDismissTimer = 0;
+  let cardGestureWasPinch = false;
+  const CARD_ZOOM_MIN = 1;
+  const CARD_ZOOM_MAX = 3;
   let annotDirty = true;
   let ribbonCache = new Map();
   let pointCache = new Map();
@@ -650,6 +658,7 @@ const Meridian3D = (() => {
   function closeOverlay({ resumeAuto = false } = {}) {
     const el = $('m3d-point-overlay');
     if (el) el.hidden = true;
+    resetCardZoom();
     calloutsDirty = true;
     if (resumeAuto) resumeAutoTour();
   }
@@ -662,10 +671,12 @@ const Meridian3D = (() => {
     overlay.hidden = false;
     hideCallouts();
     sheet.innerHTML = '';
+    resetCardZoom();
     await UI.renderPointPanel(sheet, point.name, {
       meridian: point.meridian,
       intlCode: point.code,
     });
+    wrapPointSheet();
   }
 
   function pauseAutoTour() {
@@ -740,6 +751,164 @@ const Meridian3D = (() => {
     });
   }
 
+  function pointOverlayOpen() {
+    const el = $('m3d-point-overlay');
+    return !!(el && !el.hidden);
+  }
+
+  function wrapPointSheet() {
+    const sheet = $('m3d-point-sheet');
+    if (!sheet) return null;
+    const existing = [...sheet.children].find((el) => el.classList.contains('m3d-point-zoom'));
+    if (existing) return existing;
+    if (!sheet.firstChild) return null;
+    const zoom = document.createElement('div');
+    zoom.className = 'm3d-point-zoom';
+    while (sheet.firstChild) zoom.appendChild(sheet.firstChild);
+    sheet.appendChild(zoom);
+    return zoom;
+  }
+
+  function resetCardZoom() {
+    cardZoom = { scale: 1, x: 0, y: 0 };
+    cardPinch = null;
+    cardPan = null;
+    cardGestureWasPinch = false;
+    const sheet = $('m3d-point-sheet');
+    if (!sheet) return;
+    sheet.classList.remove('is-zoomed');
+    const zoom = [...sheet.children].find((el) => el.classList.contains('m3d-point-zoom'));
+    if (zoom) zoom.style.transform = '';
+  }
+
+  function applyCardZoom() {
+    const sheet = $('m3d-point-sheet');
+    const zoom = wrapPointSheet();
+    if (!sheet || !zoom) return;
+    const zoomed = cardZoom.scale > 1.001;
+    sheet.classList.toggle('is-zoomed', zoomed);
+    zoom.style.transformOrigin = '0 0';
+    zoom.style.transform = zoomed || cardZoom.x || cardZoom.y
+      ? `translate(${cardZoom.x}px, ${cardZoom.y}px) scale(${cardZoom.scale})`
+      : '';
+  }
+
+  function clampCardPan() {
+    const sheet = $('m3d-point-sheet');
+    const zoom = wrapPointSheet();
+    if (!sheet || !zoom || cardZoom.scale <= 1.001) return;
+    const w = zoom.scrollWidth * cardZoom.scale;
+    const h = zoom.scrollHeight * cardZoom.scale;
+    const vw = sheet.clientWidth;
+    const vh = sheet.clientHeight;
+    cardZoom.x = w <= vw + 0.5 ? 0 : Math.min(0, Math.max(vw - w, cardZoom.x));
+    cardZoom.y = h <= vh + 0.5 ? 0 : Math.min(0, Math.max(vh - h, cardZoom.y));
+  }
+
+  function touchInsideSheet(touch) {
+    const sheet = $('m3d-point-sheet');
+    if (!sheet || !touch) return false;
+    const rect = sheet.getBoundingClientRect();
+    return touch.clientX >= rect.left && touch.clientX <= rect.right
+      && touch.clientY >= rect.top && touch.clientY <= rect.bottom;
+  }
+
+  function bothTouchesInsideSheet(touches) {
+    return !!(touches && touches.length >= 2 && touchInsideSheet(touches[0]) && touchInsideSheet(touches[1]));
+  }
+
+  function sheetMidpoint(touches) {
+    const sheet = $('m3d-point-sheet');
+    const rect = sheet.getBoundingClientRect();
+    const x = (touches[0].clientX + touches[1].clientX) / 2 - rect.left + sheet.scrollLeft;
+    const y = (touches[0].clientY + touches[1].clientY) / 2 - rect.top + sheet.scrollTop;
+    return { x, y };
+  }
+
+  function absorbSheetScroll() {
+    const sheet = $('m3d-point-sheet');
+    if (!sheet || cardZoom.scale > 1.001) return;
+    cardZoom.x -= sheet.scrollLeft;
+    cardZoom.y -= sheet.scrollTop;
+    sheet.scrollLeft = 0;
+    sheet.scrollTop = 0;
+  }
+
+  function settleCardZoom() {
+    if (cardZoom.scale > 1.001) {
+      applyCardZoom();
+      return;
+    }
+    const sheet = $('m3d-point-sheet');
+    cardZoom.scale = 1;
+    if (sheet && (cardZoom.x || cardZoom.y)) {
+      const maxTop = Math.max(0, sheet.scrollHeight - sheet.clientHeight);
+      sheet.scrollTop = Math.min(maxTop, Math.max(0, -cardZoom.y));
+    }
+    cardZoom.x = 0;
+    cardZoom.y = 0;
+    applyCardZoom();
+  }
+
+  function beginCardPinch(touches) {
+    if (!wrapPointSheet()) return;
+    absorbSheetScroll();
+    const mid = sheetMidpoint(touches);
+    cardPinch = {
+      dist: pinchTouchDist(touches),
+      scale: cardZoom.scale,
+      contentX: (mid.x - cardZoom.x) / cardZoom.scale,
+      contentY: (mid.y - cardZoom.y) / cardZoom.scale,
+    };
+    cardPan = null;
+    cardGestureWasPinch = true;
+    armDismissGuard();
+  }
+
+  function moveCardPinch(touches) {
+    const sheet = $('m3d-point-sheet');
+    if (!cardPinch || !sheet) return;
+    const dist = pinchTouchDist(touches);
+    if (!(cardPinch.dist > 1) || !(dist > 1)) return;
+    const raw = cardPinch.scale * (dist / cardPinch.dist);
+    cardZoom.scale = Math.min(CARD_ZOOM_MAX, Math.max(CARD_ZOOM_MIN, raw));
+    const mid = sheetMidpoint(touches);
+    cardZoom.x = mid.x - cardPinch.contentX * cardZoom.scale;
+    cardZoom.y = mid.y - cardPinch.contentY * cardZoom.scale;
+    if (cardZoom.scale <= 1.001) settleCardZoom();
+    else {
+      clampCardPan();
+      applyCardZoom();
+    }
+    armDismissGuard();
+  }
+
+  function beginCardPan(touch) {
+    cardPan = {
+      x: touch.clientX,
+      y: touch.clientY,
+      originX: cardZoom.x,
+      originY: cardZoom.y,
+    };
+  }
+
+  function moveCardPan(touch) {
+    if (!cardPan) return;
+    cardZoom.x = cardPan.originX + (touch.clientX - cardPan.x);
+    cardZoom.y = cardPan.originY + (touch.clientY - cardPan.y);
+    clampCardPan();
+    applyCardZoom();
+  }
+
+  function armDismissGuard() {
+    suppressPointDismiss = true;
+    if (suppressDismissTimer) clearTimeout(suppressDismissTimer);
+    suppressDismissTimer = setTimeout(() => {
+      suppressPointDismiss = false;
+      suppressDismissTimer = 0;
+    }, 450);
+  }
+
   function pinchTouchDist(touches) {
     if (!touches || touches.length < 2) return 0;
     return Math.hypot(
@@ -771,6 +940,23 @@ const Meridian3D = (() => {
       page3d.addEventListener(type, stopPageZoom, { capture: true, passive: false });
     });
     page3d.addEventListener('touchstart', (ev) => {
+      if (pointOverlayOpen()) {
+        if (ev.touches.length >= 2 && bothTouchesInsideSheet(ev.touches)) {
+          beginCardPinch(ev.touches);
+          overlayPinch = null;
+          return;
+        }
+        if (ev.touches.length >= 2) {
+          overlayPinch = null;
+          cardPinch = null;
+          cardPan = null;
+          cardGestureWasPinch = true;
+          armDismissGuard();
+          return;
+        }
+        if (cardZoom.scale > 1.001 && touchInsideSheet(ev.touches[0])) beginCardPan(ev.touches[0]);
+        return;
+      }
       if (ev.touches.length < 2) return;
       overlayPinched = true;
       if (!camera || !controls || bothTouchesOnCanvas(ev.touches)) {
@@ -783,6 +969,20 @@ const Meridian3D = (() => {
       };
     }, { capture: true, passive: true });
     page3d.addEventListener('touchmove', (ev) => {
+      if (pointOverlayOpen()) {
+        if (cardPinch && ev.touches.length >= 2 && bothTouchesInsideSheet(ev.touches)) {
+          ev.preventDefault();
+          moveCardPinch(ev.touches);
+          return;
+        }
+        if (cardPan && ev.touches.length === 1 && cardZoom.scale > 1.001) {
+          ev.preventDefault();
+          moveCardPan(ev.touches[0]);
+          return;
+        }
+        if (ev.touches.length >= 2) ev.preventDefault();
+        return;
+      }
       const scaled = typeof ev.scale === 'number' && ev.scale !== 1;
       if (ev.touches.length < 2 && !scaled) return;
       if (!bothTouchesOnCanvas(ev.touches)) ev.preventDefault();
@@ -795,7 +995,21 @@ const Meridian3D = (() => {
       dollyToDistance(overlayPinch.camDist * (overlayPinch.dist / dist));
     }, { capture: true, passive: false });
     const endPinch = (ev) => {
-      if (ev.touches && ev.touches.length >= 2) return;
+      const left = ev.touches ? ev.touches.length : 0;
+      if (left >= 2) return;
+      if (cardPinch || cardPan || cardGestureWasPinch) {
+        cardPinch = null;
+        if (left === 1 && cardZoom.scale > 1.001 && touchInsideSheet(ev.touches[0])) {
+          beginCardPan(ev.touches[0]);
+        } else {
+          cardPan = null;
+          settleCardZoom();
+          if (left === 0 && cardGestureWasPinch) {
+            cardGestureWasPinch = false;
+            armDismissGuard();
+          }
+        }
+      }
       if (overlayPinch) {
         overlayPinch = null;
         orbiting = false;
@@ -4996,7 +5210,10 @@ const Meridian3D = (() => {
       leave();
       UI.showPage('page-home');
     });
-    $('m3d-point-dismiss').onclick = () => closeOverlay({ resumeAuto: true });
+    $('m3d-point-dismiss').onclick = () => {
+      if (suppressPointDismiss) return;
+      closeOverlay({ resumeAuto: true });
+    };
     $('m3d-title').addEventListener('click', () => {
       if (currentPoint && $('m3d-point-overlay').hidden && !playingAuto) openOverlay(currentPoint);
     });
