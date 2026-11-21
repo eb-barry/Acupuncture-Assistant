@@ -531,7 +531,10 @@ const Meridian3D = (() => {
 
   function setTitle(text) {
     const el = $('m3d-title');
-    if (el) el.textContent = text || '3D 經絡模型';
+    if (!el) return;
+    const title = text || '3D 經絡模型';
+    el.textContent = title;
+    el.classList.toggle('is-playing', title !== '3D 經絡模型');
   }
 
   function setLoading(on, caption) {
@@ -5339,6 +5342,7 @@ const Meridian3D = (() => {
     }
 
     window.__m3dTest = {
+      setTitle,
       loadProgress: () => lastLoadProgress,
       loadOverlay() {
         const el = $('m3d-loading');

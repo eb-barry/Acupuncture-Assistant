@@ -139,6 +139,19 @@ body::before {
   position: sticky; top: 0; z-index: 100;
   gap: var(--sp-sm);
 }
+/* 標題列上方鋪滿同一塊綠，蓋住系統列與標題之間的白底模糊帶，不蓋到標題文字 */
+.top-bar::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 100%;
+  height: 160px;
+  background: #0abfbc;
+  pointer-events: none;
+}
+/* 功能頁根底改成標題綠。iOS 狀態列會採樣這個顏色，避免白底被模糊進系統列。 */
+html.feature-top {
+  background: #0abfbc;
+}
 .top-bar .btn-icon {
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
@@ -842,7 +855,8 @@ body::before {
 
 /* ── 3D 經絡模型 ── */
 #page-meridian-3d {
-  overflow: hidden;
+  /* 不要用 overflow:hidden，否則 iOS 不會把標題綠延伸進狀態列 */
+  overflow: visible;
   touch-action: none;
   overscroll-behavior: none;
   -webkit-user-select: none;
@@ -858,10 +872,12 @@ body::before {
 }
 #page-meridian-3d .m3d-topbar {
   gap: 6px;
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 200;
   flex-shrink: 0;
   touch-action: none;
+  background: #0abfbc;
 }
 .m3d-top-actions {
   display: flex; align-items: center; gap: 4px; flex-shrink: 0;
@@ -887,6 +903,11 @@ body::before {
   font-size: var(--fs-md); padding: 0 4px;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+#m3d-title.is-playing {
+  font-size: calc(var(--fs-md) * 2);
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .m3d-stage {

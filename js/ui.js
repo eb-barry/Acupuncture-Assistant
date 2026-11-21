@@ -17,6 +17,10 @@ const UI = (() => {
       const scroll = target.querySelector('.scroll-area');
       if (scroll) scroll.scrollTop = 0;
     }
+    const onHome = !id || id === 'page-home';
+    document.documentElement.classList.toggle('feature-top', !onHome);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', onHome ? '#eef4f7' : '#0abfbc');
   }
 
   /* ── Toast ── */
