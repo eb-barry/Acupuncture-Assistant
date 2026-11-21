@@ -69,7 +69,7 @@ const Meridian3D = (() => {
     mode: 'manual',
     scale: 1,
     pauseSec: PAUSE_SEC_DEFAULT,
-    narrator: NARRATOR_SYNTH,
+    narrator: 'Barry',
     meridians: new Set(),
   };
 
@@ -819,8 +819,21 @@ const Meridian3D = (() => {
     } catch {}
   }
 
+  function narratorForGender(gender) {
+    return gender === 'female' ? 'Ashley' : 'Barry';
+  }
+
   function clampNarrator(value) {
-    return NARRATORS.includes(value) ? value : NARRATOR_SYNTH;
+    return NARRATORS.includes(value) ? value : narratorForGender(opts.gender);
+  }
+
+  function setNarrator(name) {
+    const next = clampNarrator(name);
+    opts.narrator = next;
+    const sel = $('m3d-narrator');
+    if (sel) sel.value = next;
+    narratorMissNotified = false;
+    if (typeof Settings !== 'undefined') Settings.set('narrator', next);
   }
 
   function usingNarrator() {
@@ -938,24 +951,17 @@ const Meridian3D = (() => {
     });
   }
 
-  function revertNarratorToSynth() {
-    const name = opts.narrator;
-    if (name === NARRATOR_SYNTH) return;
-    opts.narrator = NARRATOR_SYNTH;
-    const sel = $('m3d-narrator');
-    if (sel) sel.value = NARRATOR_SYNTH;
-    if (typeof Settings !== 'undefined') Settings.set('narrator', NARRATOR_SYNTH);
-    if (!narratorMissNotified) {
-      narratorMissNotified = true;
-      UI.toast(`找不到${name}的語音檔，已改回電腦合成`);
-    }
+  function noteMissingNarration() {
+    if (narratorMissNotified) return;
+    narratorMissNotified = true;
+    UI.toast(`找不到${opts.narrator}的部分語音檔，這些句子改以系統語音補上`);
   }
 
   async function narrateIntro(mer, count, phase) {
     if (usingNarrator()) {
       const status = await playClip(narratorClipUrl(opts.narrator, `${mer.id}-${count}.mp3`));
       if (status === 'ok' || status === 'aborted' || autoAbort) return;
-      if (status === 'missing') revertNarratorToSynth();
+      if (status === 'missing') noteMissingNarration();
     }
     if (phase !== 'count') {
       await speak(mer.name, opts.gender);
@@ -1026,7 +1032,7 @@ const Meridian3D = (() => {
       const file = `${rec.code}-${rec.meridian}-${rec.name}.mp3`;
       const status = await playClip(narratorClipUrl(opts.narrator, file));
       if (status === 'ok' || status === 'aborted' || autoAbort) return;
-      if (status === 'missing') revertNarratorToSynth();
+      if (status === 'missing') noteMissingNarration();
     }
     await speak(rec.name, opts.gender);
   }
@@ -4911,6 +4917,7 @@ const Meridian3D = (() => {
       const changed = next !== opts.gender;
       opts.gender = next;
       if (changed) {
+        setNarrator(narratorForGender(next));
         stopAuto();
         autoCursor = null;
         if (loadedGender && $('m3d-modal').hidden) playManual();
@@ -4938,15 +4945,10 @@ const Meridian3D = (() => {
     };
 
     const narrator = $('m3d-narrator');
-    opts.narrator = clampNarrator(typeof Settings !== 'undefined' ? Settings.get('narrator') : NARRATOR_SYNTH);
+    const savedNarrator = typeof Settings !== 'undefined' ? Settings.get('narrator') : '';
+    setNarrator(NARRATORS.includes(savedNarrator) ? savedNarrator : narratorForGender(opts.gender));
     if (narrator) {
-      narrator.value = opts.narrator;
-      narrator.onchange = () => {
-        opts.narrator = clampNarrator(narrator.value);
-        narrator.value = opts.narrator;
-        narratorMissNotified = false;
-        if (typeof Settings !== 'undefined') Settings.set('narrator', opts.narrator);
-      };
+      narrator.onchange = () => setNarrator(narrator.value);
     }
 
     const pause = $('m3d-pause');

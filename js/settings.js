@@ -18,7 +18,7 @@ const Settings = (() => {
     descSize:    'normal',
     voiceGender: 'female',
     autoPauseSec: 1.5,
-    narrator: 'synth',
+    narrator: 'Barry',
     termsAcceptedAt: null,
   };
 

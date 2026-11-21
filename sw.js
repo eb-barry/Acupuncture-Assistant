@@ -7,7 +7,8 @@
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v98';
+const SHELL_CACHE   = 'acupuncture-shell-v99';
+const SHELL_REV     = 'v99';
 const ASSET_CACHE   = 'acupuncture-assets-v5';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 const AUDIO_CACHE   = 'acupuncture-audio-v1';
@@ -45,6 +46,7 @@ const ASSET_FILES = [
 ];
 
 const LIVE_CACHES = [SHELL_CACHE, ASSET_CACHE, CONTENT_CACHE, AUDIO_CACHE];
+let replaceOpenClients = false;
 
 function toRequest(file) {
   return new Request(new URL(file, self.registration.scope).href, { cache: 'reload' });
@@ -69,6 +71,7 @@ function isVersionedAsset(url) {
 
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
+    replaceOpenClients = !!self.registration.active;
     await precache(SHELL_CACHE, SHELL_FILES);
     await precache(ASSET_CACHE, ASSET_FILES);
     await self.skipWaiting();
@@ -76,15 +79,30 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => !LIVE_CACHES.includes(k))
-          .map((k) => caches.delete(k)),
-      ),
-    ).then(() => self.clients.claim()),
-  );
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((k) => !LIVE_CACHES.includes(k))
+        .map((k) => caches.delete(k)),
+    );
+    const windows = replaceOpenClients
+      ? await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      : [];
+    await self.clients.claim();
+    if (!windows.length) return;
+    setTimeout(() => {
+      windows.forEach((client) => {
+        if (!client.url || !client.url.startsWith(self.registration.scope)) return;
+        let next;
+        try { next = new URL(client.url); }
+        catch { return; }
+        if (next.searchParams.get('sw') === SHELL_REV) return;
+        next.searchParams.set('sw', SHELL_REV);
+        client.navigate(next.href).catch(() => {});
+      });
+    }, 50);
+  })());
 });
 
 function isShellRequest(url) {
