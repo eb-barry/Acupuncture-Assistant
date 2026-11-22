@@ -179,31 +179,54 @@
             <button type="button" class="m3d-sheet-close" id="m3d-modal-close" aria-label="關閉">×</button>
           </div>
           <div class="m3d-sheet-body">
-            <p class="m3d-field-label">模型性別</p>
-            <div class="font-size-picker m3d-switch" id="m3d-gender">
-              <button type="button" data-gender="male" class="active">男</button>
-              <button type="button" data-gender="female">女</button>
+            <div class="m3d-pair">
+              <div class="m3d-pair-col">
+                <p class="m3d-field-label">模型性別</p>
+                <div class="m3d-radio" id="m3d-gender">
+                  <button type="button" class="m3d-radio-side" data-gender="male">男</button>
+                  <button type="button" class="m3d-radio-track" data-toggle="gender" aria-label="模型性別">
+                    <span class="m3d-radio-knob"></span>
+                  </button>
+                  <button type="button" class="m3d-radio-side" data-gender="female">女</button>
+                </div>
+              </div>
+              <div class="m3d-pair-col">
+                <p class="m3d-field-label">導覽模式</p>
+                <div class="m3d-radio" id="m3d-mode">
+                  <button type="button" class="m3d-radio-side" data-mode="manual">手動</button>
+                  <button type="button" class="m3d-radio-track" data-toggle="mode" aria-label="導覽模式">
+                    <span class="m3d-radio-knob"></span>
+                  </button>
+                  <button type="button" class="m3d-radio-side" data-mode="auto">自動</button>
+                </div>
+              </div>
             </div>
-            <p class="m3d-field-label">導覽模式</p>
-            <div class="font-size-picker m3d-switch" id="m3d-mode">
-              <button type="button" data-mode="manual" class="active">手動</button>
-              <button type="button" data-mode="auto">自動</button>
+            <div class="m3d-pair">
+              <div class="m3d-pair-col">
+                <p class="m3d-field-label">語音播報</p>
+                <div class="select-wrap">
+                  <select id="m3d-narrator" class="styled-select" aria-label="語音播報">
+                    <option value="Barry">Barry</option>
+                    <option value="Ashley">Ashley</option>
+                    <option value="Joyce">Joyce</option>
+                  </select>
+                </div>
+              </div>
+              <div class="m3d-pair-col">
+                <p class="m3d-field-label">播報延遲</p>
+                <div class="select-wrap">
+                  <select id="m3d-pause" class="styled-select" aria-label="播報延遲">
+                    <option value="0">0 秒</option>
+                    <option value="0.5">0.5 秒</option>
+                    <option value="1">1 秒</option>
+                    <option value="1.5">1.5 秒</option>
+                    <option value="2">2 秒</option>
+                    <option value="2.5">2.5 秒</option>
+                    <option value="3">3 秒</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <p class="m3d-field-label">模型比例 <span id="m3d-scale-val">1.0×</span></p>
-            <input type="range" id="m3d-scale" min="0.5" max="5" step="0.5" value="1">
-            <p class="m3d-field-hint">自動導覽固定 5×：每條經脈第一穴置中並面對使用者；畫面內穴位播報完且靠近邊緣 10%、或穴名超出畫面時才緩慢移到下一視角。</p>
-            <p class="m3d-field-label">播報延遲 <span id="m3d-pause-val">1.5 秒</span></p>
-            <input type="range" id="m3d-pause" min="0" max="3" step="0.5" value="1.5">
-            <p class="m3d-field-hint">自動導覽時，穴位播報之間的停頓時間，可調 0–3 秒，每段 0.5 秒。</p>
-            <p class="m3d-field-label">語音播報</p>
-            <div class="select-wrap">
-              <select id="m3d-narrator" class="styled-select" aria-label="語音播報">
-                <option value="Barry">Barry</option>
-                <option value="Ashley">Ashley</option>
-                <option value="Joyce">Joyce</option>
-              </select>
-            </div>
-            <p class="m3d-field-hint">男模型預設 Barry，女模型預設 Ashley，也可改選其他播報員。每條經脈先播簡介，再逐穴播放錄音。</p>
             <p class="m3d-field-label">經脈選擇</p>
             <div class="m3d-meridian-actions">
               <button type="button" class="btn btn-secondary" id="m3d-select-all">全選</button>
