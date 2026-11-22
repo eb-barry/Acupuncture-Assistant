@@ -5201,11 +5201,14 @@ const Meridian3D = (() => {
       markAnnotDirty();
     };
 
-    $('m3d-gender').onclick = (e) => {
-      const btn = e.target.closest('button[data-gender]');
-      if (!btn) return;
-      $('m3d-gender').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
-      const next = btn.dataset.gender;
+    const paintRadio = (id, value, rightValue) => {
+      const el = $(id);
+      if (!el) return;
+      el.classList.toggle('is-right', value === rightValue);
+    };
+    const chooseGender = (next) => {
+      if (next !== 'male' && next !== 'female') return;
+      paintRadio('m3d-gender', next, 'female');
       const changed = next !== opts.gender;
       opts.gender = next;
       if (changed) {
@@ -5215,11 +5218,9 @@ const Meridian3D = (() => {
         if (loadedGender && $('m3d-modal').hidden) playManual();
       }
     };
-    $('m3d-mode').onclick = (e) => {
-      const btn = e.target.closest('button[data-mode]');
-      if (!btn) return;
-      $('m3d-mode').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
-      const next = btn.dataset.mode;
+    const chooseMode = (next) => {
+      if (next !== 'manual' && next !== 'auto') return;
+      paintRadio('m3d-mode', next, 'auto');
       if (next !== opts.mode) {
         stopAuto();
         autoCursor = null;
@@ -5227,14 +5228,22 @@ const Meridian3D = (() => {
       opts.mode = next;
       markAnnotDirty();
     };
-
-    const scale = $('m3d-scale');
-    const scaleVal = $('m3d-scale-val');
-    scale.oninput = () => {
-      opts.scale = Number(scale.value) || 1;
-      scaleVal.textContent = opts.scale.toFixed(1) + '×';
-      applyScale();
+    $('m3d-gender').onclick = (e) => {
+      const side = e.target.closest('[data-gender]');
+      if (side) { chooseGender(side.dataset.gender); return; }
+      if (e.target.closest('[data-toggle="gender"]')) {
+        chooseGender(opts.gender === 'female' ? 'male' : 'female');
+      }
     };
+    $('m3d-mode').onclick = (e) => {
+      const side = e.target.closest('[data-mode]');
+      if (side) { chooseMode(side.dataset.mode); return; }
+      if (e.target.closest('[data-toggle="mode"]')) {
+        chooseMode(opts.mode === 'auto' ? 'manual' : 'auto');
+      }
+    };
+    paintRadio('m3d-gender', opts.gender, 'female');
+    paintRadio('m3d-mode', opts.mode, 'auto');
 
     const narrator = $('m3d-narrator');
     const savedNarrator = typeof Settings !== 'undefined' ? Settings.get('narrator') : '';
@@ -5244,16 +5253,21 @@ const Meridian3D = (() => {
     }
 
     const pause = $('m3d-pause');
-    const pauseVal = $('m3d-pause-val');
     const savedPause = clampPauseSec(typeof Settings !== 'undefined' ? Settings.get('autoPauseSec') : PAUSE_SEC_DEFAULT);
     opts.pauseSec = savedPause;
+    const pauseChoices = [0, 0.5, 1, 1.5, 2, 2.5, 3];
+    const pauseSelectValue = (sec) => {
+      const n = clampPauseSec(sec);
+      const hit = pauseChoices.reduce((best, v) => (
+        Math.abs(v - n) < Math.abs(best - n) ? v : best
+      ), pauseChoices[0]);
+      return String(hit);
+    };
     if (pause) {
-      pause.value = String(savedPause);
-      if (pauseVal) pauseVal.textContent = savedPause.toFixed(1) + ' 秒';
-      pause.oninput = () => {
+      pause.value = pauseSelectValue(savedPause);
+      pause.onchange = () => {
         opts.pauseSec = clampPauseSec(pause.value);
-        pause.value = String(opts.pauseSec);
-        if (pauseVal) pauseVal.textContent = opts.pauseSec.toFixed(1) + ' 秒';
+        pause.value = pauseSelectValue(opts.pauseSec);
         if (typeof Settings !== 'undefined') Settings.set('autoPauseSec', opts.pauseSec);
       };
     }

@@ -118,7 +118,7 @@
 Acupuncture-Assistant/
 ├── index.html                  # 主頁面（含所有子頁面框架、條款模板）
 ├── manifest.json               # PWA 設定
-├── sw.js                       # Service Worker（離線快取，shell v102）
+├── sw.js                       # Service Worker（離線快取，shell v103）
 ├── favicon.svg                 # 網站圖示
 ├── favicon.ico                 # 網站圖示（備援）
 ├── LICENSE                     # GNU General Public License v3.0

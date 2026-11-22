@@ -1043,20 +1043,63 @@ html.feature-top {
   font-size: var(--fs-sm); color: var(--clr-teal-dark); font-weight: 600;
   margin: 12px 0 8px;
 }
-.m3d-switch { width: 100%; }
-.m3d-switch button { flex: 1; }
-.m3d-switch.font-size-picker button {
-  width: auto;
-  height: auto;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px 16px;
-  font-size: var(--fs-md);
-  font-family: var(--font-sans);
+.m3d-pair {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
 }
-#m3d-scale,
-#m3d-pause {
-  width: 100%; accent-color: var(--clr-teal); height: 28px;
+.m3d-pair-col { flex: 1; min-width: 0; }
+.m3d-radio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 44px;
+}
+.m3d-radio-side {
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  color: var(--clr-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.m3d-radio.is-right .m3d-radio-side[data-gender="female"],
+.m3d-radio.is-right .m3d-radio-side[data-mode="auto"],
+.m3d-radio:not(.is-right) .m3d-radio-side[data-gender="male"],
+.m3d-radio:not(.is-right) .m3d-radio-side[data-mode="manual"] {
+  color: var(--clr-ink);
+  font-weight: 700;
+}
+.m3d-radio-track {
+  position: relative;
+  box-sizing: border-box;
+  width: 52px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.m3d-radio-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #34c759;
+  pointer-events: none;
+  transition: transform var(--dur-fast) var(--ease);
+}
+.m3d-radio.is-right .m3d-radio-knob {
+  transform: translateX(24px);
 }
 .m3d-sheet .select-wrap { margin-top: 2px; }
 .m3d-sheet .styled-select {
