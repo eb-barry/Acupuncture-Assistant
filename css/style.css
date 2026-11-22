@@ -1050,16 +1050,16 @@ html.feature-top {
 }
 .m3d-pair-col { flex: 1; min-width: 0; }
 .m3d-radio {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
+  column-gap: 6px;
   min-height: 44px;
 }
 .m3d-radio-side {
   border: none;
   background: transparent;
-  padding: 4px 2px;
+  padding: 4px 0;
   font-family: var(--font-sans);
   font-size: var(--fs-md);
   color: var(--clr-muted);
@@ -1067,6 +1067,8 @@ html.feature-top {
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
 }
+.m3d-radio-side:first-of-type { justify-self: end; }
+.m3d-radio-side:last-of-type { justify-self: start; }
 .m3d-radio.is-right .m3d-radio-side[data-gender="female"],
 .m3d-radio.is-right .m3d-radio-side[data-mode="auto"],
 .m3d-radio:not(.is-right) .m3d-radio-side[data-gender="male"],
@@ -1077,7 +1079,7 @@ html.feature-top {
 .m3d-radio-track {
   position: relative;
   box-sizing: border-box;
-  width: 52px;
+  width: 91px;
   height: 28px;
   flex-shrink: 0;
   padding: 0;
@@ -1099,7 +1101,7 @@ html.feature-top {
   transition: transform var(--dur-fast) var(--ease);
 }
 .m3d-radio.is-right .m3d-radio-knob {
-  transform: translateX(24px);
+  transform: translateX(63px);
 }
 .m3d-sheet .select-wrap { margin-top: 2px; }
 .m3d-sheet .styled-select {
