@@ -28,9 +28,10 @@ const Settings = (() => {
       if (!raw) return { ...defaults };
       const parsed = JSON.parse(raw);
       const prefs = { ...defaults, ...parsed };
-      // 舊版出廠值 1.5 秒只遷移一次，之後使用者再選 1.5 秒會保留。
-      if (!parsed.autoPauseMigrated) {
+      // 舊的 1.5 秒出廠值改成 0 秒。已經選過其他秒數的會保留。
+      if (!parsed.autoPauseZero) {
         if (Number(parsed.autoPauseSec) === 1.5) prefs.autoPauseSec = 0;
+        prefs.autoPauseZero = true;
         prefs.autoPauseMigrated = true;
         save(prefs);
       }

@@ -527,6 +527,14 @@ const Meridian3D = (() => {
     if (!img || !btn) return;
     img.src = kind === 'stop' ? 'assets/icons/stop-3d.png' : 'assets/icons/play-3d.png';
     btn.setAttribute('aria-label', kind === 'stop' ? '停止' : '播放');
+    syncPlayReady();
+  }
+
+  function syncPlayReady() {
+    const btn = $('m3d-play');
+    if (!btn) return;
+    const stopped = btn.getAttribute('aria-label') === '停止';
+    btn.classList.toggle('is-ready', !stopped && opts.meridians.size > 0);
   }
 
   function setTitle(text) {
@@ -5181,6 +5189,7 @@ const Meridian3D = (() => {
       if (el.checked) opts.meridians.add(id);
       else opts.meridians.delete(id);
       markAnnotDirty();
+      syncPlayReady();
     };
     list.addEventListener('change', (e) => {
       if (e.target && e.target.matches('input[data-mid]')) syncMeridianBox(e.target);
@@ -5194,11 +5203,13 @@ const Meridian3D = (() => {
       MERIDIANS.forEach((m) => opts.meridians.add(m.id));
       list.querySelectorAll('input').forEach((el) => { el.checked = true; });
       markAnnotDirty();
+      syncPlayReady();
     };
     $('m3d-select-none').onclick = () => {
       opts.meridians.clear();
       list.querySelectorAll('input').forEach((el) => { el.checked = false; });
       markAnnotDirty();
+      syncPlayReady();
     };
 
     const paintRadio = (id, value, rightValue) => {
