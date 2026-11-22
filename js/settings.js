@@ -17,7 +17,7 @@ const Settings = (() => {
     fontSize:    'medium',
     descSize:    'normal',
     voiceGender: 'female',
-    autoPauseSec: 1.5,
+    autoPauseSec: 0,
     narrator: 'Barry',
     termsAcceptedAt: null,
   };
@@ -25,7 +25,16 @@ const Settings = (() => {
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? { ...defaults, ...JSON.parse(raw) } : { ...defaults };
+      if (!raw) return { ...defaults };
+      const parsed = JSON.parse(raw);
+      const prefs = { ...defaults, ...parsed };
+      // 舊版出廠值 1.5 秒只遷移一次，之後使用者再選 1.5 秒會保留。
+      if (!parsed.autoPauseMigrated) {
+        if (Number(parsed.autoPauseSec) === 1.5) prefs.autoPauseSec = 0;
+        prefs.autoPauseMigrated = true;
+        save(prefs);
+      }
+      return prefs;
     } catch { return { ...defaults }; }
   }
 

@@ -53,7 +53,7 @@ const Meridian3D = (() => {
   const PAUSE_SEC_MIN = 0;
   const PAUSE_SEC_MAX = 3;
   const PAUSE_SEC_STEP = 0.5;
-  const PAUSE_SEC_DEFAULT = 1.5;
+  const PAUSE_SEC_DEFAULT = 0;
 
   const MAP_URL = {
     male: 'assets/meridians/male.json',
