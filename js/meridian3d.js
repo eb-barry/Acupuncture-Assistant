@@ -3774,7 +3774,8 @@ const Meridian3D = (() => {
       return false;
     }
     if (isFocusRec(rec)) return true;
-    if (currentPoint && htSegment(currentPoint) === 'dorsal'
+    const manualHt = opts.mode !== 'auto' && rec.meridianId === 'HT';
+    if (!manualHt && currentPoint && htSegment(currentPoint) === 'dorsal'
       && rec.meridianId === 'HT' && htSegment(rec) !== 'dorsal') {
       return false;
     }
@@ -3796,7 +3797,7 @@ const Meridian3D = (() => {
     toCam.multiplyScalar(1 / dist);
     const { raw, flat } = facingAmounts(rec, toCam);
     if (flat >= -0.18 || raw >= -0.12) return true;
-    if (flat < -0.55 && raw < -0.42) return false;
+    if (flat < -0.55 && raw < -0.42 && !manualHt) return false;
     return !isPointOccluded(world, dist);
   }
 
