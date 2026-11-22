@@ -899,24 +899,57 @@ html.feature-top {
 #m3d-menu-btn img { width: 26px; height: 26px; }
 @keyframes m3d-play-breathe {
   0%, 100% {
-    opacity: 0.55;
-    transform: scale(0.94);
-    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.28));
+    transform: scale(0.78);
+    filter:
+      brightness(0.72)
+      drop-shadow(0 0 0 rgba(255,255,255,0));
   }
   50% {
-    opacity: 1;
-    transform: scale(1.08);
+    transform: scale(1.28);
     filter:
-      drop-shadow(0 0 6px rgba(255,255,255,0.95))
-      drop-shadow(0 0 12px rgba(255,255,255,0.75));
+      brightness(1.45)
+      drop-shadow(0 0 8px #fff)
+      drop-shadow(0 0 16px rgba(255,255,255,0.95));
   }
 }
+@keyframes m3d-play-glow {
+  0%, 100% {
+    transform: scale(0.55);
+    opacity: 0.05;
+  }
+  50% {
+    transform: scale(2.15);
+    opacity: 1;
+  }
+}
+#m3d-play.is-ready { position: relative; overflow: visible; }
+#m3d-play.is-ready::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, rgba(255,255,255,0.92) 38%, rgba(255,255,255,0) 72%);
+  pointer-events: none;
+  z-index: 0;
+  animation: m3d-play-glow 1.35s ease-in-out infinite;
+}
 #m3d-play.is-ready img {
-  animation: m3d-play-breathe 1.6s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+  animation: m3d-play-breathe 1.35s ease-in-out infinite;
   transform-origin: center;
 }
 @media (prefers-reduced-motion: reduce) {
-  #m3d-play.is-ready img { animation: none; opacity: 1; transform: none; }
+  #m3d-play.is-ready img {
+    animation: none;
+    transform: none;
+    filter: drop-shadow(0 0 8px #fff);
+  }
+  #m3d-play.is-ready::after { animation: none; opacity: 0.9; transform: scale(1.35); }
 }
 .m3d-icon-btn:active { background: rgba(255,255,255,0.18); }
 .m3d-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
