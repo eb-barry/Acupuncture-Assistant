@@ -1079,7 +1079,7 @@ html.feature-top {
 .m3d-radio-track {
   position: relative;
   box-sizing: border-box;
-  width: 91px;
+  width: 83px;
   height: 28px;
   flex-shrink: 0;
   padding: 0;
@@ -1101,7 +1101,7 @@ html.feature-top {
   transition: transform var(--dur-fast) var(--ease);
 }
 .m3d-radio.is-right .m3d-radio-knob {
-  transform: translateX(63px);
+  transform: translateX(55px);
 }
 .m3d-sheet .select-wrap { margin-top: 2px; }
 .m3d-sheet .styled-select {
