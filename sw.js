@@ -7,8 +7,8 @@
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v109';
-const SHELL_REV     = 'v109';
+const SHELL_CACHE   = 'acupuncture-shell-v110';
+const SHELL_REV     = 'v110'; // keep identical to index.html acupuncture-shell and shell-rev.txt
 const ASSET_CACHE   = 'acupuncture-assets-v5';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 const AUDIO_CACHE   = 'acupuncture-audio-v1';
@@ -70,6 +70,10 @@ function isVersionedAsset(url) {
   return /\.(glb|gltf|json)$/i.test(url.pathname);
 }
 
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
     replaceOpenClients = !!self.registration.active;
@@ -118,6 +122,11 @@ function isShellRequest(url) {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
+
+  if (url.origin === self.location.origin && url.pathname.endsWith('/shell-rev.txt')) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
 
   if (isShellRequest(url)) {
     e.respondWith(
