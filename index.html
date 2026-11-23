@@ -835,14 +835,6 @@
       navigator.serviceWorker.register('./sw.js')
         .then((reg) => {
           ensureLatest(reg);
-          document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') ensureLatest(reg);
-          });
-          window.addEventListener('pageshow', () => ensureLatest(reg));
-          window.addEventListener('focus', () => ensureLatest(reg));
-          setInterval(() => {
-            if (document.visibilityState === 'visible') ensureLatest(reg);
-          }, 60000);
         })
         .catch((err) => console.warn('SW registration failed:', err));
     });
