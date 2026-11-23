@@ -118,7 +118,7 @@
 Acupuncture-Assistant/
 ├── index.html                  # 主頁面（含所有子頁面框架、條款模板）
 ├── manifest.json               # PWA 設定
-├── sw.js                       # Service Worker（離線快取，shell v109）
+├── sw.js                       # Service Worker（離線快取，shell v110）
 ├── favicon.svg                 # 網站圖示
 ├── favicon.ico                 # 網站圖示（備援）
 ├── LICENSE                     # GNU General Public License v3.0
@@ -162,7 +162,7 @@ Acupuncture-Assistant/
 | 字型 | Noto Serif TC / Noto Sans TC（Google Fonts） |
 | 農曆計算 | Julian Day Number（JDN）算法，基準日 2024/1/1 甲子日，經 lunar-python 驗證 |
 | 語音朗讀 | Web Speech API（speechSynthesis），中文女聲優先 |
-| 離線支援 | PWA Service Worker，App Shell 預快取 + 資產按需快取 |
+| 離線支援 | PWA Service Worker，App Shell 預快取 + 資產按需快取。使用者開啟 App 時核對版號，有新版就載入最新程式；離線仍用已安裝的這一版 |
 | 圖片載入 | 多 CDN 備援（GitHub Pages → raw.githubusercontent.com → jsDelivr） |
 | 資料快取 | 併發請求 dedup（in-flight promise 共用），避免首次載入競態 |
 | 資料格式 | JSON（穴位資料、歌訣清單），WebP 圖片 |

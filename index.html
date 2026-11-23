@@ -16,6 +16,7 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#eef4f7" />
+  <meta name="acupuncture-shell" content="v110" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -756,24 +757,86 @@
   // ── Service Worker (PWA offline support) ──
   (function stripShellRev() {
     const url = new URL(location.href);
-    if (!url.searchParams.has('sw')) return;
+    if (!url.searchParams.has('sw') && !url.searchParams.has('fresh')) return;
     url.searchParams.delete('sw');
+    url.searchParams.delete('fresh');
     history.replaceState(null, '', url.pathname + url.search + url.hash);
   })();
 
   if ('serviceWorker' in navigator) {
+    const pageRev = (document.querySelector('meta[name="acupuncture-shell"]') || {}).content || '';
     let refreshing = false;
+    let checking = false;
+    const reloadLatest = () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    };
     if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload();
-      });
+      navigator.serviceWorker.addEventListener('controllerchange', () => reloadLatest());
     }
+    const triedKey = 'acupuncture-shell-try';
+    const readTried = () => {
+      try { return sessionStorage.getItem(triedKey) || ''; }
+      catch { return ''; }
+    };
+    const writeTried = (rev) => {
+      try { sessionStorage.setItem(triedKey, rev); }
+      catch {}
+    };
+    const clearTried = () => {
+      try { sessionStorage.removeItem(triedKey); }
+      catch {}
+    };
+    const networkRev = async () => {
+      const res = await fetch('./shell-rev.txt', { cache: 'no-store' });
+      if (!res.ok) return '';
+      return (await res.text()).trim();
+    };
+    const ensureLatest = async (reg) => {
+      if (checking || refreshing || !reg) return;
+      checking = true;
+      try {
+        let remote = '';
+        try { remote = await networkRev(); }
+        catch {
+          reg.update().catch(() => {});
+          return;
+        }
+        if (!remote || !pageRev || remote === pageRev) {
+          clearTried();
+          reg.update().catch(() => {});
+          return;
+        }
+        if (readTried() === remote) return;
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        reg.update().catch(() => {});
+        const deadline = performance.now() + 4000;
+        while (performance.now() < deadline) {
+          if (refreshing) return;
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          if (reg.installing || reg.waiting) return;
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+        if (refreshing) return;
+        writeTried(remote);
+        refreshing = true;
+        try { await reg.unregister(); }
+        catch {}
+        const url = new URL(location.href);
+        url.searchParams.set('sw', remote);
+        url.searchParams.set('fresh', String(Date.now()));
+        window.location.replace(url.href);
+      } finally {
+        checking = false;
+      }
+    };
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
-        .then((reg) => reg.update())
-        .catch(err => console.warn('SW registration failed:', err));
+        .then((reg) => {
+          ensureLatest(reg);
+        })
+        .catch((err) => console.warn('SW registration failed:', err));
     });
   }
 
