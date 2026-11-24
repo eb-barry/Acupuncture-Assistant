@@ -7,8 +7,8 @@
  *   Other assets → Network with cache fallback
  */
 
-const SHELL_CACHE   = 'acupuncture-shell-v113';
-const SHELL_REV     = 'v113'; // keep identical to index.html acupuncture-shell and shell-rev.txt
+const SHELL_CACHE   = 'acupuncture-shell-v114';
+const SHELL_REV     = 'v114'; // keep identical to index.html acupuncture-shell and shell-rev.txt
 const ASSET_CACHE   = 'acupuncture-assets-v5';
 const CONTENT_CACHE = 'acupuncture-content-v2';
 const AUDIO_CACHE   = 'acupuncture-audio-v1';
@@ -29,6 +29,7 @@ const SHELL_FILES = [
   './js/meridian3d.js',
   './assets/main-menu.webp',
   './assets/icons/play-3d.png',
+  './assets/icons/play-3d-amber.png',
   './assets/icons/stop-3d.png',
   './assets/icons/menu-3d.png',
   './manifest.json',

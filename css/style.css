@@ -910,24 +910,13 @@ html.feature-top {
   width: 40px;
   height: 40px;
   margin: -20px 0 0 -20px;
-  border-radius: 50%;
-  background: #ffb000;
+  object-fit: contain;
   pointer-events: none;
   z-index: 2;
 }
 #m3d-play.is-ready .m3d-play-amber {
   display: block;
   animation: m3d-play-amber 1s linear infinite;
-}
-#m3d-play.is-ready .m3d-play-amber::before {
-  content: "";
-  position: absolute;
-  left: 55%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border-style: solid;
-  border-width: 7px 0 7px 12px;
-  border-color: transparent transparent transparent #fff;
 }
 @media (prefers-reduced-motion: reduce) {
   #m3d-play.is-ready .m3d-play-amber {
